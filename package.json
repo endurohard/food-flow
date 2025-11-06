@@ -1,0 +1,36 @@
+{
+  "name": "food-flow",
+  "version": "1.0.0",
+  "description": "Food delivery service with microservices architecture",
+  "main": "index.js",
+  "scripts": {
+    "dev": "docker-compose up",
+    "dev:build": "docker-compose up --build",
+    "stop": "docker-compose down",
+    "clean": "docker-compose down -v",
+    "logs": "docker-compose logs -f",
+    "db:migrate": "cd database && npm run migrate",
+    "kong:setup": "node scripts/setup-kong.js",
+    "test": "npm run test --workspaces",
+    "lint": "eslint . --ext .js,.ts",
+    "format": "prettier --write \"**/*.{js,ts,json,md}\""
+  },
+  "keywords": [
+    "food-delivery",
+    "microservices",
+    "kong",
+    "docker",
+    "postgres"
+  ],
+  "author": "",
+  "license": "MIT",
+  "workspaces": [
+    "services/*"
+  ],
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0"
+  }
+}

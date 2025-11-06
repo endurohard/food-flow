@@ -1,0 +1,53 @@
+version: '3.9'
+
+# Development override configuration
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # User Service with hot reload
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev
+
+  # Restaurant Service with hot reload
+  restaurant-service:
+    build:
+      context: ./services/restaurant-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/restaurant-service:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev
+
+  # Order Service with hot reload
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/order-service:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev
+
+  # Delivery Service with hot reload
+  delivery-service:
+    build:
+      context: ./services/delivery-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/delivery-service:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev
