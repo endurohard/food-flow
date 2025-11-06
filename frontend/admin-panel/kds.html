@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kitchen Display System - FoodFlow</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👨‍🍳</text></svg>">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    .kds-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .kds-grid {
+        gap: 20px;
+      }
+    }
+
+    .order-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.3s;
+      position: relative;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+      animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .order-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .order-card.preparing {
+      border-left: 4px solid #1e88e5;
+      box-shadow: 0 2px 8px rgba(30, 136, 229, 0.15);
+    }
+
+    .order-card.ready {
+      border-left: 4px solid #43a047;
+      box-shadow: 0 2px 8px rgba(67, 160, 71, 0.15);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 2px 8px rgba(67, 160, 71, 0.15);
+      }
+      50% {
+        box-shadow: 0 4px 16px rgba(67, 160, 71, 0.3);
+      }
+    }
+
+    .order-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .order-number {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1e88e5;
+    }
+
+    @media (min-width: 768px) {
+      .order-number {
+        font-size: 36px;
+      }
+    }
+
+    .order-time {
+      text-align: right;
+    }
+
+    .timer {
+      font-size: 20px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .timer {
+        font-size: 24px;
+      }
+    }
+
+    .timer.warning {
+      color: #fb8c00;
+      animation: blink 1s infinite;
+    }
+
+    .timer.urgent {
+      color: #e53935;
+      animation: blink 0.5s infinite;
+    }
+
+    @keyframes blink {
+      0%, 50%, 100% { opacity: 1; }
+      25%, 75% { opacity: 0.5; }
+    }
+
+    .time-label {
+      font-size: 11px;
+      color: #8b95a5;
+      text-transform: uppercase;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .order-type {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .type-delivery {
+      background: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+    }
+
+    .type-pickup {
+      background: rgba(139, 92, 246, 0.1);
+      color: #8b5cf6;
+    }
+
+    .type-dine-in {
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+    }
+
+    .order-items {
+      margin-bottom: 16px;
+    }
+
+    .item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #f5f7fa;
+      border-radius: 8px;
+      border-left: 3px solid #1e88e5;
+      align-items: center;
+    }
+
+    .item-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .item-name {
+        font-size: 16px;
+      }
+    }
+
+    .item-qty {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1e88e5;
+      min-width: 50px;
+      text-align: center;
+      background: rgba(30, 136, 229, 0.1);
+      border-radius: 6px;
+      padding: 4px 8px;
+    }
+
+    @media (min-width: 768px) {
+      .item-qty {
+        font-size: 20px;
+      }
+    }
+
+    .item-notes {
+      font-size: 12px;
+      color: #fb8c00;
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: rgba(251, 158, 11, 0.1);
+      border-radius: 6px;
+      border-left: 2px solid #fb8c00;
+    }
+
+    .order-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    @media (min-width: 768px) {
+      .btn {
+        padding: 14px 20px;
+        font-size: 15px;
+      }
+    }
+
+    .btn:active {
+      transform: scale(0.95);
+    }
+
+    .btn-ready {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-ready:hover {
+      background: #388e3c;
+      box-shadow: 0 4px 12px rgba(67, 160, 71, 0.3);
+    }
+
+    .btn-recall {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-recall:hover {
+      background: #d32f2f;
+      box-shadow: 0 4px 12px rgba(229, 57, 53, 0.3);
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      text-align: center;
+      grid-column: 1 / -1;
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    @media (min-width: 768px) {
+      .empty-icon {
+        font-size: 80px;
+      }
+    }
+
+    .empty-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 8px;
+    }
+
+    @media (min-width: 768px) {
+      .empty-text {
+        font-size: 24px;
+      }
+    }
+
+    .empty-subtext {
+      font-size: 14px;
+      color: #8b95a5;
+    }
+
+    .badge-new {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #e53935;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      animation: bounce 1s infinite;
+      box-shadow: 0 4px 12px rgba(229, 57, 53, 0.3);
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .order-special-instructions {
+      padding: 12px;
+      background: rgba(251, 191, 36, 0.1);
+      border-radius: 8px;
+      border-left: 3px solid #fbbf24;
+      margin-bottom: 12px;
+    }
+
+    .special-instructions-label {
+      font-size: 11px;
+      color: #fb8c00;
+      font-weight: 600;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .special-instructions-text {
+      font-size: 13px;
+      color: #2c3e50;
+      line-height: 1.4;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 767px) {
+      .kds-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item active">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        👨‍🍳 KDS (Кухня)
+      </div>
+    </div>
+    <div class="nav-brand" id="currentTime" style="font-size: 18px; color: #1e88e5;">00:00:00</div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">👨‍🍳 Kitchen Display System</h1>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">⏳</div>
+        <div class="stat-info">
+          <div class="stat-label">Готовятся</div>
+          <div class="stat-value" id="preparingCount" style="color: #1e88e5;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);">✅</div>
+        <div class="stat-info">
+          <div class="stat-label">Готовы</div>
+          <div class="stat-value" id="readyCount" style="color: #43a047;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders Grid -->
+    <div class="kds-grid" id="ordersGrid">
+      <div class="empty-state">
+        <div class="empty-icon">😴</div>
+        <div class="empty-text">Нет активных заказов</div>
+        <div class="empty-subtext">Ожидание новых заказов...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'http://localhost/api';
+    let orders = [];
+    let timers = {};
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      loadOrders();
+      setInterval(loadOrders, 3000); // Refresh every 3 seconds
+
+      // Update timers every second
+      setInterval(updateTimers, 1000);
+    });
+
+    // Update clock
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('currentTime').textContent = `${hours}:${minutes}:${seconds}`;
+    }
+
+    // Load orders
+    async function loadOrders() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders`);
+        if (response.ok) {
+          const data = await response.json();
+          const allOrders = data.data || [];
+
+          // Filter only preparing and ready orders
+          orders = allOrders.filter(o => o.status === 'preparing' || o.status === 'ready');
+
+          updateStats();
+          renderOrders();
+        }
+      } catch (error) {
+        console.error('Error loading orders:', error);
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const preparing = orders.filter(o => o.status === 'preparing').length;
+      const ready = orders.filter(o => o.status === 'ready').length;
+
+      document.getElementById('preparingCount').textContent = preparing;
+      document.getElementById('readyCount').textContent = ready;
+    }
+
+    // Render orders
+    function renderOrders() {
+      const grid = document.getElementById('ordersGrid');
+
+      if (orders.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">😴</div>
+            <div class="empty-text">Нет активных заказов</div>
+            <div class="empty-subtext">Ожидание новых заказов...</div>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+    }
+
+    // Render order card
+    function renderOrderCard(order) {
+      const isNew = !timers[order.id];
+      const elapsed = getElapsedTime(order);
+      const elapsedClass = elapsed > 20 ? 'urgent' : elapsed > 10 ? 'warning' : '';
+
+      if (isNew) {
+        timers[order.id] = new Date(order.createdAt).getTime();
+        playSound('new-order');
+      }
+
+      const orderTypeMap = {
+        'delivery': { class: 'type-delivery', icon: '🚚', text: 'Доставка' },
+        'pickup': { class: 'type-pickup', icon: '🏃', text: 'Самовывоз' },
+        'dine-in': { class: 'type-dine-in', icon: '🍽️', text: 'В зале' }
+      };
+
+      const typeInfo = orderTypeMap[order.orderType] || orderTypeMap['delivery'];
+
+      return `
+        <div class="order-card ${order.status}">
+          ${order.status === 'preparing' && elapsed < 1 ? '<div class="badge-new">НОВЫЙ</div>' : ''}
+
+          <div class="order-header">
+            <div class="order-number">#${order.id}</div>
+            <div class="order-time">
+              <div class="timer ${elapsedClass}" id="timer-${order.id}">${formatTime(elapsed)}</div>
+              <div class="time-label">${order.status === 'preparing' ? 'В работе' : 'Готов'}</div>
+            </div>
+          </div>
+
+          <div class="order-type ${typeInfo.class}">
+            ${typeInfo.icon} ${typeInfo.text}
+          </div>
+
+          <div class="order-items">
+            ${order.items.map(item => `
+              <div class="item">
+                <div>
+                  <div class="item-name">${item.name}</div>
+                  ${item.specialInstructions ? `
+                    <div class="item-notes">💬 ${item.specialInstructions}</div>
+                  ` : ''}
+                </div>
+                <div class="item-qty">×${item.quantity}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          ${order.specialInstructions ? `
+            <div class="order-special-instructions">
+              <div class="special-instructions-label">💬 Комментарий к заказу:</div>
+              <div class="special-instructions-text">${order.specialInstructions}</div>
+            </div>
+          ` : ''}
+
+          <div class="order-actions">
+            ${order.status === 'preparing' ? `
+              <button class="btn btn-ready" onclick="markReady(${order.id})">
+                ✅ Готов
+              </button>
+            ` : `
+              <button class="btn btn-recall" onclick="recallOrder(${order.id})">
+                ↩️ Вернуть
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    // Get elapsed time in minutes
+    function getElapsedTime(order) {
+      const now = Date.now();
+      const created = new Date(order.createdAt).getTime();
+      return Math.floor((now - created) / 60000);
+    }
+
+    // Format time
+    function formatTime(minutes) {
+      if (minutes < 1) return 'только что';
+      if (minutes < 60) return `${minutes} мин`;
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}:${String(mins).padStart(2, '0')}`;
+    }
+
+    // Update all timers
+    function updateTimers() {
+      orders.forEach(order => {
+        const timerEl = document.getElementById(`timer-${order.id}`);
+        if (timerEl) {
+          const elapsed = getElapsedTime(order);
+          timerEl.textContent = formatTime(elapsed);
+
+          // Update class for warning/urgent
+          timerEl.className = 'timer';
+          if (elapsed > 20) {
+            timerEl.classList.add('urgent');
+          } else if (elapsed > 10) {
+            timerEl.classList.add('warning');
+          }
+        }
+      });
+    }
+
+    // Mark order as ready
+    async function markReady(orderId) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ready' })
+        });
+
+        if (response.ok) {
+          playSound('ready');
+          await loadOrders();
+        }
+      } catch (error) {
+        console.error('Error marking order as ready:', error);
+      }
+    }
+
+    // Recall order (back to preparing)
+    async function recallOrder(orderId) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'preparing' })
+        });
+
+        if (response.ok) {
+          await loadOrders();
+        }
+      } catch (error) {
+        console.error('Error recalling order:', error);
+      }
+    }
+
+    // Play sound
+    function playSound(type) {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      if (type === 'new-order') {
+        // Two beeps for new order
+        oscillator.frequency.value = 800;
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+
+        const oscillator2 = audioContext.createOscillator();
+        oscillator2.connect(gainNode);
+        oscillator2.frequency.value = 1000;
+        oscillator2.start(audioContext.currentTime + 0.15);
+        oscillator2.stop(audioContext.currentTime + 0.25);
+      } else if (type === 'ready') {
+        oscillator.frequency.value = 1200;
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+      }
+
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    }
+  </script>
+</body>
+</html>

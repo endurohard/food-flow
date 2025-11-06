@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Система лояльности - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e1e8ed;
+      padding-bottom: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tabs::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+
+    .tabs::-webkit-scrollbar-thumb {
+      background: #c5cdd8;
+      border-radius: 2px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -14px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .tab {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+    }
+
+    .tab:hover {
+      color: #2c3e50;
+    }
+
+    .tab.active {
+      color: #1e88e5;
+      border-bottom-color: #1e88e5;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .btn-success {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #388e3c;
+    }
+
+    .btn-warning {
+      background: #fb8c00;
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: #f57c00;
+    }
+
+    .btn-danger {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #d32f2f;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    /* Customer Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .cards-grid {
+        gap: 20px;
+      }
+    }
+
+    .customer-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .customer-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .customer-card.bronze::before { background: linear-gradient(90deg, #cd7f32 0%, #a0522d 100%); }
+    .customer-card.silver::before { background: linear-gradient(90deg, #c0c0c0 0%, #808080 100%); }
+    .customer-card.gold::before { background: linear-gradient(90deg, #ffd700 0%, #ffa500 100%); }
+    .customer-card.platinum::before { background: linear-gradient(90deg, #e5e4e2 0%, #bcc6cc 100%); }
+
+    .customer-card:hover {
+      transform: translateY(-2px);
+      border-color: #1e88e5;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .customer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .customer-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .customer-name {
+        font-size: 18px;
+      }
+    }
+
+    .customer-tier {
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .customer-tier.bronze { background: rgba(205, 127, 50, 0.1); color: #cd7f32; }
+    .customer-tier.silver { background: rgba(192, 192, 192, 0.1); color: #757575; }
+    .customer-tier.gold { background: rgba(255, 215, 0, 0.1); color: #f57c00; }
+    .customer-tier.platinum { background: rgba(100, 116, 139, 0.1); color: #64748b; }
+
+    .customer-info {
+      margin: 12px 0;
+      color: #5a6c7d;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .points-section {
+      background: #f5f7fa;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .points-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1e88e5;
+    }
+
+    @media (min-width: 768px) {
+      .points-value {
+        font-size: 32px;
+      }
+    }
+
+    .points-label {
+      color: #8b95a5;
+      font-size: 13px;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #e1e8ed;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #1e88e5 0%, #1976d2 100%);
+      transition: all 0.3s;
+    }
+
+    .customer-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    /* Discount Cards */
+    .discount-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: all 0.3s;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .discount-card:hover {
+      border-color: #1e88e5;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .discount-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .discount-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .discount-name {
+        font-size: 20px;
+      }
+    }
+
+    .discount-badge {
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      background: #fb8c00;
+      color: white;
+    }
+
+    .discount-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .discount-detail {
+      background: #f5f7fa;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .detail-label {
+      color: #8b95a5;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .detail-value {
+      color: #2c3e50;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .status-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .status-toggle.active {
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+      border: 1px solid #43a047;
+    }
+
+    .status-toggle.inactive {
+      background: rgba(139, 149, 165, 0.1);
+      color: #8b95a5;
+      border: 1px solid #c5cdd8;
+    }
+
+    /* Campaign Cards */
+    .campaign-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .campaign-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .campaign-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .campaign-title {
+        font-size: 20px;
+      }
+    }
+
+    .campaign-dates {
+      color: #8b95a5;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #8b95a5;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: #5a6c7d;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      color: #5a6c7d;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #8b95a5;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 767px) {
+      .discount-header,
+      .campaign-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item active">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">🎁 Система лояльности и скидок</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('customers')">👥 Клиенты</button>
+      <button class="tab" onclick="switchTab('discounts')">💰 Скидки</button>
+      <button class="tab" onclick="switchTab('campaigns')">📢 Акции</button>
+      <button class="tab" onclick="switchTab('settings')">⚙️ Настройки</button>
+    </div>
+
+    <!-- Customers Tab -->
+    <div id="customersTab" class="tab-content active">
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">👥</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего клиентов</div>
+            <div class="stat-value" id="totalCustomers">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(205, 127, 50, 0.1);">🥉</div>
+          <div class="stat-info">
+            <div class="stat-label">Bronze</div>
+            <div class="stat-value" id="bronzeCustomers">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(192, 192, 192, 0.1);">🥈</div>
+          <div class="stat-info">
+            <div class="stat-label">Silver</div>
+            <div class="stat-value" id="silverCustomers">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(255, 215, 0, 0.1);">🥇</div>
+          <div class="stat-info">
+            <div class="stat-label">Gold</div>
+            <div class="stat-value" id="goldCustomers">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="customerSearch" placeholder="Поиск клиента по имени или телефону..." oninput="filterCustomers()">
+      </div>
+
+      <div class="cards-grid" id="customersGrid">
+        <!-- Customer cards will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Discounts Tab -->
+    <div id="discountsTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50;">💰 Конструктор скидок</h2>
+        <button class="btn btn-primary" onclick="openAddDiscountModal()">➕ Создать скидку</button>
+      </div>
+
+      <div id="discountsList">
+        <!-- Discounts will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Campaigns Tab -->
+    <div id="campaignsTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50;">📢 Маркетинговые акции</h2>
+        <button class="btn btn-primary" onclick="openAddCampaignModal()">➕ Создать акцию</button>
+      </div>
+
+      <div id="campaignsList">
+        <!-- Campaigns will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settingsTab" class="tab-content">
+      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #2c3e50;">⚙️ Настройки программы лояльности</h2>
+
+      <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 24px; max-width: 800px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+        <div class="form-group">
+          <label class="form-label">Начисление баллов за каждый потраченный рубль:</label>
+          <input type="number" class="form-input" id="pointsPerRuble" value="1" min="0" step="0.1">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Стоимость 1 балла (в рублях):</label>
+          <input type="number" class="form-input" id="rublePerPoint" value="1" min="0" step="0.1">
+        </div>
+
+        <h3 style="margin: 24px 0 16px; color: #2c3e50; font-size: 18px;">Уровни лояльности:</h3>
+
+        <div class="form-group">
+          <label class="form-label">🥉 Bronze - минимум баллов для получения:</label>
+          <input type="number" class="form-input" id="bronzeThreshold" value="0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">🥈 Silver - минимум баллов для получения:</label>
+          <input type="number" class="form-input" id="silverThreshold" value="500">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">🥇 Gold - минимум баллов для получения:</label>
+          <input type="number" class="form-input" id="goldThreshold" value="1500">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">💎 Platinum - минимум баллов для получения:</label>
+          <input type="number" class="form-input" id="platinumThreshold" value="3000">
+        </div>
+
+        <button class="btn btn-success" onclick="saveSettings()">💾 Сохранить настройки</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Customer Modal -->
+  <div class="modal" id="customerModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Информация о клиенте</h2>
+        <button class="close-btn" onclick="closeCustomerModal()">&times;</button>
+      </div>
+
+      <div id="customerModalBody">
+        <!-- Customer details will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Discount Modal -->
+  <div class="modal" id="discountModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Создать скидку</h2>
+        <button class="close-btn" onclick="closeDiscountModal()">&times;</button>
+      </div>
+
+      <form id="discountForm" onsubmit="saveDiscount(event)">
+        <div class="form-group">
+          <label class="form-label">Название скидки:</label>
+          <input type="text" class="form-input" id="discountName" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Тип скидки:</label>
+            <select class="form-select" id="discountType" required>
+              <option value="percentage">Процент</option>
+              <option value="fixed">Фиксированная сумма</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Размер скидки:</label>
+            <input type="number" class="form-input" id="discountValue" required min="0" step="0.01">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Применяется к:</label>
+          <select class="form-select" id="discountAppliesTo" required>
+            <option value="all">Весь заказ</option>
+            <option value="category">Определённая категория</option>
+            <option value="item">Конкретное блюдо</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Минимальная сумма заказа:</label>
+            <input type="number" class="form-input" id="discountMinOrder" value="0" min="0">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Макс. использований:</label>
+            <input type="number" class="form-input" id="discountMaxUses" value="0" min="0" placeholder="0 = безлимит">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Действует с:</label>
+            <input type="date" class="form-input" id="discountStartDate" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Действует по:</label>
+            <input type="date" class="form-input" id="discountEndDate" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Описание:</label>
+          <textarea class="form-textarea" id="discountDescription" placeholder="Краткое описание условий скидки"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeDiscountModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Campaign Modal -->
+  <div class="modal" id="campaignModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Создать акцию</h2>
+        <button class="close-btn" onclick="closeCampaignModal()">&times;</button>
+      </div>
+
+      <form id="campaignForm" onsubmit="saveCampaign(event)">
+        <div class="form-group">
+          <label class="form-label">Название акции:</label>
+          <input type="text" class="form-input" id="campaignName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Описание:</label>
+          <textarea class="form-textarea" id="campaignDescription" required></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Начало акции:</label>
+            <input type="date" class="form-input" id="campaignStartDate" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Конец акции:</label>
+            <input type="date" class="form-input" id="campaignEndDate" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Тип акции:</label>
+          <select class="form-select" id="campaignType" required>
+            <option value="birthday">День рождения</option>
+            <option value="happy-hour">Счастливые часы</option>
+            <option value="seasonal">Сезонная</option>
+            <option value="new-customer">Для новых клиентов</option>
+            <option value="loyalty">Программа лояльности</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Бонусные баллы:</label>
+          <input type="number" class="form-input" id="campaignBonusPoints" value="0" min="0">
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeCampaignModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <script>
+    let customers = [];
+    let discounts = [];
+    let campaigns = [];
+    let loyaltySettings = {
+      pointsPerRuble: 1,
+      rublePerPoint: 1,
+      tiers: {
+        bronze: 0,
+        silver: 500,
+        gold: 1500,
+        platinum: 3000
+      }
+    };
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize with sample data
+    function initializeData() {
+      const savedCustomers = localStorage.getItem('loyaltyCustomers');
+      const savedDiscounts = localStorage.getItem('loyaltyDiscounts');
+      const savedCampaigns = localStorage.getItem('loyaltyCampaigns');
+      const savedSettings = localStorage.getItem('loyaltySettings');
+
+      if (savedSettings) {
+        loyaltySettings = JSON.parse(savedSettings);
+      }
+
+      if (savedCustomers) {
+        customers = JSON.parse(savedCustomers);
+      } else {
+        customers = [
+          { id: 1, name: 'Иван Петров', phone: '+7 999 111-11-11', email: 'ivan@example.com', points: 1250, tier: 'silver', joinDate: '2024-01-15', totalSpent: 45000 },
+          { id: 2, name: 'Мария Сидорова', phone: '+7 999 222-22-22', email: 'maria@example.com', points: 2800, tier: 'gold', joinDate: '2023-11-20', totalSpent: 95000 },
+          { id: 3, name: 'Алексей Иванов', phone: '+7 999 333-33-33', email: 'alex@example.com', points: 450, tier: 'bronze', joinDate: '2024-05-10', totalSpent: 12000 },
+          { id: 4, name: 'Елена Кузнецова', phone: '+7 999 444-44-44', email: 'elena@example.com', points: 3500, tier: 'platinum', joinDate: '2023-08-05', totalSpent: 125000 },
+          { id: 5, name: 'Дмитрий Смирнов', phone: '+7 999 555-55-55', email: 'dmitry@example.com', points: 780, tier: 'silver', joinDate: '2024-03-22', totalSpent: 28000 }
+        ];
+      }
+
+      if (savedDiscounts) {
+        discounts = JSON.parse(savedDiscounts);
+      } else {
+        discounts = [
+          { id: 1, name: 'Летняя скидка', type: 'percentage', value: 15, appliesTo: 'all', minOrder: 1000, maxUses: 100, startDate: '2024-06-01', endDate: '2024-08-31', description: 'Скидка 15% на все заказы от 1000₽', isActive: true, usedCount: 23 },
+          { id: 2, name: 'Скидка новичкам', type: 'fixed', value: 500, appliesTo: 'all', minOrder: 0, maxUses: 0, startDate: '2024-01-01', endDate: '2024-12-31', description: 'Скидка 500₽ на первый заказ', isActive: true, usedCount: 45 }
+        ];
+      }
+
+      if (savedCampaigns) {
+        campaigns = JSON.parse(savedCampaigns);
+      } else {
+        campaigns = [
+          { id: 1, name: 'День рождения ресторана', type: 'seasonal', description: 'Скидка 20% в честь дня рождения ресторана + удвоенные баллы', startDate: '2024-12-01', endDate: '2024-12-07', bonusPoints: 100, isActive: true },
+          { id: 2, name: 'Счастливые часы', type: 'happy-hour', description: 'С 14:00 до 17:00 скидка 10% на все меню', startDate: '2024-11-01', endDate: '2024-11-30', bonusPoints: 50, isActive: true }
+        ];
+      }
+
+      saveData();
+      loadSettings();
+    }
+
+    function saveData() {
+      localStorage.setItem('loyaltyCustomers', JSON.stringify(customers));
+      localStorage.setItem('loyaltyDiscounts', JSON.stringify(discounts));
+      localStorage.setItem('loyaltyCampaigns', JSON.stringify(campaigns));
+      localStorage.setItem('loyaltySettings', JSON.stringify(loyaltySettings));
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tab + 'Tab').classList.add('active');
+
+      if (tab === 'customers') renderCustomers();
+      else if (tab === 'discounts') renderDiscounts();
+      else if (tab === 'campaigns') renderCampaigns();
+    }
+
+    function getTierName(tier) {
+      const names = {
+        bronze: '🥉 Bronze',
+        silver: '🥈 Silver',
+        gold: '🥇 Gold',
+        platinum: '💎 Platinum'
+      };
+      return names[tier] || tier;
+    }
+
+    function getTierProgress(points) {
+      const tiers = loyaltySettings.tiers;
+      if (points >= tiers.platinum) return { current: 'platinum', next: null, progress: 100 };
+      if (points >= tiers.gold) return { current: 'gold', next: 'platinum', progress: (points - tiers.gold) / (tiers.platinum - tiers.gold) * 100 };
+      if (points >= tiers.silver) return { current: 'silver', next: 'gold', progress: (points - tiers.silver) / (tiers.gold - tiers.silver) * 100 };
+      return { current: 'bronze', next: 'silver', progress: points / tiers.silver * 100 };
+    }
+
+    function renderCustomers() {
+      const grid = document.getElementById('customersGrid');
+      const search = document.getElementById('customerSearch').value.toLowerCase();
+
+      const filteredCustomers = customers.filter(c =>
+        c.name.toLowerCase().includes(search) || c.phone.includes(search)
+      );
+
+      grid.innerHTML = filteredCustomers.map(customer => {
+        const tierProgress = getTierProgress(customer.points);
+
+        return `
+          <div class="customer-card ${customer.tier}">
+            <div class="customer-header">
+              <div>
+                <div class="customer-name">${customer.name}</div>
+                <div class="customer-info">${customer.phone}</div>
+              </div>
+              <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
+            </div>
+
+            <div class="points-section">
+              <div class="points-value">${customer.points}</div>
+              <div class="points-label">баллов</div>
+              ${tierProgress.next ? `
+                <div style="color: #8b95a5; font-size: 11px; margin-top: 8px;">
+                  До ${getTierName(tierProgress.next)}: ${loyaltySettings.tiers[tierProgress.next] - customer.points} баллов
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: ${tierProgress.progress}%"></div>
+                </div>
+              ` : '<div style="color: #43a047; font-size: 11px; margin-top: 8px;">🏆 Максимальный уровень</div>'}
+            </div>
+
+            <div class="customer-info">
+              <div><strong>Всего потрачено:</strong> ${customer.totalSpent.toLocaleString('ru-RU')} ₽</div>
+              <div><strong>Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+            </div>
+
+            <div class="customer-actions">
+              <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="viewCustomer(${customer.id})">
+                👁️ Подробнее
+              </button>
+              <button class="btn btn-success btn-small" onclick="addPoints(${customer.id})">
+                + Баллы
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      updateCustomerStats();
+    }
+
+    function updateCustomerStats() {
+      document.getElementById('totalCustomers').textContent = customers.length;
+      document.getElementById('bronzeCustomers').textContent = customers.filter(c => c.tier === 'bronze').length;
+      document.getElementById('silverCustomers').textContent = customers.filter(c => c.tier === 'silver').length;
+      document.getElementById('goldCustomers').textContent = customers.filter(c => c.tier === 'gold').length;
+    }
+
+    function filterCustomers() {
+      renderCustomers();
+    }
+
+    function viewCustomer(id) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) return;
+
+      const modal = document.getElementById('customerModal');
+      const body = document.getElementById('customerModalBody');
+
+      body.innerHTML = `
+        <div style="text-align: center; margin-bottom: 24px;">
+          <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #1e88e5 0%, #1976d2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${customer.name.split(' ').map(n => n[0]).join('')}</div>
+          <h2 style="margin-bottom: 8px; color: #2c3e50;">${customer.name}</h2>
+          <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
+        </div>
+
+        <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+              <div style="color: #8b95a5; font-size: 13px;">Баллы</div>
+              <div style="font-size: 24px; font-weight: 700; color: #1e88e5;">${customer.points}</div>
+            </div>
+            <div>
+              <div style="color: #8b95a5; font-size: 13px;">Всего потрачено</div>
+              <div style="font-size: 24px; font-weight: 700; color: #43a047;">${customer.totalSpent.toLocaleString('ru-RU')} ₽</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="color: #5a6c7d; line-height: 2;">
+          <div><strong style="color: #2c3e50;">📞 Телефон:</strong> ${customer.phone}</div>
+          <div><strong style="color: #2c3e50;">📧 Email:</strong> ${customer.email}</div>
+          <div><strong style="color: #2c3e50;">📅 Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-success" style="flex: 1;" onclick="addPoints(${customer.id})">➕ Начислить баллы</button>
+          <button class="btn btn-warning" style="flex: 1;" onclick="deductPoints(${customer.id})">➖ Списать баллы</button>
+        </div>
+      `;
+
+      modal.classList.add('active');
+    }
+
+    function closeCustomerModal() {
+      document.getElementById('customerModal').classList.remove('active');
+    }
+
+    function addPoints(id) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) return;
+
+      const points = prompt(`Сколько баллов начислить клиенту "${customer.name}"?`, '100');
+      if (!points || isNaN(points)) return;
+
+      customer.points += parseInt(points);
+      updateCustomerTier(customer);
+      saveData();
+      renderCustomers();
+      closeCustomerModal();
+      showNotification(`✅ Начислено ${points} баллов клиенту ${customer.name}`);
+    }
+
+    function deductPoints(id) {
+      const customer = customers.find(c => c.id === id);
+      if (!customer) return;
+
+      const points = prompt(`Сколько баллов списать у клиента "${customer.name}"?`, '100');
+      if (!points || isNaN(points)) return;
+
+      customer.points = Math.max(0, customer.points - parseInt(points));
+      updateCustomerTier(customer);
+      saveData();
+      renderCustomers();
+      closeCustomerModal();
+      showNotification(`✅ Списано ${points} баллов у клиента ${customer.name}`);
+    }
+
+    function updateCustomerTier(customer) {
+      const tiers = loyaltySettings.tiers;
+      if (customer.points >= tiers.platinum) customer.tier = 'platinum';
+      else if (customer.points >= tiers.gold) customer.tier = 'gold';
+      else if (customer.points >= tiers.silver) customer.tier = 'silver';
+      else customer.tier = 'bronze';
+    }
+
+    // Discounts
+    function renderDiscounts() {
+      const container = document.getElementById('discountsList');
+
+      container.innerHTML = discounts.map(discount => `
+        <div class="discount-card">
+          <div class="discount-header">
+            <div>
+              <div class="discount-name">${discount.name}</div>
+              <div style="color: #8b95a5; margin-top: 8px; font-size: 13px;">${discount.description}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="discount-badge">${discount.type === 'percentage' ? discount.value + '%' : discount.value + '₽'}</div>
+              <span class="status-toggle ${discount.isActive ? 'active' : 'inactive'}" onclick="toggleDiscount(${discount.id})">
+                ${discount.isActive ? '✅ Активна' : '⏸️ Неактивна'}
+              </span>
+            </div>
+          </div>
+
+          <div class="discount-details">
+            <div class="discount-detail">
+              <div class="detail-label">Минимальный заказ</div>
+              <div class="detail-value">${discount.minOrder} ₽</div>
+            </div>
+            <div class="discount-detail">
+              <div class="detail-label">Использований</div>
+              <div class="detail-value">${discount.usedCount} ${discount.maxUses > 0 ? '/ ' + discount.maxUses : ''}</div>
+            </div>
+            <div class="discount-detail">
+              <div class="detail-label">Действует с</div>
+              <div class="detail-value">${new Date(discount.startDate).toLocaleDateString('ru-RU')}</div>
+            </div>
+            <div class="discount-detail">
+              <div class="detail-label">Действует до</div>
+              <div class="detail-value">${new Date(discount.endDate).toLocaleDateString('ru-RU')}</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
+            <button class="btn btn-danger btn-small" onclick="deleteDiscount(${discount.id})">🗑️ Удалить</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openAddDiscountModal() {
+      document.getElementById('discountModal').classList.add('active');
+    }
+
+    function closeDiscountModal() {
+      document.getElementById('discountModal').classList.remove('active');
+    }
+
+    function saveDiscount(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('discountName').value,
+        type: document.getElementById('discountType').value,
+        value: parseFloat(document.getElementById('discountValue').value),
+        appliesTo: document.getElementById('discountAppliesTo').value,
+        minOrder: parseFloat(document.getElementById('discountMinOrder').value),
+        maxUses: parseInt(document.getElementById('discountMaxUses').value),
+        startDate: document.getElementById('discountStartDate').value,
+        endDate: document.getElementById('discountEndDate').value,
+        description: document.getElementById('discountDescription').value,
+        isActive: true,
+        usedCount: 0
+      };
+
+      const newId = discounts.length > 0 ? Math.max(...discounts.map(d => d.id)) + 1 : 1;
+      discounts.push({ id: newId, ...formData });
+
+      saveData();
+      renderDiscounts();
+      closeDiscountModal();
+      showNotification('✅ Скидка создана');
+    }
+
+    function toggleDiscount(id) {
+      const discount = discounts.find(d => d.id === id);
+      if (!discount) return;
+
+      discount.isActive = !discount.isActive;
+      saveData();
+      renderDiscounts();
+      showNotification(`✅ Скидка "${discount.name}" ${discount.isActive ? 'активирована' : 'деактивирована'}`);
+    }
+
+    function deleteDiscount(id) {
+      if (!confirm('Удалить скидку?')) return;
+
+      discounts = discounts.filter(d => d.id !== id);
+      saveData();
+      renderDiscounts();
+      showNotification('🗑️ Скидка удалена');
+    }
+
+    // Campaigns
+    function renderCampaigns() {
+      const container = document.getElementById('campaignsList');
+
+      container.innerHTML = campaigns.map(campaign => `
+        <div class="campaign-card">
+          <div class="campaign-header">
+            <div>
+              <div class="campaign-title">${campaign.name}</div>
+              <div class="campaign-dates">
+                📅 ${new Date(campaign.startDate).toLocaleDateString('ru-RU')} - ${new Date(campaign.endDate).toLocaleDateString('ru-RU')}
+              </div>
+            </div>
+            <span class="status-toggle ${campaign.isActive ? 'active' : 'inactive'}" onclick="toggleCampaign(${campaign.id})">
+              ${campaign.isActive ? '✅ Активна' : '⏸️ Неактивна'}
+            </span>
+          </div>
+
+          <div style="color: #8b95a5; margin-bottom: 16px; font-size: 14px;">${campaign.description}</div>
+
+          <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px; flex: 1;">
+              <div style="color: #8b95a5; font-size: 11px;">Тип акции</div>
+              <div style="color: #2c3e50; font-weight: 600; font-size: 14px; margin-top: 4px;">${getCampaignTypeName(campaign.type)}</div>
+            </div>
+            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px; flex: 1;">
+              <div style="color: #8b95a5; font-size: 11px;">Бонусные баллы</div>
+              <div style="color: #1e88e5; font-weight: 700; font-size: 18px; margin-top: 4px;">${campaign.bonusPoints}</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
+            <button class="btn btn-danger btn-small" onclick="deleteCampaign(${campaign.id})">🗑️ Удалить</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function getCampaignTypeName(type) {
+      const names = {
+        birthday: '🎂 День рождения',
+        'happy-hour': '⏰ Счастливые часы',
+        seasonal: '🍂 Сезонная',
+        'new-customer': '🆕 Для новых',
+        loyalty: '🎁 Лояльность'
+      };
+      return names[type] || type;
+    }
+
+    function openAddCampaignModal() {
+      document.getElementById('campaignModal').classList.add('active');
+    }
+
+    function closeCampaignModal() {
+      document.getElementById('campaignModal').classList.remove('active');
+    }
+
+    function saveCampaign(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('campaignName').value,
+        description: document.getElementById('campaignDescription').value,
+        startDate: document.getElementById('campaignStartDate').value,
+        endDate: document.getElementById('campaignEndDate').value,
+        type: document.getElementById('campaignType').value,
+        bonusPoints: parseInt(document.getElementById('campaignBonusPoints').value),
+        isActive: true
+      };
+
+      const newId = campaigns.length > 0 ? Math.max(...campaigns.map(c => c.id)) + 1 : 1;
+      campaigns.push({ id: newId, ...formData });
+
+      saveData();
+      renderCampaigns();
+      closeCampaignModal();
+      showNotification('✅ Акция создана');
+    }
+
+    function toggleCampaign(id) {
+      const campaign = campaigns.find(c => c.id === id);
+      if (!campaign) return;
+
+      campaign.isActive = !campaign.isActive;
+      saveData();
+      renderCampaigns();
+      showNotification(`✅ Акция "${campaign.name}" ${campaign.isActive ? 'активирована' : 'деактивирована'}`);
+    }
+
+    function deleteCampaign(id) {
+      if (!confirm('Удалить акцию?')) return;
+
+      campaigns = campaigns.filter(c => c.id !== id);
+      saveData();
+      renderCampaigns();
+      showNotification('🗑️ Акция удалена');
+    }
+
+    // Settings
+    function loadSettings() {
+      document.getElementById('pointsPerRuble').value = loyaltySettings.pointsPerRuble;
+      document.getElementById('rublePerPoint').value = loyaltySettings.rublePerPoint;
+      document.getElementById('bronzeThreshold').value = loyaltySettings.tiers.bronze;
+      document.getElementById('silverThreshold').value = loyaltySettings.tiers.silver;
+      document.getElementById('goldThreshold').value = loyaltySettings.tiers.gold;
+      document.getElementById('platinumThreshold').value = loyaltySettings.tiers.platinum;
+    }
+
+    function saveSettings() {
+      loyaltySettings = {
+        pointsPerRuble: parseFloat(document.getElementById('pointsPerRuble').value),
+        rublePerPoint: parseFloat(document.getElementById('rublePerPoint').value),
+        tiers: {
+          bronze: parseInt(document.getElementById('bronzeThreshold').value),
+          silver: parseInt(document.getElementById('silverThreshold').value),
+          gold: parseInt(document.getElementById('goldThreshold').value),
+          platinum: parseInt(document.getElementById('platinumThreshold').value)
+        }
+      };
+
+      // Update all customer tiers based on new settings
+      customers.forEach(customer => updateCustomerTier(customer));
+
+      saveData();
+      showNotification('✅ Настройки сохранены');
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.classList.add('show');
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Initialize
+    initializeData();
+    renderCustomers();
+  </script>
+</body>
+</html>

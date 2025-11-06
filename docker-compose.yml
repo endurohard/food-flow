@@ -9,8 +9,8 @@ services:
       POSTGRES_USER: foodflow
       POSTGRES_PASSWORD: foodflow_secret
       POSTGRES_DB: foodflow
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
@@ -26,8 +26,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: food-flow-redis
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     networks:
@@ -38,94 +38,31 @@ services:
       timeout: 3s
       retries: 5
 
-  # Kong Database
-  kong-database:
-    image: postgres:16-alpine
-    container_name: kong-database
-    environment:
-      POSTGRES_USER: kong
-      POSTGRES_PASSWORD: kong_secret
-      POSTGRES_DB: kong
-    volumes:
-      - kong_data:/var/lib/postgresql/data
-    networks:
-      - food-flow-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kong"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Kong Migration
-  kong-migration:
-    image: kong:3.5
-    container_name: kong-migration
-    command: kong migrations bootstrap
-    environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-database
-      KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kong_secret
-      KONG_PG_DATABASE: kong
-    networks:
-      - food-flow-network
-    depends_on:
-      kong-database:
-        condition: service_healthy
-    restart: on-failure
-
-  # Kong API Gateway
+  # Kong API Gateway (DB-less mode)
   kong:
     image: kong:3.5
     container_name: kong-gateway
     environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-database
-      KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kong_secret
-      KONG_PG_DATABASE: kong
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
-      KONG_ADMIN_GUI_URL: http://localhost:8002
+    volumes:
+      - ./kong:/kong
     ports:
-      - "8000:8000"   # Proxy
-      - "8443:8443"   # Proxy SSL
-      - "8001:8001"   # Admin API
-      - "8444:8444"   # Admin API SSL
-      - "8002:8002"   # Kong Manager
+      - "80:8000"     # HTTP API Gateway
+      - "443:8443"    # HTTPS API Gateway
     networks:
       - food-flow-network
-    depends_on:
-      kong-database:
-        condition: service_healthy
-      kong-migration:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 10s
       timeout: 10s
       retries: 10
-
-  # Konga - Kong Admin UI
-  konga:
-    image: pantsel/konga:latest
-    container_name: konga
-    environment:
-      NODE_ENV: production
-      DB_ADAPTER: postgres
-      DB_HOST: kong-database
-      DB_USER: kong
-      DB_PASSWORD: kong_secret
-      DB_DATABASE: konga
-    ports:
-      - "1337:1337"
-    networks:
-      - food-flow-network
-    depends_on:
-      - kong-database
+    restart: unless-stopped
 
   # User Service
   user-service:
@@ -139,8 +76,8 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-jwt-secret-key-change-in-production
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     networks:
       - food-flow-network
     depends_on:
@@ -161,8 +98,8 @@ services:
       PORT: 3002
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
-    ports:
-      - "3002:3002"
+    expose:
+      - "3002"
     networks:
       - food-flow-network
     depends_on:
@@ -184,8 +121,8 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://rabbitmq:5672
-    ports:
-      - "3003:3003"
+    expose:
+      - "3003"
     networks:
       - food-flow-network
     depends_on:
@@ -209,8 +146,8 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://rabbitmq:5672
-    ports:
-      - "3004:3004"
+    expose:
+      - "3004"
     networks:
       - food-flow-network
     depends_on:
@@ -237,8 +174,8 @@ services:
       PRINTER_TYPE: network
       PRINTER_INTERFACE: 192.168.1.100:9100
       AUTO_PRINT: "true"
-    ports:
-      - "3005:3005"
+    expose:
+      - "3005"
     networks:
       - food-flow-network
     depends_on:
@@ -261,9 +198,9 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: foodflow
       RABBITMQ_DEFAULT_PASS: foodflow_secret
-    ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI
+    expose:
+      - "5672"   # AMQP
+      - "15672"  # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
@@ -278,8 +215,8 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -298,8 +235,8 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_INSTALL_PLUGINS: grafana-clock-panel
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -318,8 +255,8 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
+    expose:
+      - "9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     networks:
@@ -332,33 +269,30 @@ services:
     container_name: kibana
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-    ports:
-      - "5601:5601"
+    expose:
+      - "5601"
     networks:
       - food-flow-network
     depends_on:
       - elasticsearch
     restart: unless-stopped
 
-  # Nginx for serving frontend
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-frontend
-    ports:
-      - "80:80"
-      - "443:443"
+  # Static file server for frontend
+  frontend-service:
+    build:
+      context: ./services/frontend-service
+      dockerfile: Dockerfile
+    container_name: frontend-service
+    expose:
+      - "3000"
     volumes:
-      - ./frontend/dist:/usr/share/nginx/html
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./frontend:/app/public:ro
     networks:
       - food-flow-network
-    depends_on:
-      - kong
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  kong_data:
   redis_data:
   rabbitmq_data:
   prometheus_data:

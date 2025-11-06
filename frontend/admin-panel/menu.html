@@ -1,0 +1,2281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление меню - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e1e8ed;
+      padding-bottom: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tabs::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+
+    .tabs::-webkit-scrollbar-thumb {
+      background: #c5cdd8;
+      border-radius: 2px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -14px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .tab {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+    }
+
+    .tab:hover {
+      color: #2c3e50;
+    }
+
+    .tab.active {
+      color: #1e88e5;
+      border-bottom-color: #1e88e5;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .btn-success {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #388e3c;
+    }
+
+    .btn-warning {
+      background: #fb8c00;
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: #f57c00;
+    }
+
+    .btn-danger {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #d32f2f;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    .content-layout {
+      display: grid;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .content-layout {
+        grid-template-columns: 280px 1fr;
+      }
+    }
+
+    /* Categories Sidebar */
+    .categories-sidebar {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      height: fit-content;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 1024px) {
+      .categories-sidebar {
+        position: sticky;
+        top: 100px;
+      }
+    }
+
+    .sidebar-header-cat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .sidebar-title-cat {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .category-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #5a6c7d;
+    }
+
+    .category-item:hover {
+      background: #f5f7fa;
+    }
+
+    .category-item.active {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .category-count {
+      background: #f5f7fa;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #5a6c7d;
+    }
+
+    .category-item.active .category-count {
+      background: rgba(255, 255, 255, 0.25);
+      color: white;
+    }
+
+    /* Dishes Grid */
+    .dishes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .dishes-grid {
+        gap: 20px;
+      }
+    }
+
+    .dish-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .dish-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .dish-image {
+      width: 100%;
+      height: 160px;
+      background: #f5f7fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .dish-image {
+        height: 200px;
+        font-size: 64px;
+      }
+    }
+
+    .dish-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-new {
+      background: #43a047;
+      color: white;
+    }
+
+    .badge-hot {
+      background: #e53935;
+      color: white;
+    }
+
+    .badge-sale {
+      background: #fb8c00;
+      color: white;
+    }
+
+    .dish-content {
+      padding: 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dish-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 8px;
+    }
+
+    .dish-description {
+      color: #5a6c7d;
+      font-size: 13px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .dish-info {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .info-tag {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #f5f7fa;
+      color: #5a6c7d;
+    }
+
+    .dish-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid #e1e8ed;
+      margin-top: auto;
+    }
+
+    .dish-price {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e88e5;
+    }
+
+    .dish-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stop-list-badge {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+    }
+
+    .stop-list-text {
+      color: #e53935;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #8b95a5;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: #5a6c7d;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      color: #5a6c7d;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .form-checkbox input {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #8b95a5;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .modifiers-list, .modifier-item, .size-selector, .size-option,
+    .price-schemes, .price-scheme-card, .scheme-header {
+      /* Стили для модификаторов и схем цен */
+    }
+
+    .modifier-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #f5f7fa;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .modifier-name {
+      font-weight: 600;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .modifier-price {
+      color: #1e88e5;
+      font-size: 13px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1023px) {
+      .categories-sidebar {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item active">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddDishModal()">
+      ➕ Блюдо
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">🍽️ Управление меню</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('dishes')">🍕 Блюда</button>
+      <button class="tab" onclick="switchTab('recipes')">📋 Техкарты</button>
+      <button class="tab" onclick="switchTab('categories')">📁 Категории</button>
+      <button class="tab" onclick="switchTab('modifiers')">🎨 Модификаторы</button>
+      <button class="tab" onclick="switchTab('prices')">💰 Схемы цен</button>
+      <button class="tab" onclick="switchTab('costprices')">💵 Цены закупки</button>
+      <button class="tab" onclick="switchTab('stoplist')">🚫 Стоп-лист</button>
+    </div>
+
+    <!-- Dishes Tab -->
+    <div id="dishesTab" class="tab-content active">
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1);">🍽️</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего</div>
+            <div class="stat-value" id="totalDishes">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">Доступно</div>
+            <div class="stat-value" id="availableDishes">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1);">🚫</div>
+          <div class="stat-info">
+            <div class="stat-label">Стоп-лист</div>
+            <div class="stat-value" id="stoplistDishes">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1);">⭐</div>
+          <div class="stat-info">
+            <div class="stat-label">Хиты</div>
+            <div class="stat-value" id="popularDishes">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content-layout">
+        <!-- Categories Sidebar -->
+        <div class="categories-sidebar">
+          <div class="sidebar-header-cat">
+            <span class="sidebar-title-cat">Категории</span>
+            <button class="btn btn-small btn-primary" onclick="openAddCategoryModal()">+</button>
+          </div>
+          <div id="categoriesList">
+            <!-- Categories will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Dishes Grid -->
+        <div>
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="dishSearch" placeholder="Поиск..." oninput="filterDishes()">
+          </div>
+          <div class="dishes-grid" id="dishesGrid">
+            <!-- Dishes will be rendered here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recipes Tab (Tech Cards) -->
+    <div id="recipesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">📋 Техкарты (Рецепты)</h2>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn btn-secondary" onclick="loadSampleRecipes()">📥 Загрузить образцы</button>
+          <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Добавить техкарту</button>
+        </div>
+      </div>
+      <div id="recipesManagement"></div>
+    </div>
+
+    <!-- Categories Tab -->
+    <div id="categoriesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">📁 Категории блюд</h2>
+        <button class="btn btn-primary" onclick="openAddCategoryModal()">➕ Добавить</button>
+      </div>
+      <div id="categoriesManagement"></div>
+    </div>
+
+    <!-- Modifiers Tab -->
+    <div id="modifiersTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">🎨 Модификаторы</h2>
+        <button class="btn btn-primary" onclick="openAddModifierModal()">➕ Добавить</button>
+      </div>
+      <div id="modifiersManagement"></div>
+    </div>
+
+    <!-- Price Schemes Tab -->
+    <div id="pricesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">💰 Схемы цен</h2>
+        <button class="btn btn-primary" onclick="openAddPriceSchemeModal()">➕ Создать</button>
+      </div>
+      <div id="priceSchemes"></div>
+    </div>
+
+    <!-- Cost Prices Tab -->
+    <div id="costpricesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">💵 Цены закупки ингредиентов</h2>
+      </div>
+      <div id="costPricesManagement"></div>
+    </div>
+
+    <!-- Stop-list Tab -->
+    <div id="stoplistTab" class="tab-content">
+      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 20px;">🚫 Стоп-лист</h2>
+      <div id="stoplistManagement"></div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Dish Modal -->
+  <div class="modal" id="dishModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="dishModalTitle">Добавить блюдо</h2>
+        <button class="close-btn" onclick="closeDishModal()">&times;</button>
+      </div>
+
+      <form id="dishForm" onsubmit="saveDish(event)">
+        <div class="form-group">
+          <label class="form-label">Название:</label>
+          <input type="text" class="form-input" id="dishName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Описание:</label>
+          <textarea class="form-textarea" id="dishDescription" required></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Категория:</label>
+            <select class="form-select" id="dishCategory" required>
+              <option value="">Выберите</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Цена (₽):</label>
+            <input type="number" class="form-input" id="dishPrice" required step="0.01" min="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Вес/объем:</label>
+            <input type="text" class="form-input" id="dishWeight" placeholder="300 г">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Калории:</label>
+            <input type="number" class="form-input" id="dishCalories" placeholder="450">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Время (мин):</label>
+            <input type="number" class="form-input" id="dishCookTime" value="15">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Иконка:</label>
+            <input type="text" class="form-input" id="dishIcon" placeholder="🍕" maxlength="2">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="margin-bottom: 10px;">Особенности:</label>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishIsNew">
+            <label>🆕 Новинка</label>
+          </div>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishIsHot">
+            <label>🔥 Хит</label>
+          </div>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishIsVegetarian">
+            <label>🌱 Вегетарианское</label>
+          </div>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishIsSpicy">
+            <label>🌶️ Острое</label>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeDishModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Category Modal -->
+  <div class="modal" id="categoryModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Добавить категорию</h2>
+        <button class="close-btn" onclick="closeCategoryModal()">&times;</button>
+      </div>
+
+      <form id="categoryForm" onsubmit="saveCategory(event)">
+        <div class="form-group">
+          <label class="form-label">Название:</label>
+          <input type="text" class="form-input" id="categoryName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Иконка:</label>
+          <input type="text" class="form-input" id="categoryIcon" placeholder="🍕" maxlength="2">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Порядок:</label>
+          <input type="number" class="form-input" id="categoryOrder" value="0">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="submit" class="btn btn-primary" style="flex: 1;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeCategoryModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Modifier Modal -->
+  <div class="modal" id="modifierModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Добавить модификатор</h2>
+        <button class="close-btn" onclick="closeModifierModal()">&times;</button>
+      </div>
+
+      <form id="modifierForm" onsubmit="saveModifier(event)">
+        <div class="form-group">
+          <label class="form-label">Название:</label>
+          <input type="text" class="form-input" id="modifierName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Цена (₽):</label>
+          <input type="number" class="form-input" id="modifierPrice" required step="0.01" min="0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Тип:</label>
+          <select class="form-select" id="modifierType" required>
+            <option value="sauce">Соус</option>
+            <option value="topping">Топпинг</option>
+            <option value="side">Гарнир</option>
+            <option value="drink">Напиток</option>
+            <option value="other">Другое</option>
+          </select>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button type="submit" class="btn btn-primary" style="flex: 1;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModifierModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Recipe Modal -->
+  <div class="modal" id="recipeModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Создать техкарту</h2>
+        <button class="close-btn" onclick="closeRecipeModal()">&times;</button>
+      </div>
+
+      <form id="recipeForm" onsubmit="saveRecipe(event)">
+        <div class="form-group">
+          <label class="form-label">Выберите блюдо:</label>
+          <select class="form-select" id="recipeDishId" required onchange="updateRecipeName()">
+            <option value="">Выберите</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Название техкарты:</label>
+          <input type="text" class="form-input" id="recipeName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Описание:</label>
+          <textarea class="form-textarea" id="recipeDescription" placeholder="Технология приготовления..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="margin-bottom: 12px;">Ингредиенты:</label>
+          <div id="recipeIngredientsList">
+            <!-- Ingredients will be added here -->
+          </div>
+          <button type="button" class="btn btn-secondary" onclick="addIngredientRow()" style="margin-top: 10px;">➕ Добавить ингредиент</button>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeRecipeModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <script>
+    let dishes = [];
+    let categories = [];
+    let modifiers = [];
+    let priceSchemes = [];
+    let stoplist = [];
+    let recipes = [];
+    let inventory = [];
+    let currentCategory = 'all';
+    let editingDishId = null;
+    let ingredientRowCounter = 0;
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize with sample data
+    function initializeData() {
+      const savedDishes = localStorage.getItem('menuDishes');
+      const savedCategories = localStorage.getItem('menuCategories');
+      const savedModifiers = localStorage.getItem('menuModifiers');
+      const savedStoplist = localStorage.getItem('menuStoplist');
+      const savedRecipes = localStorage.getItem('menuRecipes');
+      const savedInventory = localStorage.getItem('inventory');
+
+      if (savedCategories) {
+        categories = JSON.parse(savedCategories);
+      } else {
+        categories = [
+          { id: 1, name: 'Пицца', icon: '🍕', order: 1 },
+          { id: 2, name: 'Суши', icon: '🍣', order: 2 },
+          { id: 3, name: 'Бургеры', icon: '🍔', order: 3 },
+          { id: 4, name: 'Салаты', icon: '🥗', order: 4 },
+          { id: 5, name: 'Напитки', icon: '🥤', order: 5 },
+          { id: 6, name: 'Десерты', icon: '🍰', order: 6 }
+        ];
+      }
+
+      if (savedDishes) {
+        dishes = JSON.parse(savedDishes);
+      } else {
+        dishes = [
+          { id: 1, name: 'Маргарита', description: 'Классическая пицца с томатами, моцареллой и базиликом', category: 1, price: 450, weight: '500 г', calories: 890, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: true, isSpicy: false },
+          { id: 2, name: 'Пепперони', description: 'Пицца с острой салями', category: 1, price: 520, weight: '550 г', calories: 980, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: false, isSpicy: true },
+          { id: 3, name: 'Филадельфия', description: 'Ролл с лососем и сливочным сыром', category: 2, price: 380, weight: '250 г', calories: 420, cookTime: 10, icon: '🍣', isNew: true, isHot: false, isVegetarian: false, isSpicy: false },
+          { id: 4, name: 'Калифорния', description: 'Ролл с крабом и икрой тобико', category: 2, price: 350, weight: '240 г', calories: 380, cookTime: 10, icon: '🍣', isNew: false, isHot: true, isVegetarian: false, isSpicy: false },
+          { id: 5, name: 'Чизбургер', description: 'Сочный бургер с говядиной', category: 3, price: 320, weight: '300 г', calories: 650, cookTime: 12, icon: '🍔', isNew: false, isHot: false, isVegetarian: false, isSpicy: false },
+          { id: 6, name: 'Цезарь', description: 'Салат с курицей гриль', category: 4, price: 280, weight: '250 г', calories: 340, cookTime: 8, icon: '🥗', isNew: false, isHot: true, isVegetarian: false, isSpicy: false }
+        ];
+      }
+
+      if (savedModifiers) {
+        modifiers = JSON.parse(savedModifiers);
+      } else {
+        modifiers = [
+          { id: 1, name: 'Соус Цезарь', price: 50, type: 'sauce' },
+          { id: 2, name: 'Соус Барбекю', price: 50, type: 'sauce' },
+          { id: 3, name: 'Сырный соус', price: 70, type: 'sauce' },
+          { id: 4, name: 'Бекон', price: 80, type: 'topping' },
+          { id: 5, name: 'Грибы', price: 60, type: 'topping' },
+          { id: 6, name: 'Картофель фри', price: 120, type: 'side' }
+        ];
+      }
+
+      if (savedStoplist) {
+        stoplist = JSON.parse(savedStoplist);
+      } else {
+        stoplist = [];
+      }
+
+      if (savedRecipes) {
+        recipes = JSON.parse(savedRecipes);
+      } else {
+        // Sample recipes with realistic ingredients for existing dishes
+        recipes = [
+          {
+            id: 1,
+            dishId: 1, // Маргарита
+            name: 'Техкарта: Маргарита',
+            description: 'Раскатать тесто, нанести соус, выложить моцареллу, базилик. Выпекать 12 минут при 250°C.',
+            ingredients: [
+              { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
+              { inventoryId: 2, name: 'Моцарелла', quantity: 150, unit: 'г' },
+              { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
+              { inventoryId: 4, name: 'Базилик', quantity: 5, unit: 'г' }
+            ],
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 2,
+            dishId: 2, // Пепперони
+            name: 'Техкарта: Пепперони',
+            description: 'Раскатать тесто, нанести соус, выложить моцареллу и салями. Выпекать 12 минут при 250°C.',
+            ingredients: [
+              { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
+              { inventoryId: 2, name: 'Моцарелла', quantity: 130, unit: 'г' },
+              { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
+              { inventoryId: 5, name: 'Салями Пепперони', quantity: 80, unit: 'г' }
+            ],
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 3,
+            dishId: 3, // Филадельфия
+            name: 'Техкарта: Филадельфия',
+            description: 'Приготовить рис, выложить на нори, добавить лосось и сливочный сыр, свернуть ролл.',
+            ingredients: [
+              { inventoryId: 7, name: 'Рис для суши', quantity: 120, unit: 'г' },
+              { inventoryId: 8, name: 'Нори', quantity: 2, unit: 'шт' },
+              { inventoryId: 6, name: 'Лосось свежий', quantity: 80, unit: 'г' },
+              { inventoryId: 9, name: 'Сливочный сыр', quantity: 60, unit: 'г' }
+            ],
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 4,
+            dishId: 5, // Чизбургер
+            name: 'Техкарта: Чизбургер',
+            description: 'Обжарить котлету, разрезать булочку, выложить салат, котлету, сыр. Подать горячим.',
+            ingredients: [
+              { inventoryId: 10, name: 'Говяжья котлета', quantity: 1, unit: 'шт' },
+              { inventoryId: 11, name: 'Булочка для бургера', quantity: 1, unit: 'шт' },
+              { inventoryId: 12, name: 'Салат Айсберг', quantity: 30, unit: 'г' },
+              { inventoryId: 2, name: 'Моцарелла', quantity: 40, unit: 'г' }
+            ],
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 5,
+            dishId: 6, // Цезарь
+            name: 'Техкарта: Цезарь',
+            description: 'Обжарить куриное филе, нарезать салат, добавить сыр. Заправить соусом Цезарь.',
+            ingredients: [
+              { inventoryId: 13, name: 'Куриное филе', quantity: 150, unit: 'г' },
+              { inventoryId: 12, name: 'Салат Айсберг', quantity: 100, unit: 'г' },
+              { inventoryId: 2, name: 'Моцарелла', quantity: 50, unit: 'г' }
+            ],
+            createdAt: new Date().toISOString()
+          }
+        ];
+      }
+
+      if (savedInventory) {
+        inventory = JSON.parse(savedInventory);
+      } else {
+        // Sample inventory items with cost prices (costPrice - цена за единицу измерения)
+        inventory = [
+          { id: 1, name: 'Тесто для пиццы', unit: 'г', quantity: 10000, minQuantity: 2000, costPrice: 0.15 },
+          { id: 2, name: 'Моцарелла', unit: 'г', quantity: 5000, minQuantity: 1000, costPrice: 0.85 },
+          { id: 3, name: 'Томатный соус', unit: 'мл', quantity: 3000, minQuantity: 500, costPrice: 0.12 },
+          { id: 4, name: 'Базилик', unit: 'г', quantity: 200, minQuantity: 50, costPrice: 1.2 },
+          { id: 5, name: 'Салями Пепперони', unit: 'г', quantity: 3000, minQuantity: 500, costPrice: 1.5 },
+          { id: 6, name: 'Лосось свежий', unit: 'г', quantity: 2000, minQuantity: 300, costPrice: 2.8 },
+          { id: 7, name: 'Рис для суши', unit: 'г', quantity: 5000, minQuantity: 1000, costPrice: 0.08 },
+          { id: 8, name: 'Нори', unit: 'шт', quantity: 100, minQuantity: 20, costPrice: 15 },
+          { id: 9, name: 'Сливочный сыр', unit: 'г', quantity: 2000, minQuantity: 300, costPrice: 0.95 },
+          { id: 10, name: 'Говяжья котлета', unit: 'шт', quantity: 50, minQuantity: 10, costPrice: 35 },
+          { id: 11, name: 'Булочка для бургера', unit: 'шт', quantity: 60, minQuantity: 15, costPrice: 12 },
+          { id: 12, name: 'Салат Айсберг', unit: 'г', quantity: 1500, minQuantity: 300, costPrice: 0.25 },
+          { id: 13, name: 'Куриное филе', unit: 'г', quantity: 3000, minQuantity: 500, costPrice: 0.65 }
+        ];
+      }
+
+      priceSchemes = [
+        { id: 1, name: 'Базовые цены', description: 'Стандартные цены', isActive: true, multiplier: 1.0 },
+        { id: 2, name: 'Акция -20%', description: 'Скидка 20%', isActive: false, multiplier: 0.8 },
+        { id: 3, name: 'VIP зал +15%', description: 'Наценка VIP', isActive: false, multiplier: 1.15 }
+      ];
+
+      saveData();
+      updateCategoryOptions();
+    }
+
+    function saveData() {
+      localStorage.setItem('menuDishes', JSON.stringify(dishes));
+      localStorage.setItem('menuCategories', JSON.stringify(categories));
+      localStorage.setItem('menuModifiers', JSON.stringify(modifiers));
+      localStorage.setItem('menuStoplist', JSON.stringify(stoplist));
+      localStorage.setItem('menuRecipes', JSON.stringify(recipes));
+      localStorage.setItem('inventory', JSON.stringify(inventory));
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tab + 'Tab').classList.add('active');
+
+      if (tab === 'recipes') renderRecipesManagement();
+      else if (tab === 'categories') renderCategoriesManagement();
+      else if (tab === 'modifiers') renderModifiersManagement();
+      else if (tab === 'prices') renderPriceSchemes();
+      else if (tab === 'costprices') renderCostPrices();
+      else if (tab === 'stoplist') renderStoplist();
+    }
+
+    function renderCategories() {
+      const container = document.getElementById('categoriesList');
+      const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
+
+      container.innerHTML = `
+        <div class="category-item ${currentCategory === 'all' ? 'active' : ''}" onclick="selectCategory('all')">
+          <span>🍽️ Все</span>
+          <span class="category-count">${dishes.length}</span>
+        </div>
+        ${sortedCategories.map(cat => `
+          <div class="category-item ${currentCategory === cat.id ? 'active' : ''}" onclick="selectCategory(${cat.id})">
+            <span>${cat.icon} ${cat.name}</span>
+            <span class="category-count">${dishes.filter(d => d.category === cat.id).length}</span>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    function selectCategory(categoryId) {
+      currentCategory = categoryId;
+      renderCategories();
+      renderDishes();
+    }
+
+    function renderDishes() {
+      const grid = document.getElementById('dishesGrid');
+      const search = document.getElementById('dishSearch').value.toLowerCase();
+
+      let filteredDishes = dishes.filter(dish => {
+        const matchesCategory = currentCategory === 'all' || dish.category === currentCategory;
+        const matchesSearch = dish.name.toLowerCase().includes(search) || dish.description.toLowerCase().includes(search);
+        return matchesCategory && matchesSearch;
+      });
+
+      if (filteredDishes.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #8b95a5; padding: 40px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">Блюда не найдены</div>';
+        updateStats();
+        return;
+      }
+
+      grid.innerHTML = filteredDishes.map(dish => {
+        const inStoplist = stoplist.includes(dish.id);
+        const recipe = recipes.find(r => r.dishId === dish.id);
+        const dishCost = recipe ? calculateDishCost(recipe.id) : 0;
+        const profit = dish.price - dishCost;
+        const profitMargin = dish.price > 0 ? ((profit / dish.price) * 100) : 0;
+
+        return `
+          <div class="dish-card">
+            <div class="dish-image">
+              <span>${dish.icon || '🍽️'}</span>
+              ${dish.isNew ? '<div class="dish-badge badge-new">Новинка</div>' : ''}
+              ${dish.isHot ? `<div class="dish-badge badge-hot" style="top: ${dish.isNew ? '45px' : '10px'};">Хит</div>` : ''}
+              ${inStoplist ? `
+                <div class="stop-list-badge">
+                  <div class="stop-list-text">🚫 СТОП-ЛИСТ</div>
+                  <button class="btn btn-success btn-small" onclick="removeFromStoplist(${dish.id})">Вернуть</button>
+                </div>
+              ` : ''}
+            </div>
+            <div class="dish-content">
+              <div class="dish-name">${dish.name}</div>
+              <div class="dish-description">${dish.description}</div>
+              <div class="dish-info">
+                ${dish.weight ? `<span class="info-tag">⚖️ ${dish.weight}</span>` : ''}
+                ${dish.calories ? `<span class="info-tag">🔥 ${dish.calories} ккал</span>` : ''}
+                ${dish.cookTime ? `<span class="info-tag">⏱️ ${dish.cookTime} мин</span>` : ''}
+                ${dish.isVegetarian ? '<span class="info-tag">🌱</span>' : ''}
+                ${dish.isSpicy ? '<span class="info-tag">🌶️</span>' : ''}
+              </div>
+              ${recipe ? `
+                <div style="margin: 12px 0; padding: 8px; background: #f5f7fa; border-radius: 8px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                    <span style="color: #5a6c7d;">Себестоимость:</span>
+                    <span style="color: #1e88e5; font-weight: 600;">${dishCost.toFixed(2)} ₽</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                    <span style="color: #5a6c7d;">Прибыль:</span>
+                    <span style="color: ${profit > 0 ? '#43a047' : '#e53935'}; font-weight: 600;">${profit.toFixed(2)} ₽ (${profitMargin.toFixed(0)}%)</span>
+                  </div>
+                </div>
+              ` : ''}
+              <div class="dish-footer">
+                <div class="dish-price">${dish.price} ₽</div>
+                <div class="dish-actions">
+                  <button class="btn btn-secondary btn-small" onclick="editDish(${dish.id})">✏️</button>
+                  ${inStoplist ? '' : `<button class="btn btn-warning btn-small" onclick="addToStoplist(${dish.id})">🚫</button>`}
+                  <button class="btn btn-danger btn-small" onclick="deleteDish(${dish.id})">🗑️</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      updateStats();
+    }
+
+    function updateStats() {
+      document.getElementById('totalDishes').textContent = dishes.length;
+      document.getElementById('availableDishes').textContent = dishes.filter(d => !stoplist.includes(d.id)).length;
+      document.getElementById('stoplistDishes').textContent = stoplist.length;
+      document.getElementById('popularDishes').textContent = dishes.filter(d => d.isHot).length;
+    }
+
+    function filterDishes() {
+      renderDishes();
+    }
+
+    function openAddDishModal() {
+      editingDishId = null;
+      document.getElementById('dishModalTitle').textContent = 'Добавить блюдо';
+      document.getElementById('dishForm').reset();
+      document.getElementById('dishModal').classList.add('active');
+    }
+
+    function editDish(id) {
+      const dish = dishes.find(d => d.id === id);
+      if (!dish) return;
+
+      editingDishId = id;
+      document.getElementById('dishModalTitle').textContent = 'Редактировать';
+      document.getElementById('dishName').value = dish.name;
+      document.getElementById('dishDescription').value = dish.description;
+      document.getElementById('dishCategory').value = dish.category;
+      document.getElementById('dishPrice').value = dish.price;
+      document.getElementById('dishWeight').value = dish.weight || '';
+      document.getElementById('dishCalories').value = dish.calories || '';
+      document.getElementById('dishCookTime').value = dish.cookTime || 15;
+      document.getElementById('dishIcon').value = dish.icon || '';
+      document.getElementById('dishIsNew').checked = dish.isNew || false;
+      document.getElementById('dishIsHot').checked = dish.isHot || false;
+      document.getElementById('dishIsVegetarian').checked = dish.isVegetarian || false;
+      document.getElementById('dishIsSpicy').checked = dish.isSpicy || false;
+      document.getElementById('dishModal').classList.add('active');
+    }
+
+    function saveDish(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('dishName').value,
+        description: document.getElementById('dishDescription').value,
+        category: parseInt(document.getElementById('dishCategory').value),
+        price: parseFloat(document.getElementById('dishPrice').value),
+        weight: document.getElementById('dishWeight').value,
+        calories: parseInt(document.getElementById('dishCalories').value) || null,
+        cookTime: parseInt(document.getElementById('dishCookTime').value) || 15,
+        icon: document.getElementById('dishIcon').value || '🍽️',
+        isNew: document.getElementById('dishIsNew').checked,
+        isHot: document.getElementById('dishIsHot').checked,
+        isVegetarian: document.getElementById('dishIsVegetarian').checked,
+        isSpicy: document.getElementById('dishIsSpicy').checked
+      };
+
+      if (editingDishId) {
+        const index = dishes.findIndex(d => d.id === editingDishId);
+        dishes[index] = { ...dishes[index], ...formData };
+        showNotification('✅ Блюдо обновлено');
+      } else {
+        const newId = dishes.length > 0 ? Math.max(...dishes.map(d => d.id)) + 1 : 1;
+        dishes.push({ id: newId, ...formData });
+        showNotification('✅ Блюдо добавлено');
+      }
+
+      saveData();
+      renderDishes();
+      renderCategories();
+      closeDishModal();
+    }
+
+    function deleteDish(id) {
+      if (!confirm('Удалить блюдо?')) return;
+
+      dishes = dishes.filter(d => d.id !== id);
+      stoplist = stoplist.filter(sid => sid !== id);
+      saveData();
+      renderDishes();
+      renderCategories();
+      showNotification('🗑️ Удалено');
+    }
+
+    function closeDishModal() {
+      document.getElementById('dishModal').classList.remove('active');
+    }
+
+    // Categories
+    function updateCategoryOptions() {
+      const select = document.getElementById('dishCategory');
+      select.innerHTML = '<option value="">Выберите</option>' +
+        categories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+    }
+
+    function openAddCategoryModal() {
+      document.getElementById('categoryForm').reset();
+      document.getElementById('categoryModal').classList.add('active');
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('categoryModal').classList.remove('active');
+    }
+
+    function saveCategory(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('categoryName').value,
+        icon: document.getElementById('categoryIcon').value || '📁',
+        order: parseInt(document.getElementById('categoryOrder').value) || 0
+      };
+
+      const newId = categories.length > 0 ? Math.max(...categories.map(c => c.id)) + 1 : 1;
+      categories.push({ id: newId, ...formData });
+
+      saveData();
+      updateCategoryOptions();
+      renderCategories();
+      renderCategoriesManagement();
+      closeCategoryModal();
+      showNotification('✅ Категория добавлена');
+    }
+
+    function renderCategoriesManagement() {
+      const container = document.getElementById('categoriesManagement');
+      const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
+
+      container.innerHTML = `
+        <div style="display: grid; gap: 12px;">
+          ${sortedCategories.map(cat => `
+            <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+              <div>
+                <div style="font-size: 24px; margin-bottom: 6px;">${cat.icon}</div>
+                <div style="font-size: 16px; font-weight: 700; color: #2c3e50; margin-bottom: 4px;">${cat.name}</div>
+                <div style="color: #8b95a5; font-size: 13px;">Блюд: ${dishes.filter(d => d.category === cat.id).length}</div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-danger btn-small" onclick="deleteCategory(${cat.id})">🗑️</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function deleteCategory(id) {
+      if (dishes.some(d => d.category === id)) {
+        showNotification('⚠️ Нельзя удалить категорию с блюдами');
+        return;
+      }
+
+      if (!confirm('Удалить?')) return;
+
+      categories = categories.filter(c => c.id !== id);
+      saveData();
+      updateCategoryOptions();
+      renderCategories();
+      renderCategoriesManagement();
+      showNotification('🗑️ Удалено');
+    }
+
+    // Modifiers
+    function openAddModifierModal() {
+      document.getElementById('modifierForm').reset();
+      document.getElementById('modifierModal').classList.add('active');
+    }
+
+    function closeModifierModal() {
+      document.getElementById('modifierModal').classList.remove('active');
+    }
+
+    function saveModifier(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('modifierName').value,
+        price: parseFloat(document.getElementById('modifierPrice').value),
+        type: document.getElementById('modifierType').value
+      };
+
+      const newId = modifiers.length > 0 ? Math.max(...modifiers.map(m => m.id)) + 1 : 1;
+      modifiers.push({ id: newId, ...formData });
+
+      saveData();
+      renderModifiersManagement();
+      closeModifierModal();
+      showNotification('✅ Добавлено');
+    }
+
+    function renderModifiersManagement() {
+      const container = document.getElementById('modifiersManagement');
+
+      const groupedModifiers = modifiers.reduce((acc, mod) => {
+        if (!acc[mod.type]) acc[mod.type] = [];
+        acc[mod.type].push(mod);
+        return acc;
+      }, {});
+
+      const typeNames = {
+        sauce: '🍯 Соусы',
+        topping: '🍕 Топпинги',
+        side: '🍟 Гарниры',
+        drink: '🥤 Напитки',
+        other: '📦 Другое'
+      };
+
+      container.innerHTML = Object.entries(groupedModifiers).map(([type, mods]) => `
+        <div style="margin-bottom: 24px;">
+          <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">${typeNames[type] || type}</h3>
+          <div style="display: grid; gap: 10px;">
+            ${mods.map(mod => `
+              <div class="modifier-item">
+                <div>
+                  <div class="modifier-name">${mod.name}</div>
+                  <div class="modifier-price">+${mod.price} ₽</div>
+                </div>
+                <button class="btn btn-danger btn-small" onclick="deleteModifier(${mod.id})">🗑️</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function deleteModifier(id) {
+      if (!confirm('Удалить?')) return;
+
+      modifiers = modifiers.filter(m => m.id !== id);
+      saveData();
+      renderModifiersManagement();
+      showNotification('🗑️ Удалено');
+    }
+
+    // Price Schemes
+    function renderPriceSchemes() {
+      const container = document.getElementById('priceSchemes');
+
+      container.innerHTML = `<div style="display: grid; gap: 12px;">${priceSchemes.map(scheme => `
+        <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 12px; padding: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <div style="font-size: 18px; font-weight: 700; color: #2c3e50;">${scheme.name}</div>
+              <div style="color: #8b95a5; margin-top: 6px; font-size: 13px;">${scheme.description}</div>
+            </div>
+            ${scheme.isActive ? '<span style="padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: rgba(67, 160, 71, 0.1); color: #43a047;">✅ Активна</span>' : ''}
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
+              <div style="color: #8b95a5; font-size: 11px;">Множитель</div>
+              <div style="color: #1e88e5; font-weight: 700; font-size: 16px;">×${scheme.multiplier}</div>
+            </div>
+            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
+              <div style="color: #8b95a5; font-size: 11px;">Пример (450₽)</div>
+              <div style="color: #2c3e50; font-weight: 700; font-size: 16px;">${Math.round(450 * scheme.multiplier)}₽</div>
+            </div>
+          </div>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    function openAddPriceSchemeModal() {
+      showNotification('🚧 В разработке');
+    }
+
+    // Stop-list
+    function addToStoplist(dishId) {
+      if (stoplist.includes(dishId)) return;
+
+      stoplist.push(dishId);
+      saveData();
+      renderDishes();
+      renderStoplist();
+      showNotification('🚫 В стоп-лист');
+    }
+
+    function removeFromStoplist(dishId) {
+      stoplist = stoplist.filter(id => id !== dishId);
+      saveData();
+      renderDishes();
+      renderStoplist();
+      showNotification('✅ Возвращено');
+    }
+
+    function renderStoplist() {
+      const container = document.getElementById('stoplistManagement');
+      const stoplistDishes = dishes.filter(d => stoplist.includes(d.id));
+
+      if (stoplistDishes.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #8b95a5; padding: 40px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">Стоп-лист пуст</div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="display: grid; gap: 12px;">
+          ${stoplistDishes.map(dish => {
+            const category = categories.find(c => c.id === dish.category);
+            return `
+              <div style="background: #ffffff; border: 1px solid #e53935; border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(229, 57, 53, 0.1);">
+                <div style="display: flex; gap: 16px; align-items: center;">
+                  <div style="font-size: 36px;">${dish.icon || '🍽️'}</div>
+                  <div>
+                    <div style="font-size: 16px; font-weight: 700; color: #2c3e50; margin-bottom: 4px;">${dish.name}</div>
+                    <div style="color: #8b95a5; font-size: 13px; margin-bottom: 4px;">${category ? category.name : ''}</div>
+                    <div style="color: #e53935; font-size: 13px;">🚫 Недоступно</div>
+                  </div>
+                </div>
+                <button class="btn btn-success btn-small" onclick="removeFromStoplist(${dish.id})">✅ Вернуть</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.classList.add('show');
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Recipes (Tech Cards)
+    function openAddRecipeModal() {
+      ingredientRowCounter = 0;
+      document.getElementById('recipeForm').reset();
+      document.getElementById('recipeIngredientsList').innerHTML = '';
+      updateRecipeDishOptions();
+      addIngredientRow();
+      document.getElementById('recipeModal').classList.add('active');
+    }
+
+    function closeRecipeModal() {
+      document.getElementById('recipeModal').classList.remove('active');
+    }
+
+    function updateRecipeDishOptions() {
+      const select = document.getElementById('recipeDishId');
+      const dishesWithoutRecipes = dishes.filter(d => !recipes.some(r => r.dishId === d.id));
+
+      select.innerHTML = '<option value="">Выберите блюдо</option>' +
+        dishesWithoutRecipes.map(d => {
+          const category = categories.find(c => c.id === d.category);
+          return `<option value="${d.id}">${d.icon} ${d.name}${category ? ' (' + category.name + ')' : ''}</option>`;
+        }).join('');
+    }
+
+    function updateRecipeName() {
+      const dishId = parseInt(document.getElementById('recipeDishId').value);
+      if (dishId) {
+        const dish = dishes.find(d => d.id === dishId);
+        if (dish) {
+          document.getElementById('recipeName').value = `Техкарта: ${dish.name}`;
+        }
+      }
+    }
+
+    function addIngredientRow() {
+      const container = document.getElementById('recipeIngredientsList');
+      const rowId = ingredientRowCounter++;
+
+      const row = document.createElement('div');
+      row.className = 'form-row';
+      row.style.marginBottom = '12px';
+      row.style.alignItems = 'end';
+      row.id = `ingredient-row-${rowId}`;
+
+      row.innerHTML = `
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">Ингредиент:</label>
+          <select class="form-select ingredient-select" required>
+            <option value="">Выберите</option>
+            ${inventory.map(item => `<option value="${item.id}">${item.name} (${item.costPrice ? item.costPrice.toFixed(2) + ' ₽/' + item.unit : item.unit})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">Количество:</label>
+          <input type="number" class="form-input ingredient-quantity" required step="0.01" min="0" placeholder="0">
+        </div>
+        <button type="button" class="btn btn-danger btn-small" onclick="removeIngredientRow(${rowId})" style="padding: 10px 12px;">🗑️</button>
+      `;
+
+      container.appendChild(row);
+    }
+
+    function removeIngredientRow(rowId) {
+      const row = document.getElementById(`ingredient-row-${rowId}`);
+      if (row) row.remove();
+    }
+
+    function saveRecipe(event) {
+      event.preventDefault();
+
+      const dishId = parseInt(document.getElementById('recipeDishId').value);
+      const name = document.getElementById('recipeName').value;
+      const description = document.getElementById('recipeDescription').value;
+
+      // Collect ingredients
+      const ingredientRows = document.querySelectorAll('#recipeIngredientsList .form-row');
+      const ingredients = [];
+
+      ingredientRows.forEach(row => {
+        const ingredientId = parseInt(row.querySelector('.ingredient-select').value);
+        const quantity = parseFloat(row.querySelector('.ingredient-quantity').value);
+
+        if (ingredientId && quantity > 0) {
+          const inventoryItem = inventory.find(i => i.id === ingredientId);
+          ingredients.push({
+            inventoryId: ingredientId,
+            name: inventoryItem.name,
+            quantity: quantity,
+            unit: inventoryItem.unit
+          });
+        }
+      });
+
+      if (ingredients.length === 0) {
+        showNotification('⚠️ Добавьте хотя бы один ингредиент');
+        return;
+      }
+
+      const newId = recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 1 : 1;
+      recipes.push({
+        id: newId,
+        dishId: dishId,
+        name: name,
+        description: description,
+        ingredients: ingredients,
+        createdAt: new Date().toISOString()
+      });
+
+      saveData();
+      renderRecipesManagement();
+      closeRecipeModal();
+      showNotification('✅ Техкарта создана');
+    }
+
+    // Calculate dish cost based on recipe
+    function calculateDishCost(recipeId) {
+      const recipe = recipes.find(r => r.id === recipeId);
+      if (!recipe) return 0;
+
+      let totalCost = 0;
+      recipe.ingredients.forEach(ing => {
+        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
+        if (inventoryItem && inventoryItem.costPrice) {
+          totalCost += ing.quantity * inventoryItem.costPrice;
+        }
+      });
+      return totalCost;
+    }
+
+    function renderRecipesManagement() {
+      const container = document.getElementById('recipesManagement');
+
+      if (recipes.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 60px 20px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+            <div style="font-size: 18px; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Техкарты не созданы</div>
+            <div style="color: #8b95a5; margin-bottom: 20px;">Создайте техкарты для автоматического списания ингредиентов</div>
+            <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Создать техкарту</button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="display: grid; gap: 16px;">
+          ${recipes.map(recipe => {
+            const dish = dishes.find(d => d.id === recipe.dishId);
+            const category = dish ? categories.find(c => c.id === dish.category) : null;
+            const dishCost = calculateDishCost(recipe.id);
+            const sellPrice = dish ? dish.price : 0;
+            const profit = sellPrice - dishCost;
+            const profitMargin = sellPrice > 0 ? ((profit / sellPrice) * 100) : 0;
+            const markup = dishCost > 0 ? ((profit / dishCost) * 100) : 0;
+
+            return `
+              <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                  <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                      <span style="font-size: 32px;">${dish ? dish.icon : '🍽️'}</span>
+                      <div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2c3e50;">${recipe.name}</div>
+                        <div style="color: #8b95a5; font-size: 13px; margin-top: 4px;">
+                          ${category ? category.icon + ' ' + category.name : ''}
+                        </div>
+                      </div>
+                    </div>
+                    ${recipe.description ? `<div style="color: #5a6c7d; font-size: 14px; margin-top: 8px; line-height: 1.5;">${recipe.description}</div>` : ''}
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-success btn-small" onclick="writeOffIngredients(${recipe.id})" title="Списать ингредиенты">📤 Списать</button>
+                    <button class="btn btn-danger btn-small" onclick="deleteRecipe(${recipe.id})">🗑️</button>
+                  </div>
+                </div>
+
+                <!-- Cost Analysis -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                  <div style="background: #f0f7ff; border: 1px solid #1e88e5; border-radius: 8px; padding: 12px;">
+                    <div style="color: #1e88e5; font-size: 11px; margin-bottom: 4px;">💰 Себестоимость</div>
+                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${dishCost.toFixed(2)} ₽</div>
+                  </div>
+                  <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px;">
+                    <div style="color: #5a6c7d; font-size: 11px; margin-bottom: 4px;">🏷️ Цена продажи</div>
+                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${sellPrice.toFixed(2)} ₽</div>
+                  </div>
+                  <div style="background: ${profit > 0 ? '#f1f8f4' : '#fef2f2'}; border: 1px solid ${profit > 0 ? '#43a047' : '#e53935'}; border-radius: 8px; padding: 12px;">
+                    <div style="color: ${profit > 0 ? '#43a047' : '#e53935'}; font-size: 11px; margin-bottom: 4px;">💵 Прибыль</div>
+                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${profit.toFixed(2)} ₽</div>
+                  </div>
+                  <div style="background: #fff8e1; border: 1px solid #fb8c00; border-radius: 8px; padding: 12px;">
+                    <div style="color: #fb8c00; font-size: 11px; margin-bottom: 4px;">📊 Наценка</div>
+                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${markup.toFixed(0)}%</div>
+                  </div>
+                  <div style="background: #f3e5f5; border: 1px solid #9c27b0; border-radius: 8px; padding: 12px;">
+                    <div style="color: #9c27b0; font-size: 11px; margin-bottom: 4px;">📈 Маржа</div>
+                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${profitMargin.toFixed(0)}%</div>
+                  </div>
+                </div>
+
+                <div style="background: #f5f7fa; border-radius: 12px; padding: 16px;">
+                  <div style="font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 12px;">📦 Ингредиенты:</div>
+                  <div style="display: grid; gap: 8px;">
+                    ${recipe.ingredients.map(ing => {
+                      const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
+                      const hasEnough = inventoryItem && inventoryItem.quantity >= ing.quantity;
+                      const ingredientCost = inventoryItem && inventoryItem.costPrice ? (ing.quantity * inventoryItem.costPrice) : 0;
+
+                      return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #ffffff; border-radius: 8px;">
+                          <span style="color: #2c3e50; font-size: 13px;">${ing.name}</span>
+                          <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="color: #5a6c7d; font-size: 13px; font-weight: 600;">${ing.quantity} ${ing.unit}</span>
+                            ${inventoryItem && inventoryItem.costPrice ? `<span style="color: #1e88e5; font-size: 11px; font-weight: 600;">${ingredientCost.toFixed(2)} ₽</span>` : ''}
+                            ${hasEnough
+                              ? `<span style="color: #43a047; font-size: 11px;">✅ ${inventoryItem.quantity} ${ing.unit}</span>`
+                              : `<span style="color: #e53935; font-size: 11px;">⚠️ ${inventoryItem ? inventoryItem.quantity : 0} ${ing.unit}</span>`
+                            }
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function writeOffIngredients(recipeId) {
+      const recipe = recipes.find(r => r.id === recipeId);
+      if (!recipe) return;
+
+      const dish = dishes.find(d => d.id === recipe.dishId);
+
+      // Check if all ingredients are available
+      const insufficientIngredients = [];
+      recipe.ingredients.forEach(ing => {
+        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
+        if (!inventoryItem || inventoryItem.quantity < ing.quantity) {
+          insufficientIngredients.push(ing.name);
+        }
+      });
+
+      if (insufficientIngredients.length > 0) {
+        showNotification(`⚠️ Недостаточно: ${insufficientIngredients.join(', ')}`);
+        return;
+      }
+
+      // Write off ingredients
+      recipe.ingredients.forEach(ing => {
+        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
+        if (inventoryItem) {
+          inventoryItem.quantity -= ing.quantity;
+        }
+      });
+
+      saveData();
+      renderRecipesManagement();
+      showNotification(`✅ Ингредиенты списаны для "${dish ? dish.name : recipe.name}"`);
+    }
+
+    function deleteRecipe(recipeId) {
+      if (!confirm('Удалить техкарту?')) return;
+
+      recipes = recipes.filter(r => r.id !== recipeId);
+      saveData();
+      renderRecipesManagement();
+      showNotification('🗑️ Техкарта удалена');
+    }
+
+    // Load sample recipes
+    function loadSampleRecipes() {
+      if (recipes.length > 0) {
+        if (!confirm('Загрузить образцы техкарт? Существующие техкарты не будут удалены.')) return;
+      }
+
+      const sampleRecipes = [
+        {
+          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 1 : 1,
+          dishId: 1, // Маргарита
+          name: 'Техкарта: Маргарита',
+          description: 'Раскатать тесто, нанести соус, выложить моцареллу, базилик. Выпекать 12 минут при 250°C.',
+          ingredients: [
+            { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
+            { inventoryId: 2, name: 'Моцарелла', quantity: 150, unit: 'г' },
+            { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
+            { inventoryId: 4, name: 'Базилик', quantity: 5, unit: 'г' }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 2 : 2,
+          dishId: 2, // Пепперони
+          name: 'Техкарта: Пепперони',
+          description: 'Раскатать тесто, нанести соус, выложить моцареллу и салями. Выпекать 12 минут при 250°C.',
+          ingredients: [
+            { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
+            { inventoryId: 2, name: 'Моцарелла', quantity: 130, unit: 'г' },
+            { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
+            { inventoryId: 5, name: 'Салями Пепперони', quantity: 80, unit: 'г' }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 3 : 3,
+          dishId: 3, // Филадельфия
+          name: 'Техкарта: Филадельфия',
+          description: 'Приготовить рис, выложить на нори, добавить лосось и сливочный сыр, свернуть ролл.',
+          ingredients: [
+            { inventoryId: 7, name: 'Рис для суши', quantity: 120, unit: 'г' },
+            { inventoryId: 8, name: 'Нори', quantity: 2, unit: 'шт' },
+            { inventoryId: 6, name: 'Лосось свежий', quantity: 80, unit: 'г' },
+            { inventoryId: 9, name: 'Сливочный сыр', quantity: 60, unit: 'г' }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 4 : 4,
+          dishId: 5, // Чизбургер
+          name: 'Техкарта: Чизбургер',
+          description: 'Обжарить котлету, разрезать булочку, выложить салат, котлету, сыр. Подать горячим.',
+          ingredients: [
+            { inventoryId: 10, name: 'Говяжья котлета', quantity: 1, unit: 'шт' },
+            { inventoryId: 11, name: 'Булочка для бургера', quantity: 1, unit: 'шт' },
+            { inventoryId: 12, name: 'Салат Айсберг', quantity: 30, unit: 'г' },
+            { inventoryId: 2, name: 'Моцарелла', quantity: 40, unit: 'г' }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 5 : 5,
+          dishId: 6, // Цезарь
+          name: 'Техкарта: Цезарь',
+          description: 'Обжарить куриное филе, нарезать салат, добавить сыр. Заправить соусом Цезарь.',
+          ingredients: [
+            { inventoryId: 13, name: 'Куриное филе', quantity: 150, unit: 'г' },
+            { inventoryId: 12, name: 'Салат Айсберг', quantity: 100, unit: 'г' },
+            { inventoryId: 2, name: 'Моцарелла', quantity: 50, unit: 'г' }
+          ],
+          createdAt: new Date().toISOString()
+        }
+      ];
+
+      // Filter out recipes for dishes that already have recipes
+      const newRecipes = sampleRecipes.filter(sample =>
+        !recipes.some(existing => existing.dishId === sample.dishId)
+      );
+
+      if (newRecipes.length === 0) {
+        showNotification('ℹ️ Все образцы уже загружены');
+        return;
+      }
+
+      recipes.push(...newRecipes);
+      saveData();
+      renderRecipesManagement();
+      renderDishes(); // Update dishes view to show cost info
+      showNotification(`✅ Загружено техкарт: ${newRecipes.length}`);
+    }
+
+    // Cost Prices Management
+    function renderCostPrices() {
+      const container = document.getElementById('costPricesManagement');
+
+      container.innerHTML = `
+        <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+          <div style="color: #5a6c7d; font-size: 14px; margin-bottom: 16px;">
+            Укажите стоимость закупки для каждого ингредиента (цена за единицу измерения). Это необходимо для расчёта себестоимости блюд.
+          </div>
+          <div style="display: grid; gap: 12px;">
+            ${inventory.map(item => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f5f7fa; border-radius: 8px; flex-wrap: wrap; gap: 12px;">
+                <div style="flex: 1; min-width: 200px;">
+                  <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">${item.name}</div>
+                  <div style="color: #8b95a5; font-size: 13px;">Единица: ${item.unit}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <input
+                      type="number"
+                      class="form-input"
+                      style="width: 120px; padding: 8px 12px;"
+                      value="${item.costPrice || 0}"
+                      step="0.01"
+                      min="0"
+                      onchange="updateIngredientCostPrice(${item.id}, this.value)"
+                      placeholder="0.00"
+                    >
+                    <span style="color: #5a6c7d; font-weight: 600;">₽/${item.unit}</span>
+                  </div>
+                  <div style="padding: 6px 12px; background: #ffffff; border-radius: 6px; color: #1e88e5; font-size: 13px; font-weight: 600; min-width: 80px; text-align: right;">
+                    ${item.costPrice ? (item.costPrice * (item.quantity || 0)).toFixed(2) + ' ₽' : '-'}
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function updateIngredientCostPrice(ingredientId, newPrice) {
+      const item = inventory.find(i => i.id === ingredientId);
+      if (item) {
+        item.costPrice = parseFloat(newPrice) || 0;
+        saveData();
+        renderRecipesManagement(); // Обновляем техкарты с новыми ценами
+        renderDishes(); // Обновляем карточки блюд
+        showNotification('✅ Цена обновлена');
+      }
+    }
+
+    // Initialize
+    initializeData();
+    renderCategories();
+    renderDishes();
+  </script>
+</body>
+</html>

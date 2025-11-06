@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление столами - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-icon.free { background: rgba(67, 160, 71, 0.1); }
+    .stat-icon.occupied { background: rgba(229, 57, 53, 0.1); }
+    .stat-icon.reserved { background: rgba(251, 140, 0, 0.1); }
+    .stat-icon.total { background: rgba(30, 136, 229, 0.1); }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    .halls-container {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .hall-tabs {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .hall-tab {
+      padding: 10px 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      color: #5a6c7d;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .hall-tab:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .hall-tab.active {
+      background: #1e88e5;
+      color: white;
+      border-color: #1e88e5;
+    }
+
+    .floor-plan {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      min-height: 600px;
+      position: relative;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 768px) {
+      .floor-plan {
+        padding: 40px;
+      }
+    }
+
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .tables-grid {
+        gap: 24px;
+      }
+    }
+
+    .table-card {
+      background: #ffffff;
+      border: 2px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .table-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      transition: all 0.3s;
+    }
+
+    .table-card.free {
+      border-color: #43a047;
+    }
+
+    .table-card.free::before {
+      background: #43a047;
+    }
+
+    .table-card.occupied {
+      border-color: #e53935;
+    }
+
+    .table-card.occupied::before {
+      background: #e53935;
+    }
+
+    .table-card.reserved {
+      border-color: #fb8c00;
+    }
+
+    .table-card.reserved::before {
+      background: #fb8c00;
+    }
+
+    .table-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .table-number {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .table-number {
+        font-size: 32px;
+      }
+    }
+
+    .table-seats {
+      color: #5a6c7d;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    @media (min-width: 768px) {
+      .table-seats {
+        font-size: 14px;
+      }
+    }
+
+    .table-status {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    @media (min-width: 768px) {
+      .table-status {
+        font-size: 12px;
+      }
+    }
+
+    .table-status.free {
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+    }
+
+    .table-status.occupied {
+      background: rgba(229, 57, 53, 0.1);
+      color: #e53935;
+    }
+
+    .table-status.reserved {
+      background: rgba(251, 140, 0, 0.1);
+      color: #fb8c00;
+    }
+
+    .table-time {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    @media (min-width: 768px) {
+      .modal-content {
+        padding: 32px;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #8b95a5;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+      transition: all 0.3s;
+    }
+
+    .close-btn:hover {
+      color: #5a6c7d;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      color: #5a6c7d;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .status-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .status-btn {
+      padding: 16px;
+      border: 2px solid #e1e8ed;
+      border-radius: 12px;
+      background: #ffffff;
+      color: #5a6c7d;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    @media (min-width: 768px) {
+      .status-btn {
+        font-size: 14px;
+      }
+    }
+
+    .status-btn:hover {
+      border-color: #1e88e5;
+      color: #2c3e50;
+    }
+
+    .status-btn.active {
+      border-color: #43a047;
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+    }
+
+    .status-btn.active.occupied {
+      border-color: #e53935;
+      background: rgba(229, 57, 53, 0.1);
+      color: #e53935;
+    }
+
+    .status-btn.active.reserved {
+      border-color: #fb8c00;
+      background: rgba(251, 140, 0, 0.1);
+      color: #fb8c00;
+    }
+
+    .table-info-section {
+      background: #f5f7fa;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: #5a6c7d;
+      font-size: 14px;
+    }
+
+    .info-value {
+      color: #2c3e50;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: flex;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item active">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-secondary" onclick="addNewTable()">
+        ➕ Добавить стол
+      </button>
+      <button class="btn btn-primary" onclick="refreshTables()">
+        🔄 Обновить
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">🍽️ Управление столами</h1>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-icon free">🟢</div>
+        <div class="stat-info">
+          <div class="stat-label">Свободные</div>
+          <div class="stat-value" id="statFree">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon occupied">🔴</div>
+        <div class="stat-info">
+          <div class="stat-label">Занятые</div>
+          <div class="stat-value" id="statOccupied">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon reserved">🟡</div>
+        <div class="stat-info">
+          <div class="stat-label">Забронированы</div>
+          <div class="stat-value" id="statReserved">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon total">🍽️</div>
+        <div class="stat-info">
+          <div class="stat-label">Всего столов</div>
+          <div class="stat-value" id="statTotal">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hall Tabs -->
+    <div class="hall-tabs" id="hallTabs">
+      <div class="hall-tab active" data-hall="main" onclick="switchHall('main')">
+        🏛️ Основной зал
+      </div>
+      <div class="hall-tab" data-hall="vip" onclick="switchHall('vip')">
+        ⭐ VIP зал
+      </div>
+      <div class="hall-tab" data-hall="terrace" onclick="switchHall('terrace')">
+        ☀️ Терраса
+      </div>
+    </div>
+
+    <!-- Floor Plan -->
+    <div class="floor-plan">
+      <div class="tables-grid" id="tablesGrid">
+        <!-- Tables will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Table Details Modal -->
+  <div class="modal" id="tableModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Стол #1</h2>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+
+      <div id="modalBody">
+        <!-- Modal body will be dynamically generated -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification">
+    <span id="notificationText"></span>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'http://localhost/api';
+    let tables = [];
+    let currentHall = 'main';
+    let currentTable = null;
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize sample data
+    function initializeTables() {
+      const savedTables = localStorage.getItem('restaurantTables');
+      if (savedTables) {
+        tables = JSON.parse(savedTables);
+      } else {
+        // Create default tables
+        tables = [
+          // Main hall
+          { id: 1, number: 1, hall: 'main', seats: 4, status: 'free' },
+          { id: 2, number: 2, hall: 'main', seats: 2, status: 'free' },
+          { id: 3, number: 3, hall: 'main', seats: 6, status: 'occupied', orderId: 1, occupiedAt: new Date().toISOString() },
+          { id: 4, number: 4, hall: 'main', seats: 4, status: 'free' },
+          { id: 5, number: 5, hall: 'main', seats: 8, status: 'reserved', customerName: 'Иван Петров', customerPhone: '+7 999 123-45-67', reservedFor: '18:00' },
+          { id: 6, number: 6, hall: 'main', seats: 2, status: 'free' },
+          { id: 7, number: 7, hall: 'main', seats: 4, status: 'occupied', orderId: 2, occupiedAt: new Date().toISOString() },
+          { id: 8, number: 8, hall: 'main', seats: 6, status: 'free' },
+          // VIP hall
+          { id: 9, number: 1, hall: 'vip', seats: 10, status: 'reserved', customerName: 'Анна Сидорова', customerPhone: '+7 999 987-65-43', reservedFor: '20:00' },
+          { id: 10, number: 2, hall: 'vip', seats: 8, status: 'free' },
+          { id: 11, number: 3, hall: 'vip', seats: 12, status: 'free' },
+          // Terrace
+          { id: 12, number: 1, hall: 'terrace', seats: 4, status: 'free' },
+          { id: 13, number: 2, hall: 'terrace', seats: 4, status: 'free' },
+          { id: 14, number: 3, hall: 'terrace', seats: 6, status: 'occupied', orderId: 3, occupiedAt: new Date().toISOString() },
+          { id: 15, number: 4, hall: 'terrace', seats: 2, status: 'free' }
+        ];
+        saveTables();
+      }
+    }
+
+    function saveTables() {
+      localStorage.setItem('restaurantTables', JSON.stringify(tables));
+    }
+
+    function switchHall(hall) {
+      currentHall = hall;
+      document.querySelectorAll('.hall-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.hall === hall);
+      });
+      renderTables();
+    }
+
+    function updateStats() {
+      const stats = {
+        free: tables.filter(t => t.status === 'free').length,
+        occupied: tables.filter(t => t.status === 'occupied').length,
+        reserved: tables.filter(t => t.status === 'reserved').length,
+        total: tables.length
+      };
+
+      document.getElementById('statFree').textContent = stats.free;
+      document.getElementById('statOccupied').textContent = stats.occupied;
+      document.getElementById('statReserved').textContent = stats.reserved;
+      document.getElementById('statTotal').textContent = stats.total;
+    }
+
+    function renderTables() {
+      const grid = document.getElementById('tablesGrid');
+      const hallTables = tables.filter(t => t.hall === currentHall);
+
+      if (hallTables.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #8b95a5; padding: 60px;">В этом зале нет столов</div>';
+        return;
+      }
+
+      grid.innerHTML = hallTables.map(table => {
+        const timeInfo = getTimeInfo(table);
+        return `
+          <div class="table-card ${table.status}" onclick="openTableModal(${table.id})">
+            <div class="table-number">Стол ${table.number}</div>
+            <div class="table-seats">👥 ${table.seats} мест${table.seats > 4 ? '' : 'а'}</div>
+            <div class="table-status ${table.status}">
+              ${getStatusText(table.status)}
+            </div>
+            ${timeInfo ? `<div class="table-time">${timeInfo}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      updateStats();
+    }
+
+    function getStatusText(status) {
+      const texts = {
+        free: 'Свободен',
+        occupied: 'Занят',
+        reserved: 'Забронирован'
+      };
+      return texts[status] || status;
+    }
+
+    function getTimeInfo(table) {
+      if (table.status === 'occupied' && table.occupiedAt) {
+        const elapsed = Math.floor((new Date() - new Date(table.occupiedAt)) / 1000 / 60);
+        return `⏱️ ${elapsed} мин`;
+      }
+      if (table.status === 'reserved' && table.reservedFor) {
+        return `🕐 ${table.reservedFor}`;
+      }
+      return '';
+    }
+
+    function openTableModal(tableId) {
+      currentTable = tables.find(t => t.id === tableId);
+      if (!currentTable) return;
+
+      const modal = document.getElementById('tableModal');
+      const title = document.getElementById('modalTitle');
+      const body = document.getElementById('modalBody');
+
+      title.textContent = `Стол #${currentTable.number}`;
+
+      body.innerHTML = `
+        <div class="table-info-section">
+          <div class="info-row">
+            <span class="info-label">Зал:</span>
+            <span class="info-value">${getHallName(currentTable.hall)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Мест:</span>
+            <span class="info-value">${currentTable.seats}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Статус:</span>
+            <span class="info-value">${getStatusText(currentTable.status)}</span>
+          </div>
+          ${currentTable.occupiedAt ? `
+          <div class="info-row">
+            <span class="info-label">Занят:</span>
+            <span class="info-value">${getTimeInfo(currentTable)}</span>
+          </div>
+          ` : ''}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Изменить статус:</label>
+          <div class="status-buttons">
+            <button class="status-btn ${currentTable.status === 'free' ? 'active' : ''}" onclick="changeTableStatus('free')">
+              🟢<br>Свободен
+            </button>
+            <button class="status-btn ${currentTable.status === 'occupied' ? 'active occupied' : ''}" onclick="changeTableStatus('occupied')">
+              🔴<br>Занят
+            </button>
+            <button class="status-btn ${currentTable.status === 'reserved' ? 'active reserved' : ''}" onclick="changeTableStatus('reserved')">
+              🟡<br>Бронь
+            </button>
+          </div>
+        </div>
+
+        ${currentTable.status === 'reserved' ? `
+        <div class="form-group">
+          <label class="form-label">Имя клиента:</label>
+          <input type="text" class="form-input" id="customerName" value="${currentTable.customerName || ''}" placeholder="Иван Иванов">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Телефон:</label>
+          <input type="tel" class="form-input" id="customerPhone" value="${currentTable.customerPhone || ''}" placeholder="+7 999 123-45-67">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Время брони:</label>
+          <input type="time" class="form-input" id="reservedFor" value="${currentTable.reservedFor || ''}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Комментарий:</label>
+          <textarea class="form-textarea" id="reservationNotes" placeholder="Дополнительная информация...">${currentTable.reservationNotes || ''}</textarea>
+        </div>
+        ` : ''}
+
+        ${currentTable.status === 'occupied' ? `
+        <div class="form-group">
+          <label class="form-label">Номер заказа:</label>
+          <input type="number" class="form-input" id="orderId" value="${currentTable.orderId || ''}" placeholder="123">
+        </div>
+        ` : ''}
+
+        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+          <button class="btn btn-primary" style="flex: 1; min-width: 120px;" onclick="saveTableChanges()">
+            💾 Сохранить
+          </button>
+          <button class="btn btn-secondary" onclick="closeModal()">
+            Отмена
+          </button>
+        </div>
+      `;
+
+      modal.classList.add('active');
+    }
+
+    function changeTableStatus(newStatus) {
+      if (!currentTable) return;
+
+      currentTable.status = newStatus;
+
+      if (newStatus === 'occupied') {
+        currentTable.occupiedAt = new Date().toISOString();
+        delete currentTable.customerName;
+        delete currentTable.customerPhone;
+        delete currentTable.reservedFor;
+        delete currentTable.reservationNotes;
+      } else if (newStatus === 'free') {
+        delete currentTable.occupiedAt;
+        delete currentTable.orderId;
+        delete currentTable.customerName;
+        delete currentTable.customerPhone;
+        delete currentTable.reservedFor;
+        delete currentTable.reservationNotes;
+      } else if (newStatus === 'reserved') {
+        delete currentTable.occupiedAt;
+        delete currentTable.orderId;
+      }
+
+      openTableModal(currentTable.id); // Refresh modal
+    }
+
+    function saveTableChanges() {
+      if (!currentTable) return;
+
+      if (currentTable.status === 'reserved') {
+        const name = document.getElementById('customerName')?.value;
+        const phone = document.getElementById('customerPhone')?.value;
+        const time = document.getElementById('reservedFor')?.value;
+        const notes = document.getElementById('reservationNotes')?.value;
+
+        if (!name || !phone || !time) {
+          showNotification('⚠️ Заполните все обязательные поля для брони');
+          return;
+        }
+
+        currentTable.customerName = name;
+        currentTable.customerPhone = phone;
+        currentTable.reservedFor = time;
+        currentTable.reservationNotes = notes;
+      }
+
+      if (currentTable.status === 'occupied') {
+        const orderId = document.getElementById('orderId')?.value;
+        if (orderId) {
+          currentTable.orderId = parseInt(orderId);
+        }
+      }
+
+      saveTables();
+      renderTables();
+      closeModal();
+      showNotification('✅ Стол обновлен');
+    }
+
+    function getHallName(hall) {
+      const names = {
+        main: '🏛️ Основной зал',
+        vip: '⭐ VIP зал',
+        terrace: '☀️ Терраса'
+      };
+      return names[hall] || hall;
+    }
+
+    function addNewTable() {
+      const hallName = getHallName(currentHall);
+      const hallTables = tables.filter(t => t.hall === currentHall);
+      const nextNumber = hallTables.length > 0 ? Math.max(...hallTables.map(t => t.number)) + 1 : 1;
+
+      const seats = prompt(`Сколько мест за столом #${nextNumber} в зале "${hallName}"?`, '4');
+      if (!seats || isNaN(seats)) return;
+
+      const newTable = {
+        id: Math.max(...tables.map(t => t.id)) + 1,
+        number: nextNumber,
+        hall: currentHall,
+        seats: parseInt(seats),
+        status: 'free'
+      };
+
+      tables.push(newTable);
+      saveTables();
+      renderTables();
+      showNotification(`✅ Стол #${nextNumber} добавлен`);
+    }
+
+    function closeModal() {
+      document.getElementById('tableModal').classList.remove('active');
+      currentTable = null;
+    }
+
+    function refreshTables() {
+      renderTables();
+      showNotification('🔄 Данные обновлены');
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('notification');
+      const text = document.getElementById('notificationText');
+
+      text.textContent = message;
+      notification.classList.add('show');
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Update timers every minute
+    setInterval(() => {
+      renderTables();
+    }, 60000);
+
+    // Initialize
+    initializeTables();
+    renderTables();
+  </script>
+</body>
+</html>

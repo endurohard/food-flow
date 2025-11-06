@@ -46,7 +46,7 @@ export class PrinterService {
       this.printer = new ThermalPrinter({
         type: PrinterTypes.EPSON,
         interface: config.printer.interface,
-        characterSet: 'UTF8',
+        characterSet: 'SLOVENIA' as any,
         removeSpecialCharacters: false,
         lineCharacter: '-',
         options: {
@@ -69,7 +69,8 @@ export class PrinterService {
   }
 
   /**
-   * Print kitchen order receipt
+   * Print kitchen order receipt (simplified production format)
+   * Only order number and items - no address, no prices
    */
   async printKitchenOrder(order: OrderPrintData): Promise<boolean> {
     try {
@@ -80,100 +81,60 @@ export class PrinterService {
 
       this.printer.clear();
 
-      // Header
+      // Order number - LARGE and centered
       this.printer.alignCenter();
-      this.printer.setTextSize(1, 1);
-      this.printer.bold(true);
-      this.printer.println('=== KITCHEN ORDER ===');
-      this.printer.bold(false);
-      this.printer.newLine();
-
-      // Order number (large and bold)
-      this.printer.setTextSize(2, 2);
+      this.printer.setTextSize(3, 3);
       this.printer.bold(true);
       this.printer.println(`#${order.orderNumber}`);
       this.printer.bold(false);
       this.printer.setTextSize(1, 1);
       this.printer.newLine();
 
-      // Order type
-      this.printer.println(`Type: ${order.orderType.toUpperCase()}`);
-      this.printer.newLine();
-
       // Timestamp
-      this.printer.alignLeft();
-      this.printer.println(`Time: ${order.timestamp.toLocaleTimeString()}`);
-      this.printer.println(`Date: ${order.timestamp.toLocaleDateString()}`);
-      this.printer.drawLine();
-
-      // Customer info
-      this.printer.bold(true);
-      this.printer.println('CUSTOMER:');
-      this.printer.bold(false);
-      this.printer.println(order.customer.name);
-      if (order.customer.phone) {
-        this.printer.println(`Tel: ${order.customer.phone}`);
-      }
-
-      if (order.orderType === 'delivery' && order.deliveryAddress) {
-        this.printer.println(`Address: ${order.deliveryAddress}`);
-      }
-      this.printer.drawLine();
-
-      // Items
-      this.printer.bold(true);
       this.printer.setTextSize(1, 1);
-      this.printer.println('ITEMS:');
-      this.printer.bold(false);
+      const timeStr = order.timestamp.toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      this.printer.println(timeStr);
+      this.printer.drawLine();
+
+      // Items - simple list
+      this.printer.alignLeft();
       this.printer.newLine();
 
       order.items.forEach((item) => {
-        // Item name and quantity
-        this.printer.setTextSize(1, 1);
+        // Quantity and item name - bold and large
+        this.printer.setTextSize(2, 2);
         this.printer.bold(true);
-        this.printer.println(`${item.quantity}x ${item.name}`);
+        this.printer.println(`${item.quantity}x`);
         this.printer.bold(false);
 
-        // Special instructions
+        this.printer.setTextSize(1, 1);
+        this.printer.bold(true);
+        this.printer.println(item.name.toUpperCase());
+        this.printer.bold(false);
+
+        // Special instructions if any
         if (item.specialInstructions) {
-          this.printer.println(`   >>> ${item.specialInstructions}`);
+          this.printer.println(`>>> ${item.specialInstructions}`);
         }
+
         this.printer.newLine();
       });
 
       this.printer.drawLine();
 
-      // Special instructions for entire order
+      // Order-level special instructions
       if (order.specialInstructions) {
+        this.printer.alignCenter();
         this.printer.bold(true);
-        this.printer.println('SPECIAL INSTRUCTIONS:');
+        this.printer.println('КОММЕНТАРИЙ:');
         this.printer.bold(false);
         this.printer.println(order.specialInstructions);
         this.printer.drawLine();
       }
 
-      // Generate QR code for order tracking
-      const qrCodeDataUrl = await QRCode.toDataURL(
-        `ORDER:${order.orderNumber}`,
-        { width: 200, margin: 1 }
-      );
-
-      // Footer
-      this.printer.alignCenter();
-      this.printer.newLine();
-      this.printer.println('Scan for order details:');
-
-      // Print QR code (if supported)
-      try {
-        await this.printer.printImageBuffer(
-          Buffer.from(qrCodeDataUrl.split(',')[1], 'base64')
-        );
-      } catch (error) {
-        logger.warn('QR code printing not supported');
-      }
-
-      this.printer.newLine();
-      this.printer.println('========================');
       this.printer.newLine();
       this.printer.newLine();
       this.printer.newLine();
@@ -189,7 +150,7 @@ export class PrinterService {
       } else {
         // Simulation mode - just log
         const receipt = await this.printer.getText();
-        logger.info('SIMULATION MODE - Receipt content:\n' + receipt);
+        logger.info('SIMULATION MODE - Kitchen receipt:\n' + receipt);
         return true;
       }
     } catch (error) {
@@ -199,7 +160,7 @@ export class PrinterService {
   }
 
   /**
-   * Print customer receipt
+   * Print customer receipt (format matching the example)
    */
   async printCustomerReceipt(order: OrderPrintData): Promise<boolean> {
     try {
@@ -210,76 +171,115 @@ export class PrinterService {
 
       this.printer.clear();
 
-      // Header - Restaurant info
-      this.printer.alignCenter();
+      // Header - Phone and Address
+      this.printer.alignLeft();
       this.printer.setTextSize(1, 1);
+      this.printer.println(order.restaurant.phone);
+      this.printer.println(`Адрес: ${order.restaurant.address}`);
+      this.printer.newLine();
+
+      // Order number - centered and large
+      this.printer.alignCenter();
+      this.printer.setTextSize(2, 2);
       this.printer.bold(true);
-      this.printer.println(order.restaurant.name);
+      this.printer.println(`Заказ № ${order.orderNumber}`);
       this.printer.bold(false);
-      this.printer.println(order.restaurant.address);
-      this.printer.println(`Tel: ${order.restaurant.phone}`);
+      this.printer.setTextSize(1, 1);
+
+      // Courier info
+      this.printer.alignLeft();
+      this.printer.println(`Курьер: ${order.customer.name}`);
+
+      // Date and time
+      const dateStr = order.timestamp.toLocaleString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+      this.printer.println(`Заказ принят: ${dateStr}`);
+
+      // Number of people
+      this.printer.println('Количество человек: 1');
       this.printer.drawLine();
 
-      // Order info
-      this.printer.bold(true);
-      this.printer.println(`Order #${order.orderNumber}`);
-      this.printer.bold(false);
-      this.printer.println(`${order.timestamp.toLocaleString()}`);
-      this.printer.println(`Type: ${order.orderType}`);
-      this.printer.drawLine();
-
-      // Items with prices
+      // Table header
       this.printer.alignLeft();
       this.printer.tableCustom([
-        { text: 'Item', align: 'LEFT', width: 0.6 },
-        { text: 'Qty', align: 'CENTER', width: 0.1 },
-        { text: 'Price', align: 'RIGHT', width: 0.3 },
+        { text: 'Наименова', align: 'LEFT', width: 0.4 },
+        { text: 'К-во', align: 'CENTER', width: 0.15 },
+        { text: 'Цена', align: 'RIGHT', width: 0.22 },
+        { text: 'Сумма', align: 'RIGHT', width: 0.23 },
       ]);
       this.printer.drawLine();
 
+      // Items
       order.items.forEach((item) => {
+        this.printer.bold(true);
+        this.printer.println(item.name.toUpperCase());
+        this.printer.bold(false);
+
         this.printer.tableCustom([
-          { text: item.name, align: 'LEFT', width: 0.6 },
-          { text: item.quantity.toString(), align: 'CENTER', width: 0.1 },
-          { text: `$${(item.price * item.quantity).toFixed(2)}`, align: 'RIGHT', width: 0.3 },
+          { text: '', align: 'LEFT', width: 0.05 },
+          { text: `${item.quantity} порц`, align: 'LEFT', width: 0.35 },
+          { text: 'x', align: 'CENTER', width: 0.05 },
+          { text: `${item.price.toFixed(2)}`, align: 'RIGHT', width: 0.27 },
+          { text: `${(item.price * item.quantity).toFixed(2)}`, align: 'RIGHT', width: 0.28 },
         ]);
 
         if (item.specialInstructions) {
-          this.printer.println(`  * ${item.specialInstructions}`);
+          this.printer.println(`  >>> ${item.specialInstructions}`);
         }
       });
 
       this.printer.drawLine();
 
-      // Totals
-      this.printer.alignRight();
-      this.printer.println(`Subtotal: $${order.subtotal.toFixed(2)}`);
-      this.printer.println(`Delivery: $${order.deliveryFee.toFixed(2)}`);
-      this.printer.println(`Tax:      $${order.tax.toFixed(2)}`);
-      this.printer.drawLine();
-      this.printer.bold(true);
-      this.printer.setTextSize(1, 1);
-      this.printer.println(`TOTAL:    $${order.total.toFixed(2)}`);
-      this.printer.bold(false);
-      this.printer.setTextSize(1, 1);
+      // Total
+      this.printer.alignLeft();
+      this.printer.tableCustom([
+        { text: 'Итого к оплате:', align: 'LEFT', width: 0.55 },
+        { text: `${order.total.toFixed(2)}`, align: 'RIGHT', width: 0.45 },
+      ]);
       this.printer.drawLine();
 
-      // QR Code for order tracking
+      // Payment method
+      this.printer.println(`Карта Интернет-эква ${order.total.toFixed(2)}`);
+      this.printer.println('Яринг (проведена)');
+      this.printer.newLine();
+
+      // Special instructions
+      if (order.specialInstructions) {
+        this.printer.println('Комментарий к заказу:');
+        this.printer.println(order.specialInstructions);
+        this.printer.drawLine();
+      }
+
+      // Footer message
       this.printer.alignCenter();
-      const trackingUrl = `https://foodflow.com/track/${order.orderNumber}`;
-      const qrCodeDataUrl = await QRCode.toDataURL(trackingUrl, { width: 200 });
+      this.printer.println('Оставить отзыв и отзыв');
+      this.printer.println('нетмонет');
+      this.printer.newLine();
+
+      // QR Code for reviews
+      this.printer.alignCenter();
+      const reviewUrl = `https://foodflow.com/review/${order.orderNumber}`;
+      const qrCodeDataUrl = await QRCode.toDataURL(reviewUrl, {
+        width: 200,
+        margin: 1,
+        errorCorrectionLevel: 'M'
+      });
 
       try {
         await this.printer.printImageBuffer(
           Buffer.from(qrCodeDataUrl.split(',')[1], 'base64')
         );
-        this.printer.println('Scan to track your order');
       } catch (error) {
-        this.printer.println(`Track: ${trackingUrl}`);
+        logger.warn('QR code printing not supported');
+        this.printer.println(`Отзыв: ${reviewUrl}`);
       }
 
       this.printer.newLine();
-      this.printer.println('Thank you for your order!');
       this.printer.newLine();
       this.printer.newLine();
 

@@ -24,8 +24,8 @@ export class RabbitMQService {
 
   async connect(): Promise<void> {
     try {
-      this.connection = await amqp.connect(config.rabbitmq.url);
-      this.channel = await this.connection.createChannel();
+      this.connection = await amqp.connect(config.rabbitmq.url) as any;
+      this.channel = await (this.connection as any).createChannel();
 
       // Declare exchange
       await this.channel.assertExchange(this.EXCHANGE, 'topic', {
@@ -156,7 +156,7 @@ export class RabbitMQService {
   async disconnect(): Promise<void> {
     try {
       await this.channel?.close();
-      await this.connection?.close();
+      await (this.connection as any)?.close();
       logger.info('Disconnected from RabbitMQ');
     } catch (error) {
       logger.error('Error disconnecting from RabbitMQ:', error);

@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление заказами - FoodFlow</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .nav-right {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    /* Controls */
+    .controls {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    @media (min-width: 768px) {
+      .controls {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 500px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-success {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #388e3c;
+      box-shadow: 0 4px 12px rgba(67, 160, 71, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    /* Kanban Board */
+    .kanban-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    @media (min-width: 1400px) {
+      .kanban-board {
+        grid-template-columns: repeat(6, 1fr);
+      }
+    }
+
+    .kanban-column {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      min-height: 600px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #e1e8ed;
+    }
+
+    .column-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .column-count {
+      background: #f5f7fa;
+      color: #5a6c7d;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .cards-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 500px;
+    }
+
+    .order-card {
+      background: #f5f7fa;
+      border-radius: 12px;
+      padding: 16px;
+      border: 2px solid #e1e8ed;
+      cursor: grab;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .order-card:hover {
+      border-color: #1e88e5;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(30, 136, 229, 0.15);
+    }
+
+    .order-card.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .order-number {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e88e5;
+    }
+
+    .order-time {
+      font-size: 11px;
+      color: #8b95a5;
+      text-align: right;
+    }
+
+    .time-value {
+      display: block;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-top: 2px;
+    }
+
+    .customer-info {
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #ffffff;
+      border-radius: 8px;
+      border-left: 3px solid #1e88e5;
+    }
+
+    .customer-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+
+    .customer-phone {
+      font-size: 12px;
+      color: #8b95a5;
+      font-family: monospace;
+    }
+
+    .customer-address {
+      font-size: 12px;
+      color: #5a6c7d;
+      margin-top: 4px;
+      display: flex;
+      align-items: start;
+      gap: 6px;
+    }
+
+    .order-items {
+      margin-bottom: 12px;
+    }
+
+    .item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e1e8ed;
+      font-size: 13px;
+    }
+
+    .item:last-child {
+      border-bottom: none;
+    }
+
+    .item-name {
+      font-weight: 500;
+      color: #2c3e50;
+    }
+
+    .item-qty {
+      color: #8b95a5;
+      margin-left: 6px;
+      font-size: 12px;
+    }
+
+    .item-price {
+      font-weight: 600;
+      color: #43a047;
+    }
+
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e1e8ed;
+    }
+
+    .order-total {
+      font-size: 18px;
+      font-weight: 700;
+      color: #43a047;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-icon-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.2s;
+    }
+
+    .btn-kitchen {
+      background: #8b5cf6;
+      color: white;
+    }
+
+    .btn-kitchen:hover {
+      background: #7c3aed;
+      transform: scale(1.1);
+    }
+
+    .btn-print {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-print:hover {
+      background: #1976d2;
+      transform: scale(1.1);
+    }
+
+    .btn-cancel {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-cancel:hover {
+      background: #d32f2f;
+      transform: scale(1.1);
+    }
+
+    .btn-ready {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-ready:hover {
+      background: #388e3c;
+      transform: scale(1.1);
+    }
+
+    .btn-delivery {
+      background: #06b6d4;
+      color: white;
+    }
+
+    .btn-delivery:hover {
+      background: #0891b2;
+      transform: scale(1.1);
+    }
+
+    .btn-delivered {
+      background: #22c55e;
+      color: white;
+    }
+
+    .btn-delivered:hover {
+      background: #16a34a;
+      transform: scale(1.1);
+    }
+
+    .new-order-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #e53935;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+      }
+    }
+
+    .empty-column {
+      text-align: center;
+      padding: 60px 20px;
+      color: #8b95a5;
+      font-size: 14px;
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .comment-badge {
+      background: #fb8c00;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-top: 8px;
+      display: inline-block;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    .notification.error {
+      background: #ffebee;
+      border-color: #e53935;
+      color: #e53935;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 3000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 30px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    .modal-header {
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #5a6c7d;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 12px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .form-select:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .warning-box {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(229, 57, 53, 0.1);
+      border: 1px solid #e53935;
+      border-radius: 8px;
+      color: #e53935;
+      font-size: 14px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    .courier-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: #f5f7fa;
+      border: 2px solid #e1e8ed;
+      border-radius: 12px;
+      transition: all 0.2s;
+      margin-bottom: 12px;
+    }
+
+    .courier-item.active {
+      background: rgba(67, 160, 71, 0.1);
+      border-color: #43a047;
+    }
+
+    .courier-info {
+      flex: 1;
+    }
+
+    .courier-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+
+    .courier-phone {
+      font-size: 12px;
+      color: #8b95a5;
+      font-family: monospace;
+    }
+
+    .courier-status {
+      font-size: 18px;
+      margin-right: 8px;
+    }
+
+    /* Responsive */
+    @media (max-width: 767px) {
+      .kanban-board {
+        grid-template-columns: 1fr;
+      }
+
+      .control-buttons {
+        width: 100%;
+      }
+
+      .btn {
+        flex: 1;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item active">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-small" onclick="openCouriersManagement()">
+        👥 Курьеры
+      </button>
+      <button class="btn btn-primary btn-small" onclick="loadOrders()">
+        🔄 Обновить
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">📦 Управление заказами</h1>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(251, 140, 0, 0.1);">🔔</div>
+        <div class="stat-info">
+          <div class="stat-label">Новые</div>
+          <div class="stat-value" id="headerPending" style="color: #fb8c00;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">✓</div>
+        <div class="stat-info">
+          <div class="stat-label">Подтв.</div>
+          <div class="stat-value" id="headerConfirmed" style="color: #1e88e5;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1);">👨‍🍳</div>
+        <div class="stat-info">
+          <div class="stat-label">Готов.</div>
+          <div class="stat-value" id="headerPreparing" style="color: #8b5cf6;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);">✅</div>
+        <div class="stat-info">
+          <div class="stat-label">Готовы</div>
+          <div class="stat-value" id="headerReady" style="color: #43a047;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(6, 182, 212, 0.1);">🚚</div>
+        <div class="stat-info">
+          <div class="stat-label">На дост.</div>
+          <div class="stat-value" id="headerDelivery" style="color: #06b6d4;">0</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">✔️</div>
+        <div class="stat-info">
+          <div class="stat-label">Доставл.</div>
+          <div class="stat-value" id="headerDelivered" style="color: #22c55e;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <div class="search-box">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Поиск по номеру, имени или телефону...">
+      </div>
+      <div class="control-buttons">
+        <button class="btn btn-success" onclick="sendAllToKitchen()">
+          👨‍🍳 Отправить все на кухню
+        </button>
+      </div>
+    </div>
+
+    <!-- Kanban Board -->
+    <div class="kanban-board">
+      <!-- Новые заказы -->
+      <div class="kanban-column" data-status="pending">
+        <div class="column-header">
+          <div class="column-title" style="color: #fb8c00;">
+            🔔 Новые
+          </div>
+          <div class="column-count" id="countPending">0</div>
+        </div>
+        <div class="cards-container" id="columnPending">
+          <div class="empty-column">
+            <div class="empty-icon">📭</div>
+            <div>Нет новых заказов</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Подтвержденные -->
+      <div class="kanban-column" data-status="confirmed">
+        <div class="column-header">
+          <div class="column-title" style="color: #1e88e5;">
+            ✓ Подтверждены
+          </div>
+          <div class="column-count" id="countConfirmed">0</div>
+        </div>
+        <div class="cards-container" id="columnConfirmed">
+          <div class="empty-column">
+            <div class="empty-icon">📋</div>
+            <div>Нет подтвержденных</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Готовятся -->
+      <div class="kanban-column" data-status="preparing">
+        <div class="column-header">
+          <div class="column-title" style="color: #8b5cf6;">
+            👨‍🍳 Готовятся
+          </div>
+          <div class="column-count" id="countPreparing">0</div>
+        </div>
+        <div class="cards-container" id="columnPreparing">
+          <div class="empty-column">
+            <div class="empty-icon">🍳</div>
+            <div>Ничего не готовится</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Готовы -->
+      <div class="kanban-column" data-status="ready">
+        <div class="column-header">
+          <div class="column-title" style="color: #43a047;">
+            ✅ Готовы
+          </div>
+          <div class="column-count" id="countReady">0</div>
+        </div>
+        <div class="cards-container" id="columnReady">
+          <div class="empty-column">
+            <div class="empty-icon">🎉</div>
+            <div>Нет готовых заказов</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- На доставке -->
+      <div class="kanban-column" data-status="out_for_delivery">
+        <div class="column-header">
+          <div class="column-title" style="color: #06b6d4;">
+            🚚 На доставке
+          </div>
+          <div class="column-count" id="countDelivery">0</div>
+        </div>
+        <div class="cards-container" id="columnOut_for_delivery">
+          <div class="empty-column">
+            <div class="empty-icon">🚗</div>
+            <div>Нет заказов на доставке</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Доставлено -->
+      <div class="kanban-column" data-status="delivered">
+        <div class="column-header">
+          <div class="column-title" style="color: #22c55e;">
+            ✔️ Доставлено
+          </div>
+          <div class="column-count" id="countDelivered">0</div>
+        </div>
+        <div class="cards-container" id="columnDelivered">
+          <div class="empty-column">
+            <div class="empty-icon">🎉</div>
+            <div>Нет доставленных заказов</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Courier Selection Modal -->
+  <div id="courierModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">🚚 Назначить курьера</h2>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Выберите курьера на смене:</label>
+        <select id="courierSelect" class="form-select">
+          <option value="">-- Выберите курьера --</option>
+        </select>
+        <div id="noCouriersWarning" class="warning-box">
+          ⚠️ Нет курьеров на смене. <a href="#" onclick="event.preventDefault(); closeCourierModal(); openCouriersManagement();" style="color: #1e88e5; text-decoration: underline;">Добавить курьера</a>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button onclick="closeCourierModal()" class="btn btn-secondary">Отмена</button>
+        <button onclick="assignCourier()" id="assignCourierBtn" class="btn btn-primary">Назначить и напечатать чек</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Couriers Management Modal -->
+  <div id="couriersManagementModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 class="modal-title">👥 Управление курьерами на смене</h2>
+      </div>
+      <div style="margin-bottom: 20px; color: #8b95a5; font-size: 14px;">
+        Включите курьеров, которые сейчас работают. Только курьеры на смене могут получать заказы.
+      </div>
+      <div id="couriersListManagement" style="margin-bottom: 20px;">
+        <!-- Courier toggles will be inserted here -->
+      </div>
+      <div class="modal-actions">
+        <button onclick="closeCouriersManagement()" class="btn btn-primary">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <script>
+    const API_BASE_URL = 'http://localhost/api';
+    let orders = [];
+    let searchTerm = '';
+    let selectedOrderIdForCourier = null;
+
+    const allCouriers = {
+      '1': { name: 'Александр Иванов', phone: '+7 (999) 111-11-11' },
+      '2': { name: 'Мария Петрова', phone: '+7 (999) 222-22-22' },
+      '3': { name: 'Дмитрий Сидоров', phone: '+7 (999) 333-33-33' },
+      '4': { name: 'Елена Кузнецова', phone: '+7 (999) 444-44-44' },
+      '5': { name: 'Игорь Смирнов', phone: '+7 (999) 555-55-55' }
+    };
+
+    // Load couriers on shift from localStorage
+    let couriersOnShift = JSON.parse(localStorage.getItem('couriersOnShift') || '[]');
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadOrders();
+      setupSearch();
+      setupDragAndDrop();
+      // Auto-refresh every 5 seconds
+      setInterval(loadOrders, 5000);
+      // Play sound for new orders
+      checkForNewOrders();
+      updateNavCourierBadge();
+    });
+
+    // Load orders
+    async function loadOrders() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders`);
+        if (response.ok) {
+          const data = await response.json();
+          const newOrders = data.data || [];
+
+          // Check for new orders
+          if (newOrders.length > orders.length) {
+            playNotificationSound();
+            showNotification('🔔 Новый заказ получен!');
+          }
+
+          orders = newOrders;
+          updateStats();
+          renderKanban();
+        }
+      } catch (error) {
+        console.error('Error loading orders:', error);
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const pending = orders.filter(o => o.status === 'pending').length;
+      const confirmed = orders.filter(o => o.status === 'confirmed').length;
+      const preparing = orders.filter(o => o.status === 'preparing').length;
+      const ready = orders.filter(o => o.status === 'ready').length;
+      const delivery = orders.filter(o => o.status === 'out_for_delivery').length;
+      const delivered = orders.filter(o => o.status === 'delivered').length;
+
+      document.getElementById('headerPending').textContent = pending;
+      document.getElementById('headerConfirmed').textContent = confirmed;
+      document.getElementById('headerPreparing').textContent = preparing;
+      document.getElementById('headerReady').textContent = ready;
+      document.getElementById('headerDelivery').textContent = delivery;
+      document.getElementById('headerDelivered').textContent = delivered;
+
+      document.getElementById('countPending').textContent = pending;
+      document.getElementById('countConfirmed').textContent = confirmed;
+      document.getElementById('countPreparing').textContent = preparing;
+      document.getElementById('countReady').textContent = ready;
+      document.getElementById('countDelivery').textContent = delivery;
+      document.getElementById('countDelivered').textContent = delivered;
+    }
+
+    // Render Kanban board
+    function renderKanban() {
+      const statuses = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
+
+      statuses.forEach(status => {
+        let containerId;
+        if (status === 'out_for_delivery') {
+          containerId = 'columnOut_for_delivery';
+        } else {
+          containerId = `column${status.charAt(0).toUpperCase() + status.slice(1)}`;
+        }
+
+        const container = document.getElementById(containerId);
+        const filtered = orders.filter(o => {
+          const matchesStatus = o.status === status;
+          const matchesSearch = !searchTerm ||
+            o.id.toString().includes(searchTerm) ||
+            o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            o.customer.phone.includes(searchTerm);
+          return matchesStatus && matchesSearch;
+        });
+
+        if (filtered.length === 0) {
+          const emojis = {
+            pending: '📭',
+            confirmed: '📋',
+            preparing: '🍳',
+            ready: '🎉',
+            out_for_delivery: '🚗',
+            delivered: '🎉'
+          };
+          const texts = {
+            pending: 'Нет новых заказов',
+            confirmed: 'Нет подтвержденных',
+            preparing: 'Ничего не готовится',
+            ready: 'Нет готовых заказов',
+            out_for_delivery: 'Нет заказов на доставке',
+            delivered: 'Нет доставленных заказов'
+          };
+          container.innerHTML = `
+            <div class="empty-column">
+              <div class="empty-icon">${emojis[status]}</div>
+              <div>${texts[status]}</div>
+            </div>
+          `;
+        } else {
+          container.innerHTML = filtered.map(order => renderOrderCard(order)).join('');
+        }
+      });
+
+      setupDragAndDrop();
+    }
+
+    // Render order card
+    function renderOrderCard(order) {
+      const isNew = order.status === 'pending';
+      const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+
+      return `
+        <div class="order-card" draggable="true" data-order-id="${order.id}">
+          ${isNew ? '<div class="new-order-badge">NEW</div>' : ''}
+          <div class="card-header">
+            <div class="order-number">#${order.id}</div>
+            <div class="order-time">
+              <span class="time-value">${elapsed} мин назад</span>
+            </div>
+          </div>
+          <div class="customer-info">
+            <div class="customer-name">👤 ${order.customer.name}</div>
+            <div class="customer-phone">📞 ${order.customer.phone}</div>
+            ${order.deliveryAddress ? `
+              <div class="customer-address">📍 ${order.deliveryAddress}</div>
+            ` : ''}
+            ${order.courierName ? `
+              <div class="customer-address" style="color: #06b6d4;">🚚 Курьер: ${order.courierName}</div>
+            ` : ''}
+          </div>
+          <div class="order-items">
+            ${order.items.slice(0, 3).map(item => `
+              <div class="item">
+                <div>
+                  <span class="item-name">${item.name}</span>
+                  <span class="item-qty">×${item.quantity}</span>
+                </div>
+                <span class="item-price">${item.price * item.quantity} ₽</span>
+              </div>
+            `).join('')}
+            ${order.items.length > 3 ? `<div class="item" style="color: #8b95a5; font-size: 12px;">... и еще ${order.items.length - 3} поз.</div>` : ''}
+          </div>
+          ${order.specialInstructions ? `
+            <div class="comment-badge">💬 Есть комментарий</div>
+          ` : ''}
+          <div class="card-footer">
+            <div class="order-total">${order.total} ₽</div>
+            <div class="card-actions">
+              ${order.status === 'pending' || order.status === 'confirmed' ? `
+                <button class="action-icon-btn btn-kitchen" onclick="sendToKitchen(${order.id})" title="Отправить на кухню">
+                  👨‍🍳
+                </button>
+              ` : ''}
+              ${order.status === 'preparing' ? `
+                <button class="action-icon-btn btn-ready" onclick="markAsReady(${order.id})" title="Готово">
+                  ✅
+                </button>
+              ` : ''}
+              ${order.status === 'ready' ? `
+                <button class="action-icon-btn btn-delivery" onclick="openCourierModal(${order.id})" title="Передать курьеру">
+                  🚚
+                </button>
+              ` : ''}
+              ${order.status === 'out_for_delivery' ? `
+                <button class="action-icon-btn btn-delivered" onclick="markAsDelivered(${order.id})" title="Доставлено">
+                  ✔️
+                </button>
+              ` : ''}
+              <button class="action-icon-btn btn-print" onclick="printOrder(${order.id})" title="Печать чека">
+                🖨️
+              </button>
+              ${order.status !== 'delivered' && order.status !== 'cancelled' ? `
+                <button class="action-icon-btn btn-cancel" onclick="cancelOrder(${order.id})" title="Отменить">
+                  ✕
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Send to kitchen
+    async function sendToKitchen(orderId) {
+      try {
+        await updateStatus(orderId, 'preparing');
+        showNotification(`Заказ #${orderId} отправлен на кухню! 👨‍🍳`);
+        playSound('success');
+      } catch (error) {
+        showNotification('Ошибка отправки на кухню', 'error');
+      }
+    }
+
+    // Mark order as ready
+    async function markAsReady(orderId) {
+      try {
+        await updateStatus(orderId, 'ready');
+        showNotification(`Заказ #${orderId} готов! ✅`);
+        playSound('success');
+      } catch (error) {
+        showNotification('Ошибка обновления статуса', 'error');
+      }
+    }
+
+    // Mark order as delivered
+    async function markAsDelivered(orderId) {
+      try {
+        await updateStatus(orderId, 'delivered');
+        showNotification(`Заказ #${orderId} доставлен! ✔️`);
+        playSound('success');
+      } catch (error) {
+        showNotification('Ошибка обновления статуса', 'error');
+      }
+    }
+
+    // Send all pending/confirmed orders to kitchen
+    async function sendAllToKitchen() {
+      const toSend = orders.filter(o => o.status === 'pending' || o.status === 'confirmed');
+      if (toSend.length === 0) {
+        showNotification('Нет заказов для отправки на кухню', 'error');
+        return;
+      }
+
+      const confirmed = confirm(`Отправить ${toSend.length} заказов на кухню?`);
+      if (!confirmed) return;
+
+      for (const order of toSend) {
+        await updateStatus(order.id, 'preparing');
+      }
+
+      showNotification(`${toSend.length} заказов отправлено на кухню! 👨‍🍳`);
+      playSound('success');
+    }
+
+    // Print order
+    async function printOrder(orderId) {
+      showNotification(`Печать чека для заказа #${orderId}... 🖨️`);
+      // TODO: Integrate with printer API
+      playSound('print');
+    }
+
+    // Cancel order
+    async function cancelOrder(orderId) {
+      const confirmed = confirm(`Отменить заказ #${orderId}?`);
+      if (!confirmed) return;
+
+      await updateStatus(orderId, 'cancelled');
+      showNotification(`Заказ #${orderId} отменен`);
+    }
+
+    // Update order status
+    async function updateStatus(orderId, newStatus) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        if (response.ok) {
+          await loadOrders();
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+      }
+    }
+
+    // Setup drag and drop
+    function setupDragAndDrop() {
+      const cards = document.querySelectorAll('.order-card');
+      const containers = document.querySelectorAll('.cards-container');
+
+      cards.forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/html', card.innerHTML);
+        });
+
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+        });
+      });
+
+      containers.forEach(container => {
+        container.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          const column = container.closest('.kanban-column');
+          column.style.background = 'rgba(30, 136, 229, 0.05)';
+        });
+
+        container.addEventListener('dragleave', () => {
+          const column = container.closest('.kanban-column');
+          column.style.background = '';
+        });
+
+        container.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          const column = container.closest('.kanban-column');
+          column.style.background = '';
+
+          const dragging = document.querySelector('.dragging');
+          if (dragging) {
+            const orderId = dragging.dataset.orderId;
+            const newStatus = column.dataset.status;
+            await updateStatus(parseInt(orderId), newStatus);
+            showNotification(`Заказ #${orderId} перемещен в "${getStatusName(newStatus)}"`);
+          }
+        });
+      });
+    }
+
+    function getStatusName(status) {
+      const names = {
+        pending: 'Новые',
+        confirmed: 'Подтверждены',
+        preparing: 'Готовятся',
+        ready: 'Готовы',
+        out_for_delivery: 'На доставке',
+        delivered: 'Доставлено'
+      };
+      return names[status] || status;
+    }
+
+    // Open courier modal
+    function openCourierModal(orderId) {
+      selectedOrderIdForCourier = orderId;
+
+      // Populate courier select with only couriers on shift
+      const select = document.getElementById('courierSelect');
+      const warning = document.getElementById('noCouriersWarning');
+      const assignBtn = document.getElementById('assignCourierBtn');
+
+      select.innerHTML = '<option value="">-- Выберите курьера --</option>';
+
+      if (couriersOnShift.length === 0) {
+        warning.style.display = 'block';
+        assignBtn.disabled = true;
+        assignBtn.style.opacity = '0.5';
+        assignBtn.style.cursor = 'not-allowed';
+      } else {
+        warning.style.display = 'none';
+        assignBtn.disabled = false;
+        assignBtn.style.opacity = '1';
+        assignBtn.style.cursor = 'pointer';
+
+        couriersOnShift.forEach(courierId => {
+          const courier = allCouriers[courierId];
+          if (courier) {
+            const option = document.createElement('option');
+            option.value = courierId;
+            option.textContent = courier.name;
+            select.appendChild(option);
+          }
+        });
+      }
+
+      const modal = document.getElementById('courierModal');
+      modal.classList.add('active');
+    }
+
+    // Close courier modal
+    function closeCourierModal() {
+      selectedOrderIdForCourier = null;
+      document.getElementById('courierSelect').value = '';
+      document.getElementById('courierModal').classList.remove('active');
+    }
+
+    // Assign courier to order
+    async function assignCourier() {
+      const courierId = document.getElementById('courierSelect').value;
+
+      if (!courierId) {
+        showNotification('Пожалуйста, выберите курьера', 'error');
+        return;
+      }
+
+      const courier = allCouriers[courierId];
+      if (!courier) {
+        showNotification('Курьер не найден', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/orders/${selectedOrderIdForCourier}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'out_for_delivery',
+            courierId: parseInt(courierId),
+            courierName: courier.name
+          })
+        });
+
+        if (response.ok) {
+          showNotification(`Заказ #${selectedOrderIdForCourier} назначен курьеру ${courier.name} 🚚`);
+          playSound('success');
+
+          // Print courier receipt
+          await printCourierReceipt(selectedOrderIdForCourier);
+
+          closeCourierModal();
+          await loadOrders();
+        }
+      } catch (error) {
+        console.error('Error assigning courier:', error);
+        showNotification('Ошибка назначения курьера', 'error');
+      }
+    }
+
+    // Print courier receipt
+    async function printCourierReceipt(orderId) {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      showNotification(`Печать чека для курьера... 🖨️`);
+
+      // TODO: Integrate with printer API
+      // For now, just show a preview in console
+      console.log('=== ЧЕК ДЛЯ КУРЬЕРА ===');
+      console.log(`Заказ #${order.id}`);
+      console.log(`Клиент: ${order.customer.name}`);
+      console.log(`Телефон: ${order.customer.phone}`);
+      console.log(`Адрес: ${order.deliveryAddress}`);
+      console.log('---');
+      order.items.forEach(item => {
+        console.log(`${item.name} x${item.quantity} - ${item.price * item.quantity} ₽`);
+      });
+      console.log('---');
+      console.log(`Итого: ${order.total} ₽`);
+      console.log(`Курьер: ${order.courierName}`);
+      console.log('======================');
+
+      playSound('print');
+    }
+
+    // Open couriers management modal
+    function openCouriersManagement() {
+      renderCouriersManagement();
+      document.getElementById('couriersManagementModal').classList.add('active');
+    }
+
+    // Close couriers management modal
+    function closeCouriersManagement() {
+      document.getElementById('couriersManagementModal').classList.remove('active');
+      updateNavCourierBadge();
+    }
+
+    // Render couriers management list
+    function renderCouriersManagement() {
+      const container = document.getElementById('couriersListManagement');
+      container.innerHTML = '';
+
+      Object.keys(allCouriers).forEach(courierId => {
+        const courier = allCouriers[courierId];
+        const isOnShift = couriersOnShift.includes(courierId);
+
+        const courierItem = document.createElement('div');
+        courierItem.className = `courier-item ${isOnShift ? 'active' : ''}`;
+
+        courierItem.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="courier-status">${isOnShift ? '🟢' : '⚫'}</span>
+            <div class="courier-info">
+              <div class="courier-name">${courier.name}</div>
+              <div class="courier-phone">📞 ${courier.phone}</div>
+            </div>
+          </div>
+          <button
+            onclick="toggleCourierShift('${courierId}')"
+            class="btn btn-small ${isOnShift ? 'btn-cancel' : 'btn-success'}"
+          >
+            ${isOnShift ? 'Завершить смену' : 'Начать смену'}
+          </button>
+        `;
+
+        container.appendChild(courierItem);
+      });
+    }
+
+    // Toggle courier shift
+    function toggleCourierShift(courierId) {
+      const index = couriersOnShift.indexOf(courierId);
+
+      if (index === -1) {
+        // Add courier to shift
+        couriersOnShift.push(courierId);
+        showNotification(`${allCouriers[courierId].name} начал(а) смену 🟢`);
+        playSound('success');
+      } else {
+        // Remove courier from shift
+        couriersOnShift.splice(index, 1);
+        showNotification(`${allCouriers[courierId].name} завершил(а) смену ⚫`);
+      }
+
+      // Save to localStorage
+      localStorage.setItem('couriersOnShift', JSON.stringify(couriersOnShift));
+
+      // Re-render
+      renderCouriersManagement();
+      updateNavCourierBadge();
+    }
+
+    // Update navigation courier badge
+    function updateNavCourierBadge() {
+      const navButton = document.querySelector('.nav-right .btn-secondary');
+      if (navButton) {
+        const count = couriersOnShift.length;
+        if (count > 0) {
+          navButton.innerHTML = `👥 Курьеры (${count})`;
+          navButton.style.background = 'rgba(67, 160, 71, 0.1)';
+          navButton.style.borderColor = '#43a047';
+          navButton.style.color = '#43a047';
+        } else {
+          navButton.innerHTML = '👥 Курьеры';
+          navButton.style.background = '';
+          navButton.style.borderColor = '#e1e8ed';
+          navButton.style.color = '#5a6c7d';
+        }
+      }
+    }
+
+    // Setup search
+    function setupSearch() {
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        searchTerm = e.target.value;
+        renderKanban();
+      });
+    }
+
+    // Show notification
+    function showNotification(message, type = 'success') {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = `notification show ${type}`;
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Play sound
+    function playSound(type) {
+      // Simple beep using Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      if (type === 'success') {
+        oscillator.frequency.value = 800;
+      } else if (type === 'error') {
+        oscillator.frequency.value = 400;
+      } else {
+        oscillator.frequency.value = 600;
+      }
+
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+    }
+
+    // Play notification sound for new orders
+    function playNotificationSound() {
+      playSound('success');
+    }
+
+    // Check for new orders
+    function checkForNewOrders() {
+      setInterval(() => {
+        const newOrdersCount = orders.filter(o => o.status === 'pending').length;
+        if (newOrdersCount > 0) {
+          document.title = `(${newOrdersCount}) Новые заказы - FoodFlow`;
+        } else {
+          document.title = 'Управление заказами - FoodFlow';
+        }
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

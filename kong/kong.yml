@@ -1,0 +1,110 @@
+_format_version: "3.0"
+
+services:
+  - name: user-service
+    url: http://user-service:3001
+    routes:
+      - name: user-routes
+        paths:
+          - /api/users
+        strip_path: false
+      - name: auth-routes
+        paths:
+          - /api/auth
+        strip_path: false
+
+  - name: restaurant-service
+    url: http://restaurant-service:3002
+    routes:
+      - name: restaurant-routes
+        paths:
+          - /api/restaurants
+        strip_path: false
+      - name: menu-routes
+        paths:
+          - /api/menus
+        strip_path: false
+
+  - name: order-service
+    url: http://order-service:3003
+    routes:
+      - name: order-routes
+        paths:
+          - /api/orders
+        strip_path: false
+      - name: cart-routes
+        paths:
+          - /api/cart
+        strip_path: false
+
+  - name: delivery-service
+    url: http://delivery-service:3004
+    routes:
+      - name: delivery-routes
+        paths:
+          - /api/deliveries
+        strip_path: false
+      - name: tracking-routes
+        paths:
+          - /api/tracking
+        strip_path: false
+
+  - name: kitchen-service
+    url: http://kitchen-service:3005
+    routes:
+      - name: kitchen-routes
+        paths:
+          - /api/kitchen
+        strip_path: false
+      - name: printer-routes
+        paths:
+          - /api/printers
+        strip_path: false
+
+  # Frontend static files
+  - name: frontend-service
+    url: http://frontend-service:3000
+    routes:
+      - name: customer-app
+        paths:
+          - /customer-app
+        strip_path: false
+      - name: admin-panel
+        paths:
+          - /admin-panel
+        strip_path: false
+      - name: root-redirect
+        paths:
+          - /
+        strip_path: false
+
+plugins:
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - Authorization
+      exposed_headers:
+        - X-Auth-Token
+      credentials: true
+      max_age: 3600
+
+  - name: rate-limiting
+    config:
+      minute: 100
+      hour: 1000
+      policy: local

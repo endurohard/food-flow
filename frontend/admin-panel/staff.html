@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление персоналом - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e1e8ed;
+      padding-bottom: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tabs::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+
+    .tabs::-webkit-scrollbar-thumb {
+      background: #c5cdd8;
+      border-radius: 2px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -14px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .tab {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+    }
+
+    .tab:hover {
+      color: #2c3e50;
+    }
+
+    .tab.active {
+      color: #1e88e5;
+      border-bottom-color: #1e88e5;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .btn-success {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #388e3c;
+    }
+
+    .btn-danger {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #d32f2f;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    /* Staff Grid */
+    .staff-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    @media (min-width: 768px) {
+      .staff-grid {
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+      }
+    }
+
+    .staff-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      transition: all 0.3s;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 768px) {
+      .staff-card {
+        padding: 24px;
+      }
+    }
+
+    .staff-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .staff-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .staff-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #1e88e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .staff-avatar {
+        width: 60px;
+        height: 60px;
+        font-size: 24px;
+      }
+    }
+
+    .staff-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .staff-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+
+    @media (min-width: 768px) {
+      .staff-name {
+        font-size: 18px;
+      }
+    }
+
+    .staff-role {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .role-waiter { background: rgba(30, 136, 229, 0.1); color: #1e88e5; }
+    .role-cook { background: rgba(251, 140, 0, 0.1); color: #fb8c00; }
+    .role-courier { background: rgba(67, 160, 71, 0.1); color: #43a047; }
+    .role-manager { background: rgba(142, 36, 170, 0.1); color: #8e24aa; }
+    .role-admin { background: rgba(229, 57, 53, 0.1); color: #e53935; }
+
+    .staff-details {
+      margin: 16px 0;
+      padding: 16px;
+      background: #f5f7fa;
+      border-radius: 12px;
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #e1e8ed;
+      gap: 12px;
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-label {
+      color: #8b95a5;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .detail-value {
+      color: #2c3e50;
+      font-weight: 600;
+      font-size: 13px;
+      text-align: right;
+      word-break: break-word;
+    }
+
+    .staff-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .staff-status.online {
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+    }
+
+    .staff-status.offline {
+      background: rgba(139, 149, 165, 0.1);
+      color: #8b95a5;
+    }
+
+    .staff-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    /* Schedule */
+    .schedule-wrapper {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      overflow-x: auto;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 768px) {
+      .schedule-wrapper {
+        padding: 24px;
+      }
+    }
+
+    .schedule-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .schedule-controls {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .week-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .week-nav button {
+      padding: 8px 16px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      color: #5a6c7d;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .week-nav button:hover {
+      background: #f5f7fa;
+      border-color: #1e88e5;
+    }
+
+    .current-week {
+      color: #2c3e50;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    @media (min-width: 768px) {
+      .current-week {
+        font-size: 16px;
+      }
+    }
+
+    .schedule-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 800px;
+    }
+
+    .schedule-table th {
+      background: #f5f7fa;
+      color: #8b95a5;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #e1e8ed;
+      font-size: 13px;
+    }
+
+    @media (min-width: 768px) {
+      .schedule-table th {
+        padding: 16px;
+        font-size: 14px;
+      }
+    }
+
+    .schedule-table td {
+      padding: 12px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    @media (min-width: 768px) {
+      .schedule-table td {
+        padding: 16px;
+      }
+    }
+
+    .schedule-table tr:hover {
+      background: #f5f7fa;
+    }
+
+    .shift-cell {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .shift-badge {
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      white-space: nowrap;
+    }
+
+    .shift-badge.morning {
+      background: rgba(251, 140, 0, 0.1);
+      color: #fb8c00;
+      border: 1px solid #fb8c00;
+    }
+
+    .shift-badge.evening {
+      background: rgba(142, 36, 170, 0.1);
+      color: #8e24aa;
+      border: 1px solid #8e24aa;
+    }
+
+    .shift-badge.full-day {
+      background: rgba(67, 160, 71, 0.1);
+      color: #43a047;
+      border: 1px solid #43a047;
+    }
+
+    .shift-badge.day-off {
+      background: rgba(139, 149, 165, 0.1);
+      color: #8b95a5;
+      border: 1px solid #8b95a5;
+    }
+
+    .shift-badge:hover {
+      transform: scale(1.05);
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    @media (min-width: 768px) {
+      .modal-content {
+        padding: 32px;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .modal-header {
+        margin-bottom: 24px;
+      }
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #8b95a5;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: #5a6c7d;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-group {
+        margin-bottom: 20px;
+      }
+    }
+
+    .form-label {
+      display: block;
+      color: #5a6c7d;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item active">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddStaffModal()">
+      ➕ Сотрудник
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">👥 Управление персоналом</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('staff')">👤 Сотрудники</button>
+      <button class="tab" onclick="switchTab('schedule')">📅 Графики смен</button>
+      <button class="tab" onclick="switchTab('timesheet')">⏱️ Табель</button>
+    </div>
+
+    <!-- Staff Tab -->
+    <div id="staffTab" class="tab-content active">
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">👥</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего</div>
+            <div class="stat-value" id="totalStaff">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">На смене</div>
+            <div class="stat-value" id="onShift">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">🍽️</div>
+          <div class="stat-info">
+            <div class="stat-label">Официанты</div>
+            <div class="stat-value" id="waitersCount">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background: rgba(251, 140, 0, 0.1);">👨‍🍳</div>
+          <div class="stat-info">
+            <div class="stat-label">Повара</div>
+            <div class="stat-value" id="cooksCount">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="staff-grid" id="staffGrid">
+        <!-- Staff cards will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Schedule Tab -->
+    <div id="scheduleTab" class="tab-content">
+      <div class="schedule-wrapper">
+        <div class="schedule-controls">
+          <div class="week-nav">
+            <button onclick="previousWeek()">◀ Пред. неделя</button>
+            <span class="current-week" id="currentWeek"></span>
+            <button onclick="nextWeek()">След. неделя ▶</button>
+          </div>
+          <button class="btn btn-success" onclick="saveSchedule()">💾 Сохранить график</button>
+        </div>
+
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th>Сотрудник</th>
+              <th>Пн</th>
+              <th>Вт</th>
+              <th>Ср</th>
+              <th>Чт</th>
+              <th>Пт</th>
+              <th>Сб</th>
+              <th>Вс</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody">
+            <!-- Schedule rows will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Timesheet Tab -->
+    <div id="timesheetTab" class="tab-content">
+      <div class="schedule-wrapper">
+        <h3 style="margin-bottom: 20px; font-size: 18px; font-weight: 700; color: #2c3e50;">⏱️ Табель учёта рабочего времени</h3>
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th>Сотрудник</th>
+              <th>Отработано часов</th>
+              <th>Количество смен</th>
+              <th>Опоздания</th>
+              <th>Зарплата (₽)</th>
+            </tr>
+          </thead>
+          <tbody id="timesheetBody">
+            <!-- Timesheet rows will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Staff Modal -->
+  <div class="modal" id="staffModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Добавить сотрудника</h2>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+
+      <form id="staffForm" onsubmit="saveStaff(event)">
+        <div class="form-group">
+          <label class="form-label">ФИО:</label>
+          <input type="text" class="form-input" id="staffName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Должность:</label>
+          <select class="form-select" id="staffRole" required>
+            <option value="waiter">Официант</option>
+            <option value="cook">Повар</option>
+            <option value="courier">Курьер</option>
+            <option value="manager">Менеджер</option>
+            <option value="admin">Администратор</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Телефон:</label>
+          <input type="tel" class="form-input" id="staffPhone" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email:</label>
+          <input type="email" class="form-input" id="staffEmail" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Ставка (₽/час):</label>
+          <input type="number" class="form-input" id="staffRate" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Дата начала работы:</label>
+          <input type="date" class="form-input" id="staffStartDate" required>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">
+            💾 Сохранить
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">
+            Отмена
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Shift Edit Modal -->
+  <div class="modal" id="shiftModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Редактировать смену</h2>
+        <button class="close-btn" onclick="closeShiftModal()">&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Тип смены:</label>
+        <select class="form-select" id="shiftType">
+          <option value="morning">🌅 Утренняя (08:00-16:00)</option>
+          <option value="evening">🌙 Вечерняя (16:00-00:00)</option>
+          <option value="full-day">☀️ Полный день (08:00-20:00)</option>
+          <option value="day-off">🏖️ Выходной</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <button class="btn btn-primary" style="flex: 1;" onclick="saveShift()">
+          💾 Сохранить
+        </button>
+        <button class="btn btn-secondary" onclick="closeShiftModal()">
+          Отмена
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <script>
+    let staff = [];
+    let schedule = {};
+    let currentWeekStart = getWeekStart(new Date());
+    let editingStaffId = null;
+    let editingShift = null;
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize with sample data
+    function initializeData() {
+      const savedStaff = localStorage.getItem('restaurantStaff');
+      if (savedStaff) {
+        staff = JSON.parse(savedStaff);
+      } else {
+        staff = [
+          { id: 1, name: 'Александр Иванов', role: 'waiter', phone: '+7 999 111-11-11', email: 'alex@example.com', rate: 250, startDate: '2024-01-15', status: 'online' },
+          { id: 2, name: 'Мария Петрова', role: 'cook', phone: '+7 999 222-22-22', email: 'maria@example.com', rate: 300, startDate: '2024-02-01', status: 'online' },
+          { id: 3, name: 'Дмитрий Сидоров', role: 'courier', phone: '+7 999 333-33-33', email: 'dmitry@example.com', rate: 200, startDate: '2024-03-10', status: 'offline' },
+          { id: 4, name: 'Елена Кузнецова', role: 'waiter', phone: '+7 999 444-44-44', email: 'elena@example.com', rate: 250, startDate: '2024-01-20', status: 'online' },
+          { id: 5, name: 'Игорь Смирнов', role: 'manager', phone: '+7 999 555-55-55', email: 'igor@example.com', rate: 400, startDate: '2023-12-01', status: 'online' }
+        ];
+        saveData();
+      }
+
+      const savedSchedule = localStorage.getItem('restaurantSchedule');
+      if (savedSchedule) {
+        schedule = JSON.parse(savedSchedule);
+      } else {
+        // Initialize empty schedule
+        staff.forEach(s => {
+          schedule[s.id] = {
+            0: 'morning', 1: 'morning', 2: 'morning', 3: 'morning', 4: 'morning', 5: 'day-off', 6: 'day-off'
+          };
+        });
+        saveData();
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem('restaurantStaff', JSON.stringify(staff));
+      localStorage.setItem('restaurantSchedule', JSON.stringify(schedule));
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tab + 'Tab').classList.add('active');
+
+      if (tab === 'schedule') {
+        renderSchedule();
+      } else if (tab === 'timesheet') {
+        renderTimesheet();
+      }
+    }
+
+    function renderStaff() {
+      const grid = document.getElementById('staffGrid');
+
+      grid.innerHTML = staff.map(s => `
+        <div class="staff-card">
+          <div class="staff-header">
+            <div class="staff-avatar">${s.name.split(' ').map(n => n[0]).join('')}</div>
+            <div class="staff-info">
+              <div class="staff-name">${s.name}</div>
+              <span class="staff-role role-${s.role}">${getRoleName(s.role)}</span>
+            </div>
+          </div>
+
+          <div class="staff-details">
+            <div class="detail-row">
+              <span class="detail-label">📞 Телефон:</span>
+              <span class="detail-value">${s.phone}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">📧 Email:</span>
+              <span class="detail-value">${s.email}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">💰 Ставка:</span>
+              <span class="detail-value">${s.rate} ₽/час</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">📅 Работает с:</span>
+              <span class="detail-value">${new Date(s.startDate).toLocaleDateString('ru-RU')}</span>
+            </div>
+          </div>
+
+          <div class="staff-status ${s.status}">
+            <span>${s.status === 'online' ? '🟢' : '⚫'}</span>
+            <span>${s.status === 'online' ? 'На смене' : 'Не на смене'}</span>
+          </div>
+
+          <div class="staff-actions">
+            <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="editStaff(${s.id})">
+              ✏️ Редактировать
+            </button>
+            <button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id})">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `).join('');
+
+      updateStats();
+    }
+
+    function updateStats() {
+      document.getElementById('totalStaff').textContent = staff.length;
+      document.getElementById('onShift').textContent = staff.filter(s => s.status === 'online').length;
+      document.getElementById('waitersCount').textContent = staff.filter(s => s.role === 'waiter').length;
+      document.getElementById('cooksCount').textContent = staff.filter(s => s.role === 'cook').length;
+    }
+
+    function getRoleName(role) {
+      const names = {
+        waiter: 'Официант',
+        cook: 'Повар',
+        courier: 'Курьер',
+        manager: 'Менеджер',
+        admin: 'Администратор'
+      };
+      return names[role] || role;
+    }
+
+    function openAddStaffModal() {
+      editingStaffId = null;
+      document.getElementById('modalTitle').textContent = 'Добавить сотрудника';
+      document.getElementById('staffForm').reset();
+      document.getElementById('staffModal').classList.add('active');
+    }
+
+    function editStaff(id) {
+      const s = staff.find(st => st.id === id);
+      if (!s) return;
+
+      editingStaffId = id;
+      document.getElementById('modalTitle').textContent = 'Редактировать сотрудника';
+      document.getElementById('staffName').value = s.name;
+      document.getElementById('staffRole').value = s.role;
+      document.getElementById('staffPhone').value = s.phone;
+      document.getElementById('staffEmail').value = s.email;
+      document.getElementById('staffRate').value = s.rate;
+      document.getElementById('staffStartDate').value = s.startDate;
+      document.getElementById('staffModal').classList.add('active');
+    }
+
+    function saveStaff(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('staffName').value,
+        role: document.getElementById('staffRole').value,
+        phone: document.getElementById('staffPhone').value,
+        email: document.getElementById('staffEmail').value,
+        rate: parseInt(document.getElementById('staffRate').value),
+        startDate: document.getElementById('staffStartDate').value,
+        status: 'offline'
+      };
+
+      if (editingStaffId) {
+        const index = staff.findIndex(s => s.id === editingStaffId);
+        staff[index] = { ...staff[index], ...formData };
+        showNotification('✅ Сотрудник обновлён');
+      } else {
+        const newId = staff.length > 0 ? Math.max(...staff.map(s => s.id)) + 1 : 1;
+        staff.push({ id: newId, ...formData });
+        schedule[newId] = { 0: 'day-off', 1: 'day-off', 2: 'day-off', 3: 'day-off', 4: 'day-off', 5: 'day-off', 6: 'day-off' };
+        showNotification('✅ Сотрудник добавлен');
+      }
+
+      saveData();
+      renderStaff();
+      closeModal();
+    }
+
+    function deleteStaff(id) {
+      if (!confirm('Удалить сотрудника?')) return;
+
+      staff = staff.filter(s => s.id !== id);
+      delete schedule[id];
+      saveData();
+      renderStaff();
+      showNotification('🗑️ Сотрудник удалён');
+    }
+
+    function closeModal() {
+      document.getElementById('staffModal').classList.remove('active');
+    }
+
+    // Schedule functions
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff));
+    }
+
+    function formatWeekRange(start) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      return `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+
+    function previousWeek() {
+      currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+      renderSchedule();
+    }
+
+    function nextWeek() {
+      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      renderSchedule();
+    }
+
+    function renderSchedule() {
+      document.getElementById('currentWeek').textContent = formatWeekRange(currentWeekStart);
+
+      const tbody = document.getElementById('scheduleBody');
+      tbody.innerHTML = staff.map(s => {
+        const shifts = schedule[s.id] || {};
+        return `
+          <tr>
+            <td><strong>${s.name}</strong><br><small class="staff-role role-${s.role}">${getRoleName(s.role)}</small></td>
+            ${[0, 1, 2, 3, 4, 5, 6].map(day => `
+              <td>
+                <div class="shift-cell">
+                  <span class="shift-badge ${shifts[day] || 'day-off'}" onclick="editShift(${s.id}, ${day})">
+                    ${getShiftLabel(shifts[day])}
+                  </span>
+                </div>
+              </td>
+            `).join('')}
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getShiftLabel(shift) {
+      const labels = {
+        morning: '🌅 08:00-16:00',
+        evening: '🌙 16:00-00:00',
+        'full-day': '☀️ 08:00-20:00',
+        'day-off': '🏖️ Выходной'
+      };
+      return labels[shift] || labels['day-off'];
+    }
+
+    function editShift(staffId, day) {
+      editingShift = { staffId, day };
+      document.getElementById('shiftType').value = schedule[staffId]?.[day] || 'day-off';
+      document.getElementById('shiftModal').classList.add('active');
+    }
+
+    function saveShift() {
+      if (!editingShift) return;
+
+      const { staffId, day } = editingShift;
+      const shiftType = document.getElementById('shiftType').value;
+
+      if (!schedule[staffId]) {
+        schedule[staffId] = {};
+      }
+      schedule[staffId][day] = shiftType;
+
+      saveData();
+      renderSchedule();
+      closeShiftModal();
+      showNotification('✅ Смена обновлена');
+    }
+
+    function closeShiftModal() {
+      document.getElementById('shiftModal').classList.remove('active');
+      editingShift = null;
+    }
+
+    function saveSchedule() {
+      saveData();
+      showNotification('✅ График сохранён');
+    }
+
+    // Timesheet functions
+    function renderTimesheet() {
+      const tbody = document.getElementById('timesheetBody');
+
+      tbody.innerHTML = staff.map(s => {
+        const shifts = schedule[s.id] || {};
+        const workDays = Object.values(shifts).filter(sh => sh !== 'day-off').length;
+        const hours = workDays * 8; // Average 8 hours per shift
+        const salary = hours * s.rate;
+
+        return `
+          <tr>
+            <td><strong>${s.name}</strong><br><small class="staff-role role-${s.role}">${getRoleName(s.role)}</small></td>
+            <td>${hours} ч</td>
+            <td>${workDays}</td>
+            <td>0</td>
+            <td><strong>${salary.toLocaleString('ru-RU')} ₽</strong></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.classList.add('show');
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Initialize
+    initializeData();
+    renderStaff();
+  </script>
+</body>
+</html>

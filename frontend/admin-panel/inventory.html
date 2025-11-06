@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление складом - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e1e8ed;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: #f5f7fa;
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #e1e8ed;
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8b95a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: #5a6c7d;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: #f5f7fa;
+      color: #2c3e50;
+    }
+
+    .sidebar-item.active {
+      background: #f0f7ff;
+      color: #1e88e5;
+      border-left-color: #1e88e5;
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e1e8ed;
+      padding-bottom: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tabs::-webkit-scrollbar-track {
+      background: #f5f7fa;
+    }
+
+    .tabs::-webkit-scrollbar-thumb {
+      background: #c5cdd8;
+      border-radius: 2px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: #5a6c7d;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -14px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .tab {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+    }
+
+    .tab:hover {
+      color: #2c3e50;
+    }
+
+    .tab.active {
+      color: #1e88e5;
+      border-bottom-color: #1e88e5;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #1e88e5;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976d2;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #5a6c7d;
+      border: 1px solid #e1e8ed;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f7fa;
+    }
+
+    .btn-success {
+      background: #43a047;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #388e3c;
+    }
+
+    .btn-warning {
+      background: #fb8c00;
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: #f57c00;
+    }
+
+    .btn-danger {
+      background: #e53935;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #d32f2f;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-icon.in-stock { background: rgba(34, 197, 94, 0.1); }
+    .stat-icon.low-stock { background: rgba(245, 158, 11, 0.1); }
+    .stat-icon.out-stock { background: rgba(239, 68, 68, 0.1); }
+    .stat-icon.total { background: rgba(59, 130, 246, 0.1); }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: #8b95a5;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    /* Inventory Table */
+    .table-wrapper {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 20px;
+      overflow-x: auto;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 768px) {
+      .table-wrapper {
+        padding: 24px;
+      }
+    }
+
+    .table-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      position: relative;
+    }
+
+    @media (min-width: 768px) {
+      .search-box {
+        min-width: 250px;
+      }
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #8b95a5;
+    }
+
+    .filter-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 8px 16px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      color: #5a6c7d;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .filter-btn:hover {
+      border-color: #1e88e5;
+      color: #2c3e50;
+    }
+
+    .filter-btn.active {
+      background: #f0f7ff;
+      border-color: #1e88e5;
+      color: #1e88e5;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      min-width: 1000px;
+    }
+
+    .data-table th {
+      background: #f5f7fa;
+      color: #5a6c7d;
+      padding: 16px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #e1e8ed;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 16px;
+      border-bottom: 1px solid #e1e8ed;
+    }
+
+    .data-table tr:hover {
+      background: #f5f7fa;
+    }
+
+    .stock-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .stock-badge.in-stock {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+    }
+
+    .stock-badge.low-stock {
+      background: rgba(245, 158, 11, 0.1);
+      color: #f59e0b;
+    }
+
+    .stock-badge.out-of-stock {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+
+    .quantity-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .quantity-bar {
+      flex: 1;
+      height: 6px;
+      background: rgba(100, 116, 139, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .quantity-fill {
+      height: 100%;
+      transition: all 0.3s;
+    }
+
+    .quantity-fill.high { background: #22c55e; }
+    .quantity-fill.medium { background: #f59e0b; }
+    .quantity-fill.low { background: #ef4444; }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    @media (min-width: 768px) {
+      .modal-content {
+        padding: 32px;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .modal-header {
+        margin-bottom: 24px;
+      }
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #8b95a5;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: #5a6c7d;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-group {
+        margin-bottom: 20px;
+      }
+    }
+
+    .form-label {
+      display: block;
+      color: #5a6c7d;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 8px;
+      color: #2c3e50;
+      font-size: 14px;
+    }
+
+    @media (min-width: 768px) {
+      .form-input, .form-select, .form-textarea {
+        padding: 12px 16px;
+      }
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: #1e88e5;
+      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: #2c3e50;
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .supplier-card {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .supplier-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .supplier-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .supplier-rating {
+      color: #fb8c00;
+      font-size: 14px;
+    }
+
+    .supplier-info {
+      color: #5a6c7d;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .supplier-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .order-history-item {
+      background: #ffffff;
+      border: 1px solid #e1e8ed;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .order-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .order-number {
+      font-weight: 700;
+      color: #1e88e5;
+    }
+
+    .order-status {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .order-status.pending { background: rgba(245, 158, 11, 0.1); color: #fb8c00; }
+    .order-status.completed { background: rgba(34, 197, 94, 0.1); color: #43a047; }
+    .order-status.cancelled { background: rgba(239, 68, 68, 0.1); color: #e53935; }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Навигация</div>
+    </div>
+    <div class="sidebar-menu">
+      <a href="orders.html" class="sidebar-item">
+        <span class="sidebar-icon">📦</span>
+        <span>Заказы</span>
+      </a>
+      <a href="tables.html" class="sidebar-item">
+        <span class="sidebar-icon">🍽️</span>
+        <span>Столы</span>
+      </a>
+      <a href="kds.html" class="sidebar-item">
+        <span class="sidebar-icon">👨‍🍳</span>
+        <span>KDS (Кухня)</span>
+      </a>
+      <a href="staff.html" class="sidebar-item">
+        <span class="sidebar-icon">👥</span>
+        <span>Персонал</span>
+      </a>
+      <a href="inventory.html" class="sidebar-item active">
+        <span class="sidebar-icon">📦</span>
+        <span>Склад</span>
+      </a>
+      <a href="menu.html" class="sidebar-item">
+        <span class="sidebar-icon">🍕</span>
+        <span>Меню</span>
+      </a>
+      <a href="loyalty.html" class="sidebar-item">
+        <span class="sidebar-icon">🎁</span>
+        <span>Лояльность</span>
+      </a>
+      <a href="analytics.html" class="sidebar-item">
+        <span class="sidebar-icon">📊</span>
+        <span>Аналитика</span>
+      </a>
+      <a href="index.html" class="sidebar-item">
+        <span class="sidebar-icon">🖨️</span>
+        <span>Принтеры</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <div class="nav-brand">
+        🍽️ FoodFlow
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddItemModal()">
+      ➕ Добавить товар
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="title">📦 Управление складом</h1>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('inventory')">📦 Остатки</button>
+      <button class="tab" onclick="switchTab('suppliers')">🏢 Поставщики</button>
+      <button class="tab" onclick="switchTab('orders')">📋 История заказов</button>
+      <button class="tab" onclick="switchTab('reports')">📊 Отчёты</button>
+    </div>
+
+    <!-- Inventory Tab -->
+    <div id="inventoryTab" class="tab-content active">
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon total">📦</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего позиций</div>
+            <div class="stat-value" id="totalItems">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon in-stock">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">В наличии</div>
+            <div class="stat-value" id="inStockItems">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon low-stock">⚠️</div>
+          <div class="stat-info">
+            <div class="stat-label">Заканчиваются</div>
+            <div class="stat-value" id="lowStockItems">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon out-stock">🚫</div>
+          <div class="stat-info">
+            <div class="stat-label">Нет в наличии</div>
+            <div class="stat-value" id="outOfStockItems">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <div class="table-controls">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="Поиск по названию..." oninput="filterInventory()">
+          </div>
+          <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">Все</button>
+            <button class="filter-btn" data-filter="in-stock" onclick="setFilter('in-stock')">В наличии</button>
+            <button class="filter-btn" data-filter="low-stock" onclick="setFilter('low-stock')">Заканчиваются</button>
+            <button class="filter-btn" data-filter="out-of-stock" onclick="setFilter('out-of-stock')">Нет в наличии</button>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Товар</th>
+              <th>Категория</th>
+              <th>Количество</th>
+              <th>Единица</th>
+              <th>Мин. остаток</th>
+              <th>Статус</th>
+              <th>Цена закупки</th>
+              <th>Стоимость</th>
+              <th>Поставщик</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryTableBody">
+            <!-- Inventory items will be rendered here -->
+          </tbody>
+        </table>
+
+        <div style="margin-top: 24px; padding: 20px; background: #f0f7ff; border-radius: 12px; border: 2px solid #1e88e5;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div style="font-size: 14px; color: #5a6c7d; margin-bottom: 4px;">Общая стоимость склада</div>
+              <div style="font-size: 28px; font-weight: 700; color: #1e88e5;" id="totalInventoryValueDisplay">0 ₽</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 14px; color: #5a6c7d; margin-bottom: 4px;">Всего позиций</div>
+              <div style="font-size: 24px; font-weight: 700; color: #2c3e50;" id="totalInventoryCount">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Suppliers Tab -->
+    <div id="suppliersTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">🏢 Поставщики</h2>
+        <button class="btn btn-primary" onclick="openAddSupplierModal()">➕ Добавить поставщика</button>
+      </div>
+
+      <div id="suppliersList">
+        <!-- Suppliers will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Orders Tab -->
+    <div id="ordersTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">📋 История заказов поставщикам</h2>
+        <button class="btn btn-primary" onclick="openNewOrderModal()">➕ Новый заказ</button>
+      </div>
+
+      <div id="ordersList">
+        <!-- Purchase orders will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Reports Tab -->
+    <div id="reportsTab" class="tab-content">
+      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 24px;">📊 Отчёты по складу</h2>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-info" style="flex: 1;">
+            <div class="stat-label">Общая стоимость запасов</div>
+            <div class="stat-value" id="totalInventoryValue">0 ₽</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info" style="flex: 1;">
+            <div class="stat-label">Закупки за месяц</div>
+            <div class="stat-value" id="monthlyPurchases">0 ₽</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #2c3e50;">Критические остатки</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Товар</th>
+              <th>Текущее количество</th>
+              <th>Минимум</th>
+              <th>Нужно заказать</th>
+              <th>Поставщик</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="criticalItemsBody">
+            <!-- Critical items will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Item Modal -->
+  <div class="modal" id="itemModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="itemModalTitle">Добавить товар</h2>
+        <button class="close-btn" onclick="closeItemModal()">&times;</button>
+      </div>
+
+      <form id="itemForm" onsubmit="saveItem(event)">
+        <div class="form-group">
+          <label class="form-label">Название товара:</label>
+          <input type="text" class="form-input" id="itemName" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Категория:</label>
+            <select class="form-select" id="itemCategory" required>
+              <option value="produce">Овощи/Фрукты</option>
+              <option value="meat">Мясо/Птица</option>
+              <option value="dairy">Молочные продукты</option>
+              <option value="seafood">Морепродукты</option>
+              <option value="dry-goods">Сухие продукты</option>
+              <option value="beverages">Напитки</option>
+              <option value="other">Прочее</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Единица измерения:</label>
+            <select class="form-select" id="itemUnit" required>
+              <option value="кг">кг</option>
+              <option value="л">л</option>
+              <option value="шт">шт</option>
+              <option value="упак">упак</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Текущее количество:</label>
+            <input type="number" class="form-input" id="itemQuantity" step="0.01" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Минимальный остаток:</label>
+            <input type="number" class="form-input" id="itemMinQuantity" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Цена закупки за единицу (₽):</label>
+            <input type="number" class="form-input" id="itemCostPrice" step="0.01" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Поставщик:</label>
+            <select class="form-select" id="itemSupplier" required>
+              <option value="">Выберите поставщика</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary" style="flex: 1; min-width: 120px;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeItemModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Supplier Modal -->
+  <div class="modal" id="supplierModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Добавить поставщика</h2>
+        <button class="close-btn" onclick="closeSupplierModal()">&times;</button>
+      </div>
+
+      <form id="supplierForm" onsubmit="saveSupplier(event)">
+        <div class="form-group">
+          <label class="form-label">Название компании:</label>
+          <input type="text" class="form-input" id="supplierName" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Контактное лицо:</label>
+          <input type="text" class="form-input" id="supplierContact" required>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Телефон:</label>
+            <input type="tel" class="form-input" id="supplierPhone" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email:</label>
+            <input type="email" class="form-input" id="supplierEmail" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Адрес:</label>
+          <input type="text" class="form-input" id="supplierAddress" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Категории товаров:</label>
+          <input type="text" class="form-input" id="supplierCategories" placeholder="Овощи, Фрукты, Молочные продукты" required>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+          <button type="submit" class="btn btn-primary" style="flex: 1;">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeSupplierModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- New Purchase Order Modal -->
+  <div class="modal" id="purchaseOrderModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Новый заказ поставщику</h2>
+        <button class="close-btn" onclick="closePurchaseOrderModal()">&times;</button>
+      </div>
+
+      <form id="purchaseOrderForm" onsubmit="savePurchaseOrder(event)">
+        <div class="form-group">
+          <label class="form-label">Поставщик:</label>
+          <select class="form-select" id="orderSupplier" required>
+            <option value="">Выберите поставщика</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Товар:</label>
+          <select class="form-select" id="orderItem" required>
+            <option value="">Выберите товар</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Количество:</label>
+            <input type="number" class="form-input" id="orderQuantity" step="0.01" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Цена закупки за единицу (₽):</label>
+            <input type="number" class="form-input" id="orderPurchasePrice" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Примечание (опционально):</label>
+          <textarea class="form-textarea" id="orderNotes" rows="3"></textarea>
+        </div>
+
+        <div style="padding: 16px; background: #f5f7fa; border-radius: 8px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; color: #5a6c7d;">Общая сумма:</span>
+            <span style="font-size: 24px; font-weight: 700; color: #1e88e5;" id="orderTotalDisplay">0 ₽</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-success" style="flex: 1; min-width: 120px;">✅ Оформить заказ</button>
+          <button type="button" class="btn btn-secondary" onclick="closePurchaseOrderModal()">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notification" id="notification"></div>
+
+  <script>
+    let inventory = [];
+    let suppliers = [];
+    let purchaseOrders = [];
+    let currentFilter = 'all';
+    let editingItemId = null;
+
+    // Sidebar functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    // Initialize with sample data
+    function initializeData() {
+      const savedInventory = localStorage.getItem('inventory');
+      const savedSuppliers = localStorage.getItem('restaurantSuppliers');
+      const savedOrders = localStorage.getItem('restaurantPurchaseOrders');
+
+      if (savedSuppliers) {
+        suppliers = JSON.parse(savedSuppliers);
+      } else {
+        suppliers = [
+          { id: 1, name: 'Эко Ферма', contact: 'Иван Петров', phone: '+7 999 111-11-11', email: 'info@ecofarm.ru', address: 'г. Москва, ул. Садовая, 15', categories: 'Овощи, Фрукты', rating: 4.8 },
+          { id: 2, name: 'Мясной Дом', contact: 'Сергей Смирнов', phone: '+7 999 222-22-22', email: 'sales@meathouse.ru', address: 'г. Москва, ул. Промышленная, 42', categories: 'Мясо, Птица', rating: 4.5 },
+          { id: 3, name: 'Молочная Лавка', contact: 'Анна Кузнецова', phone: '+7 999 333-33-33', email: 'info@milkshop.ru', address: 'г. Москва, пр. Фермерский, 8', categories: 'Молочные продукты', rating: 4.9 }
+        ];
+      }
+
+      if (savedInventory) {
+        inventory = JSON.parse(savedInventory);
+        // Migrate old 'price' field to 'costPrice' if needed
+        inventory = inventory.map(item => {
+          if (item.price !== undefined && item.costPrice === undefined) {
+            return { ...item, costPrice: item.price };
+          }
+          return item;
+        });
+      } else {
+        inventory = [
+          { id: 1, name: 'Помидоры', category: 'produce', quantity: 45, unit: 'кг', minQuantity: 20, costPrice: 150, supplierId: 1 },
+          { id: 2, name: 'Огурцы', category: 'produce', quantity: 8, unit: 'кг', minQuantity: 15, costPrice: 120, supplierId: 1 },
+          { id: 3, name: 'Куриная грудка', category: 'meat', quantity: 25, unit: 'кг', minQuantity: 10, costPrice: 350, supplierId: 2 },
+          { id: 4, name: 'Говядина', category: 'meat', quantity: 5, unit: 'кг', minQuantity: 12, costPrice: 650, supplierId: 2 },
+          { id: 5, name: 'Молоко', category: 'dairy', quantity: 0, unit: 'л', minQuantity: 30, costPrice: 65, supplierId: 3 },
+          { id: 6, name: 'Сыр Моцарелла', category: 'dairy', quantity: 18, unit: 'кг', minQuantity: 8, costPrice: 450, supplierId: 3 },
+          { id: 7, name: 'Картофель', category: 'produce', quantity: 75, unit: 'кг', minQuantity: 40, costPrice: 45, supplierId: 1 },
+          { id: 8, name: 'Лук репчатый', category: 'produce', quantity: 30, unit: 'кг', minQuantity: 15, costPrice: 35, supplierId: 1 }
+        ];
+      }
+
+      if (savedOrders) {
+        purchaseOrders = JSON.parse(savedOrders);
+      } else {
+        purchaseOrders = [
+          { id: 1, supplierId: 1, itemId: 1, date: '2024-11-01', status: 'completed', items: [{ name: 'Помидоры', quantity: 50, unit: 'кг', price: 150 }], total: 7500 },
+          { id: 2, supplierId: 2, itemId: 4, date: '2024-11-03', status: 'pending', items: [{ name: 'Говядина', quantity: 20, unit: 'кг', price: 650 }], total: 13000 }
+        ];
+      }
+
+      saveData();
+      updateSupplierOptions();
+      updateOrderItemOptions();
+    }
+
+    function saveData() {
+      localStorage.setItem('inventory', JSON.stringify(inventory));
+      localStorage.setItem('restaurantSuppliers', JSON.stringify(suppliers));
+      localStorage.setItem('restaurantPurchaseOrders', JSON.stringify(purchaseOrders));
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(tab + 'Tab').classList.add('active');
+
+      if (tab === 'suppliers') renderSuppliers();
+      else if (tab === 'orders') renderOrders();
+      else if (tab === 'reports') renderReports();
+    }
+
+    function getItemStatus(item) {
+      if (item.quantity === 0) return 'out-of-stock';
+      if (item.quantity <= item.minQuantity) return 'low-stock';
+      return 'in-stock';
+    }
+
+    function getStatusLabel(status) {
+      const labels = {
+        'in-stock': 'В наличии',
+        'low-stock': 'Заканчивается',
+        'out-of-stock': 'Нет в наличии'
+      };
+      return labels[status];
+    }
+
+    function getCategoryName(category) {
+      const names = {
+        produce: 'Овощи/Фрукты',
+        meat: 'Мясо/Птица',
+        dairy: 'Молочные',
+        seafood: 'Морепродукты',
+        'dry-goods': 'Сухие продукты',
+        beverages: 'Напитки',
+        other: 'Прочее'
+      };
+      return names[category] || category;
+    }
+
+    function renderInventory() {
+      const tbody = document.getElementById('inventoryTableBody');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+
+      let filteredItems = inventory.filter(item => {
+        const matchesSearch = item.name.toLowerCase().includes(search);
+        const status = getItemStatus(item);
+        const matchesFilter = currentFilter === 'all' || status === currentFilter;
+        return matchesSearch && matchesFilter;
+      });
+
+      tbody.innerHTML = filteredItems.map(item => {
+        const status = getItemStatus(item);
+        const supplier = suppliers.find(s => s.id === item.supplierId);
+        const percentage = (item.quantity / (item.minQuantity * 2)) * 100;
+        const barClass = percentage > 60 ? 'high' : percentage > 30 ? 'medium' : 'low';
+        const totalValue = item.quantity * (item.costPrice || 0);
+
+        return `
+          <tr>
+            <td><strong>${item.name}</strong></td>
+            <td>${getCategoryName(item.category)}</td>
+            <td>
+              <div class="quantity-cell">
+                <span style="min-width: 60px;"><strong>${item.quantity}</strong> ${item.unit}</span>
+                <div class="quantity-bar">
+                  <div class="quantity-fill ${barClass}" style="width: ${Math.min(percentage, 100)}%"></div>
+                </div>
+              </div>
+            </td>
+            <td>${item.unit}</td>
+            <td>${item.minQuantity}</td>
+            <td><span class="stock-badge ${status}">${getStatusLabel(status)}</span></td>
+            <td>${(item.costPrice || 0).toFixed(2)} ₽/${item.unit}</td>
+            <td style="font-weight: 700; color: #1e88e5;">${totalValue.toFixed(2)} ₽</td>
+            <td>${supplier ? supplier.name : '-'}</td>
+            <td>
+              <button class="btn btn-secondary btn-small" onclick="editItem(${item.id})">✏️</button>
+              <button class="btn btn-success btn-small" onclick="quickRestock(${item.id})">+</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      updateStats();
+    }
+
+    function updateStats() {
+      const stats = {
+        total: inventory.length,
+        inStock: inventory.filter(i => getItemStatus(i) === 'in-stock').length,
+        lowStock: inventory.filter(i => getItemStatus(i) === 'low-stock').length,
+        outOfStock: inventory.filter(i => getItemStatus(i) === 'out-of-stock').length
+      };
+
+      document.getElementById('totalItems').textContent = stats.total;
+      document.getElementById('inStockItems').textContent = stats.inStock;
+      document.getElementById('lowStockItems').textContent = stats.lowStock;
+      document.getElementById('outOfStockItems').textContent = stats.outOfStock;
+
+      // Calculate total inventory value
+      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
+      document.getElementById('totalInventoryValueDisplay').textContent = totalValue.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+      document.getElementById('totalInventoryCount').textContent = stats.total;
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+      });
+      renderInventory();
+    }
+
+    function filterInventory() {
+      renderInventory();
+    }
+
+    function openAddItemModal() {
+      editingItemId = null;
+      document.getElementById('itemModalTitle').textContent = 'Добавить товар';
+      document.getElementById('itemForm').reset();
+      document.getElementById('itemModal').classList.add('active');
+    }
+
+    function editItem(id) {
+      const item = inventory.find(i => i.id === id);
+      if (!item) return;
+
+      editingItemId = id;
+      document.getElementById('itemModalTitle').textContent = 'Редактировать товар';
+      document.getElementById('itemName').value = item.name;
+      document.getElementById('itemCategory').value = item.category;
+      document.getElementById('itemUnit').value = item.unit;
+      document.getElementById('itemQuantity').value = item.quantity;
+      document.getElementById('itemMinQuantity').value = item.minQuantity;
+      document.getElementById('itemCostPrice').value = item.costPrice || 0;
+      document.getElementById('itemSupplier').value = item.supplierId;
+      document.getElementById('itemModal').classList.add('active');
+    }
+
+    function saveItem(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('itemName').value,
+        category: document.getElementById('itemCategory').value,
+        unit: document.getElementById('itemUnit').value,
+        quantity: parseFloat(document.getElementById('itemQuantity').value),
+        minQuantity: parseFloat(document.getElementById('itemMinQuantity').value),
+        costPrice: parseFloat(document.getElementById('itemCostPrice').value),
+        supplierId: parseInt(document.getElementById('itemSupplier').value)
+      };
+
+      if (editingItemId) {
+        const index = inventory.findIndex(i => i.id === editingItemId);
+        inventory[index] = { ...inventory[index], ...formData };
+        showNotification('✅ Товар обновлён');
+      } else {
+        const newId = inventory.length > 0 ? Math.max(...inventory.map(i => i.id)) + 1 : 1;
+        inventory.push({ id: newId, ...formData });
+        showNotification('✅ Товар добавлен');
+      }
+
+      saveData();
+      renderInventory();
+      closeItemModal();
+    }
+
+    function quickRestock(id) {
+      const item = inventory.find(i => i.id === id);
+      if (!item) return;
+
+      const amount = prompt(`Сколько ${item.unit} добавить к "${item.name}"?`, item.minQuantity * 2);
+      if (!amount || isNaN(amount)) return;
+
+      item.quantity += parseFloat(amount);
+      saveData();
+      renderInventory();
+      showNotification(`✅ Добавлено ${amount} ${item.unit} к "${item.name}"`);
+    }
+
+    function closeItemModal() {
+      document.getElementById('itemModal').classList.remove('active');
+    }
+
+    function updateSupplierOptions() {
+      const select = document.getElementById('itemSupplier');
+      select.innerHTML = '<option value="">Выберите поставщика</option>' +
+        suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      const orderSelect = document.getElementById('orderSupplier');
+      if (orderSelect) {
+        orderSelect.innerHTML = '<option value="">Выберите поставщика</option>' +
+          suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      }
+    }
+
+    function updateOrderItemOptions() {
+      const select = document.getElementById('orderItem');
+      if (select) {
+        select.innerHTML = '<option value="">Выберите товар</option>' +
+          inventory.map(item => `<option value="${item.id}">${item.name} (${item.unit})</option>`).join('');
+      }
+    }
+
+    // Suppliers
+    function renderSuppliers() {
+      const container = document.getElementById('suppliersList');
+
+      container.innerHTML = suppliers.map(s => `
+        <div class="supplier-card">
+          <div class="supplier-header">
+            <div>
+              <div class="supplier-name">${s.name}</div>
+              <div class="supplier-rating">⭐ ${s.rating}/5.0</div>
+            </div>
+          </div>
+          <div class="supplier-info">
+            <div><strong>Контакт:</strong> ${s.contact}</div>
+            <div><strong>Телефон:</strong> ${s.phone}</div>
+            <div><strong>Email:</strong> ${s.email}</div>
+            <div><strong>Адрес:</strong> ${s.address}</div>
+            <div><strong>Категории:</strong> ${s.categories}</div>
+          </div>
+          <div class="supplier-actions">
+            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
+            <button class="btn btn-primary btn-small">📦 Заказать</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openAddSupplierModal() {
+      document.getElementById('supplierModal').classList.add('active');
+    }
+
+    function closeSupplierModal() {
+      document.getElementById('supplierModal').classList.remove('active');
+    }
+
+    function saveSupplier(event) {
+      event.preventDefault();
+
+      const formData = {
+        name: document.getElementById('supplierName').value,
+        contact: document.getElementById('supplierContact').value,
+        phone: document.getElementById('supplierPhone').value,
+        email: document.getElementById('supplierEmail').value,
+        address: document.getElementById('supplierAddress').value,
+        categories: document.getElementById('supplierCategories').value,
+        rating: 0
+      };
+
+      const newId = suppliers.length > 0 ? Math.max(...suppliers.map(s => s.id)) + 1 : 1;
+      suppliers.push({ id: newId, ...formData });
+
+      saveData();
+      updateSupplierOptions();
+      renderSuppliers();
+      closeSupplierModal();
+      showNotification('✅ Поставщик добавлен');
+    }
+
+    // Orders
+    function renderOrders() {
+      const container = document.getElementById('ordersList');
+
+      container.innerHTML = purchaseOrders.map(order => {
+        const supplier = suppliers.find(s => s.id === order.supplierId);
+        return `
+          <div class="order-history-item">
+            <div class="order-header">
+              <div>
+                <span class="order-number">Заказ #${order.id}</span>
+                <span style="color: #5a6c7d; margin-left: 12px;">${new Date(order.date).toLocaleDateString('ru-RU')}</span>
+              </div>
+              <span class="order-status ${order.status}">${order.status === 'completed' ? 'Завершён' : 'В обработке'}</span>
+            </div>
+            <div style="color: #5a6c7d; margin-bottom: 8px;">
+              <strong>Поставщик:</strong> ${supplier ? supplier.name : '-'}
+            </div>
+            <div style="color: #2c3e50;">
+              <strong>Товары:</strong> ${order.items.map(i => `${i.name} (${i.quantity} ${i.unit || 'шт'})`).join(', ')}
+            </div>
+            <div style="color: #1e88e5; font-size: 18px; font-weight: 700; margin-top: 8px;">
+              Сумма: ${order.total.toLocaleString('ru-RU')} ₽
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openNewOrderModal() {
+      document.getElementById('purchaseOrderForm').reset();
+      document.getElementById('orderTotalDisplay').textContent = '0 ₽';
+      document.getElementById('purchaseOrderModal').classList.add('active');
+    }
+
+    function closePurchaseOrderModal() {
+      document.getElementById('purchaseOrderModal').classList.remove('active');
+    }
+
+    function savePurchaseOrder(event) {
+      event.preventDefault();
+
+      const itemId = parseInt(document.getElementById('orderItem').value);
+      const supplierId = parseInt(document.getElementById('orderSupplier').value);
+      const quantity = parseFloat(document.getElementById('orderQuantity').value);
+      const purchasePrice = parseFloat(document.getElementById('orderPurchasePrice').value);
+      const notes = document.getElementById('orderNotes').value;
+
+      const item = inventory.find(i => i.id === itemId);
+      if (!item) {
+        showNotification('❌ Товар не найден');
+        return;
+      }
+
+      const total = quantity * purchasePrice;
+
+      // Create purchase order
+      const newOrderId = purchaseOrders.length > 0 ? Math.max(...purchaseOrders.map(o => o.id)) + 1 : 1;
+      const newOrder = {
+        id: newOrderId,
+        supplierId: supplierId,
+        itemId: itemId,
+        date: new Date().toISOString().split('T')[0],
+        status: 'completed',
+        items: [{
+          name: item.name,
+          quantity: quantity,
+          unit: item.unit,
+          price: purchasePrice
+        }],
+        total: total,
+        notes: notes
+      };
+
+      purchaseOrders.push(newOrder);
+
+      // Update inventory: add quantity and update cost price
+      item.quantity += quantity;
+      item.costPrice = purchasePrice;
+
+      saveData();
+      renderInventory();
+      renderOrders();
+      closePurchaseOrderModal();
+      showNotification(`✅ Заказ создан. ${quantity} ${item.unit} "${item.name}" добавлено на склад`);
+    }
+
+    // Update order total when quantity or price changes
+    document.addEventListener('DOMContentLoaded', function() {
+      const quantityInput = document.getElementById('orderQuantity');
+      const priceInput = document.getElementById('orderPurchasePrice');
+      const itemSelect = document.getElementById('orderItem');
+
+      function updateOrderTotal() {
+        const quantity = parseFloat(quantityInput.value) || 0;
+        const price = parseFloat(priceInput.value) || 0;
+        const total = quantity * price;
+        document.getElementById('orderTotalDisplay').textContent = total.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+      }
+
+      if (quantityInput) quantityInput.addEventListener('input', updateOrderTotal);
+      if (priceInput) priceInput.addEventListener('input', updateOrderTotal);
+
+      // Auto-fill purchase price when item is selected
+      if (itemSelect) {
+        itemSelect.addEventListener('change', function() {
+          const itemId = parseInt(this.value);
+          const item = inventory.find(i => i.id === itemId);
+          if (item && item.costPrice) {
+            priceInput.value = item.costPrice;
+            updateOrderTotal();
+          }
+        });
+      }
+    });
+
+    // Reports
+    function renderReports() {
+      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
+      const monthlyPurchases = purchaseOrders
+        .filter(o => new Date(o.date).getMonth() === new Date().getMonth())
+        .reduce((sum, o) => sum + o.total, 0);
+
+      document.getElementById('totalInventoryValue').textContent = totalValue.toLocaleString('ru-RU') + ' ₽';
+      document.getElementById('monthlyPurchases').textContent = monthlyPurchases.toLocaleString('ru-RU') + ' ₽';
+
+      const criticalItems = inventory.filter(i => getItemStatus(i) !== 'in-stock');
+      const tbody = document.getElementById('criticalItemsBody');
+
+      tbody.innerHTML = criticalItems.map(item => {
+        const supplier = suppliers.find(s => s.id === item.supplierId);
+        const needed = Math.max(item.minQuantity * 2 - item.quantity, 0);
+
+        return `
+          <tr>
+            <td><strong>${item.name}</strong></td>
+            <td>${item.quantity} ${item.unit}</td>
+            <td>${item.minQuantity} ${item.unit}</td>
+            <td style="color: #fb8c00; font-weight: 700;">${needed.toFixed(1)} ${item.unit}</td>
+            <td>${supplier ? supplier.name : '-'}</td>
+            <td>
+              <button class="btn btn-warning btn-small" onclick="quickRestock(${item.id})">📦 Заказать</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function showNotification(message) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.classList.add('show');
+
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Initialize
+    initializeData();
+    renderInventory();
+  </script>
+</body>
+</html>
