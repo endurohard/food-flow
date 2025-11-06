@@ -222,6 +222,38 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Kitchen Service (Printer & KDS)
+  kitchen-service:
+    build:
+      context: ./services/kitchen-service
+      dockerfile: Dockerfile
+    container_name: kitchen-service
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
+      PRINTER_TYPE: network
+      PRINTER_INTERFACE: 192.168.1.100:9100
+      AUTO_PRINT: "true"
+    ports:
+      - "3005:3005"
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    # For USB printer access, uncomment below:
+    # devices:
+    #   - "/dev/usb/lp0:/dev/usb/lp0"
+    # privileged: true
+
   # RabbitMQ for message queuing
   rabbitmq:
     image: rabbitmq:3-management-alpine

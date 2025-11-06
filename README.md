@@ -45,6 +45,7 @@ Monitoring Stack:
 - **Restaurant Service** - Restaurant and menu management
 - **Order Service** - Order processing and management
 - **Delivery Service** - Real-time delivery tracking with WebSocket
+- **Kitchen Service** - Kitchen Display System (KDS) and thermal printer integration
 
 ### Infrastructure
 
@@ -131,6 +132,8 @@ This script will:
 | Restaurant Service | http://localhost:3002 | Direct access |
 | Order Service | http://localhost:3003 | Direct access |
 | Delivery Service | http://localhost:3004 | Direct access |
+| Kitchen Service | http://localhost:3005 | Direct access |
+| Kitchen Display (KDS) | http://localhost/kds/ | Real-time order display |
 | Prometheus | http://localhost:9090 | Metrics database |
 | Grafana | http://localhost:3000 | Dashboards (admin/admin) |
 | Kibana | http://localhost:5601 | Log viewer |
@@ -144,6 +147,7 @@ Each service provides Swagger documentation:
 - Restaurant Service: http://localhost:3002/api-docs
 - Order Service: http://localhost:3003/api-docs
 - Delivery Service: http://localhost:3004/api-docs
+- Kitchen Service: http://localhost:3005/api-docs
 
 Access via Kong Gateway:
 - http://localhost:8000/api/users/... (User Service)

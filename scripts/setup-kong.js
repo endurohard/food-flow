@@ -36,6 +36,14 @@ const services = [
       { paths: ['/api/deliveries'], strip_path: true },
       { paths: ['/api/tracking'], strip_path: true }
     ]
+  },
+  {
+    name: 'kitchen-service',
+    url: 'http://kitchen-service:3005',
+    routes: [
+      { paths: ['/api/kitchen'], strip_path: true },
+      { paths: ['/api/printers'], strip_path: true }
+    ]
   }
 ];
 

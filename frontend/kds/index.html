@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Display System - Food Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #0f3460;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #e94560;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #e94560;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #8899a6;
+            text-transform: uppercase;
+        }
+
+        .orders-container {
+            padding: 20px;
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            align-content: start;
+        }
+
+        .order-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease-out;
+            border-left: 5px solid #e94560;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .order-card.new-order {
+            animation: pulse 2s ease-in-out 3;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            }
+            50% {
+                box-shadow: 0 4px 25px rgba(233, 69, 96, 0.8);
+            }
+        }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .order-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #e94560;
+        }
+
+        .order-time {
+            font-size: 14px;
+            color: #8899a6;
+        }
+
+        .elapsed-time {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 5px 12px;
+            background: #0f3460;
+            border-radius: 20px;
+        }
+
+        .elapsed-time.warning {
+            background: #ff9500;
+            color: #1a1a2e;
+        }
+
+        .elapsed-time.danger {
+            background: #ff3b30;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .customer-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 8px;
+        }
+
+        .customer-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .order-type {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #533483;
+            border-radius: 12px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .order-items {
+            margin: 15px 0;
+        }
+
+        .order-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #0f3460;
+            border-radius: 8px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .item-quantity {
+            background: #e94560;
+            color: #fff;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .item-instructions {
+            margin-top: 8px;
+            padding: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #ff9500;
+        }
+
+        .order-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-preparing {
+            background: #ff9500;
+            color: #1a1a2e;
+        }
+
+        .btn-preparing:hover {
+            background: #ffaa00;
+            transform: translateY(-2px);
+        }
+
+        .btn-ready {
+            background: #4cd137;
+            color: #1a1a2e;
+        }
+
+        .btn-ready:hover {
+            background: #5ee444;
+            transform: translateY(-2px);
+        }
+
+        .btn-complete {
+            background: #0097e6;
+            color: #fff;
+        }
+
+        .btn-complete:hover {
+            background: #00a8ff;
+            transform: translateY(-2px);
+        }
+
+        .special-instructions {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2c2c54;
+            border-left: 3px solid #ff9500;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .no-orders {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 100px 20px;
+            color: #8899a6;
+        }
+
+        .no-orders-icon {
+            font-size: 72px;
+            margin-bottom: 20px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: #4cd137;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .connection-status.disconnected {
+            background: #ff3b30;
+        }
+
+        /* Sound notification indicator */
+        .sound-icon {
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+
+        .sound-icon.muted {
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🍳 Kitchen Display System</h1>
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number" id="stat-pending">0</div>
+                <div class="stat-label">Pending</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="stat-preparing">0</div>
+                <div class="stat-label">Preparing</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="stat-ready">0</div>
+                <div class="stat-label">Ready</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="stat-avg">0</div>
+                <div class="stat-label">Avg Time (min)</div>
+            </div>
+        </div>
+        <div class="sound-icon" id="sound-toggle" onclick="toggleSound()">🔔</div>
+    </div>
+
+    <div class="connection-status" id="connection-status">Connected</div>
+
+    <div class="orders-container" id="orders-container">
+        <div class="no-orders">
+            <div class="no-orders-icon">😴</div>
+            <h2>No Active Orders</h2>
+            <p>New orders will appear here automatically</p>
+        </div>
+    </div>
+
+    <audio id="notification-sound" preload="auto">
+        <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
+    </audio>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+        // Configuration
+        const RESTAURANT_ID = new URLSearchParams(window.location.search).get('restaurantId') || '650e8400-e29b-41d4-a716-446655440001';
+        const SOCKET_URL = 'http://localhost:3005';
+
+        // State
+        let orders = {};
+        let soundEnabled = true;
+        let socket;
+
+        // Connect to Kitchen Service via WebSocket
+        function connectSocket() {
+            socket = io(SOCKET_URL);
+
+            socket.on('connect', () => {
+                console.log('Connected to kitchen service');
+                updateConnectionStatus(true);
+
+                // Authenticate with restaurant ID
+                socket.emit('authenticate', {
+                    restaurantId: RESTAURANT_ID,
+                    token: 'dummy-token' // TODO: Use real auth token
+                });
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from kitchen service');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('activeOrders', (activeOrders) => {
+                console.log('Received active orders:', activeOrders);
+                activeOrders.forEach(order => {
+                    orders[order.id] = order;
+                });
+                renderOrders();
+            });
+
+            socket.on('newOrder', (order) => {
+                console.log('New order received:', order);
+                orders[order.id] = order;
+                playNotification();
+                renderOrders();
+            });
+
+            socket.on('orderUpdated', ({ orderId, status }) => {
+                console.log('Order updated:', orderId, status);
+                if (orders[orderId]) {
+                    orders[orderId].status = status;
+                    if (status === 'picked_up' || status === 'delivered') {
+                        delete orders[orderId];
+                    }
+                    renderOrders();
+                }
+            });
+
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+            });
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.textContent = connected ? 'Connected' : 'Disconnected';
+            statusEl.className = 'connection-status' + (connected ? '' : ' disconnected');
+        }
+
+        function playNotification() {
+            if (soundEnabled) {
+                const audio = document.getElementById('notification-sound');
+                audio.play().catch(e => console.log('Could not play sound:', e));
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('sound-toggle');
+            icon.className = 'sound-icon' + (soundEnabled ? '' : ' muted');
+            icon.textContent = soundEnabled ? '🔔' : '🔕';
+        }
+
+        function getElapsedTime(createdAt) {
+            const now = new Date();
+            const created = new Date(createdAt);
+            const minutes = Math.floor((now - created) / 60000);
+            return minutes;
+        }
+
+        function getTimeClass(minutes) {
+            if (minutes >= 30) return 'danger';
+            if (minutes >= 20) return 'warning';
+            return '';
+        }
+
+        function updateOrderStatus(orderId, newStatus) {
+            socket.emit('updateOrderStatus', { orderId, status: newStatus });
+        }
+
+        function renderOrders() {
+            const container = document.getElementById('orders-container');
+            const ordersList = Object.values(orders);
+
+            if (ordersList.length === 0) {
+                container.innerHTML = `
+                    <div class="no-orders">
+                        <div class="no-orders-icon">😴</div>
+                        <h2>No Active Orders</h2>
+                        <p>New orders will appear here automatically</p>
+                    </div>
+                `;
+                updateStats({ pending: 0, preparing: 0, ready: 0, averageTime: 0 });
+                return;
+            }
+
+            container.innerHTML = ordersList.map(order => {
+                const elapsed = getElapsedTime(order.createdAt);
+                const timeClass = getTimeClass(elapsed);
+
+                return `
+                    <div class="order-card ${order.status === 'confirmed' ? 'new-order' : ''}">
+                        <div class="order-header">
+                            <span class="order-number">#${order.orderNumber}</span>
+                            <span class="elapsed-time ${timeClass}">${elapsed}m</span>
+                        </div>
+
+                        <div class="customer-info">
+                            <div class="customer-name">${order.customerName}</div>
+                            <span class="order-type">${order.orderType}</span>
+                        </div>
+
+                        <div class="order-items">
+                            ${order.items.map(item => `
+                                <div class="order-item">
+                                    <div class="item-header">
+                                        <span>${item.name}</span>
+                                        <span class="item-quantity">${item.quantity}</span>
+                                    </div>
+                                    ${item.specialInstructions ? `
+                                        <div class="item-instructions">
+                                            ⚠️ ${item.specialInstructions}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        ${order.specialInstructions ? `
+                            <div class="special-instructions">
+                                📝 <strong>Note:</strong> ${order.specialInstructions}
+                            </div>
+                        ` : ''}
+
+                        <div class="order-actions">
+                            ${order.status === 'confirmed' ? `
+                                <button class="action-btn btn-preparing" onclick="updateOrderStatus('${order.id}', 'preparing')">
+                                    Start Preparing
+                                </button>
+                            ` : ''}
+                            ${order.status === 'preparing' ? `
+                                <button class="action-btn btn-ready" onclick="updateOrderStatus('${order.id}', 'ready')">
+                                    Mark as Ready
+                                </button>
+                            ` : ''}
+                            ${order.status === 'ready' ? `
+                                <button class="action-btn btn-complete" onclick="updateOrderStatus('${order.id}', 'picked_up')">
+                                    Complete
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Update stats
+            const stats = {
+                pending: ordersList.filter(o => o.status === 'confirmed').length,
+                preparing: ordersList.filter(o => o.status === 'preparing').length,
+                ready: ordersList.filter(o => o.status === 'ready').length,
+                averageTime: Math.round(ordersList.reduce((sum, o) => sum + getElapsedTime(o.createdAt), 0) / ordersList.length)
+            };
+            updateStats(stats);
+        }
+
+        function updateStats(stats) {
+            document.getElementById('stat-pending').textContent = stats.pending;
+            document.getElementById('stat-preparing').textContent = stats.preparing;
+            document.getElementById('stat-ready').textContent = stats.ready;
+            document.getElementById('stat-avg').textContent = stats.averageTime;
+        }
+
+        // Update elapsed times every minute
+        setInterval(() => {
+            renderOrders();
+        }, 60000);
+
+        // Initialize
+        connectSocket();
+    </script>
+</body>
+</html>
