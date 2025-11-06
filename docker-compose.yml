@@ -291,6 +291,37 @@ services:
       - food-flow-network
     restart: unless-stopped
 
+  # Telegram Bot Service for invoice processing
+  telegram-bot-service:
+    build:
+      context: ./services/telegram-bot-service
+      dockerfile: Dockerfile
+    container_name: telegram-bot-service
+    environment:
+      NODE_ENV: production
+      PORT: 3007
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS}
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      MONGODB_URI: mongodb://mongodb:27017/telegram-bot
+      INVENTORY_API_URL: http://restaurant-service:3002/api/inventory
+      WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      UPLOAD_DIR: /app/uploads/invoices
+      OCR_LANGUAGE: rus+eng
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    expose:
+      - "3007"
+    volumes:
+      - telegram_uploads:/app/uploads/invoices
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
@@ -298,6 +329,7 @@ volumes:
   prometheus_data:
   grafana_data:
   elasticsearch_data:
+  telegram_uploads:
 
 networks:
   food-flow-network:
