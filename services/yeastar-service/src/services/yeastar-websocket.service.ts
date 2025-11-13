@@ -1,17 +1,17 @@
-import WebSocket from 'ws';
-import axios from 'axios';
+import { Socket } from 'net';
 import { EventEmitter } from 'events';
 import { YeastarCallEvent, YeastarConfig, Call } from '../models/call.model';
 import { logger } from '../utils/logger';
 
 export class YeastarWebSocketService extends EventEmitter {
-  private ws: WebSocket | null = null;
+  private socket: Socket | null = null;
   private config: YeastarConfig;
-  private token: string | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private isConnected: boolean = false;
   private activeCalls: Map<string, Call> = new Map();
+  private buffer: string = '';
+  private actionId: number = 1;
 
   constructor(config: YeastarConfig) {
     super();
@@ -20,26 +20,15 @@ export class YeastarWebSocketService extends EventEmitter {
 
   async connect(): Promise<void> {
     try {
-      // Step 1: Authenticate and get token
-      await this.authenticate();
+      logger.info(`Connecting to Yeastar AMI: ${this.config.host}:${this.config.port}`);
 
-      if (!this.token) {
-        throw new Error('Failed to obtain authentication token');
-      }
+      this.socket = new Socket();
 
-      // Step 2: Establish WebSocket connection
-      const wsUrl = `wss://${this.config.host}:${this.config.port}/openapi/${this.config.apiVersion}/websocket`;
-
-      logger.info(`Connecting to Yeastar WebSocket: ${wsUrl}`);
-
-      this.ws = new WebSocket(wsUrl, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`
-        },
-        rejectUnauthorized: false // For self-signed certificates
+      this.socket.connect(this.config.port, this.config.host, () => {
+        logger.info('Connected to Yeastar AMI');
       });
 
-      this.setupWebSocketHandlers();
+      this.setupSocketHandlers();
 
     } catch (error) {
       logger.error('Failed to connect to Yeastar:', error);
@@ -47,153 +36,212 @@ export class YeastarWebSocketService extends EventEmitter {
     }
   }
 
-  private async authenticate(): Promise<void> {
-    try {
-      const authUrl = `https://${this.config.host}:${this.config.port}/openapi/${this.config.apiVersion}/login`;
+  private setupSocketHandlers(): void {
+    if (!this.socket) return;
 
-      logger.info('Authenticating with Yeastar PBX...');
-
-      const response = await axios.post(authUrl, {
-        username: this.config.username,
-        password: this.config.password
-      }, {
-        httpsAgent: new (require('https').Agent)({
-          rejectUnauthorized: false
-        })
-      });
-
-      if (response.data && response.data.access_token) {
-        this.token = response.data.access_token;
-        logger.info('Successfully authenticated with Yeastar');
-      } else {
-        throw new Error('No access token in response');
-      }
-
-    } catch (error) {
-      logger.error('Authentication failed:', error);
-      throw error;
-    }
-  }
-
-  private setupWebSocketHandlers(): void {
-    if (!this.ws) return;
-
-    this.ws.on('open', () => {
-      logger.info('WebSocket connection established');
-      this.isConnected = true;
-      this.emit('connected');
-      this.startHeartbeat();
-
-      // Subscribe to call events
-      this.subscribeToEvents();
+    this.socket.on('connect', () => {
+      logger.info('AMI socket connected, attempting login...');
+      this.amiLogin();
     });
 
-    this.ws.on('message', (data: WebSocket.Data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        this.handleMessage(message);
-      } catch (error) {
-        logger.error('Failed to parse WebSocket message:', error);
-      }
+    this.socket.on('data', (data: Buffer) => {
+      const dataStr = data.toString();
+      logger.info('AMI Raw data received:', dataStr);
+      this.buffer += dataStr;
+      this.processBuffer();
     });
 
-    this.ws.on('error', (error) => {
-      logger.error('WebSocket error:', error);
+    this.socket.on('error', (error) => {
+      logger.error('AMI socket error:', error);
       this.emit('error', error);
     });
 
-    this.ws.on('close', () => {
-      logger.warn('WebSocket connection closed');
+    this.socket.on('close', () => {
+      logger.warn('AMI connection closed');
       this.isConnected = false;
       this.emit('disconnected');
       this.stopHeartbeat();
       this.scheduleReconnect();
     });
+
+    this.socket.on('end', () => {
+      logger.info('AMI connection ended');
+    });
   }
 
-  private handleMessage(message: any): void {
-    logger.debug('Received message:', message);
+  private amiLogin(): void {
+    const loginAction =
+      `Action: Login\r\n` +
+      `Username: ${this.config.username}\r\n` +
+      `Secret: ${this.config.password}\r\n` +
+      `ActionID: ${this.actionId++}\r\n` +
+      `Events: on\r\n\r\n`;
 
-    // Handle different event types
-    if (message.event) {
-      switch (message.event) {
-        case 'NewCdr':
-          this.handleNewCall(message);
-          break;
-        case 'CallStatus':
-          this.handleCallStatus(message);
-          break;
-        case 'CallRinging':
-          this.handleCallRinging(message);
-          break;
-        case 'CallAnswered':
-          this.handleCallAnswered(message);
-          break;
-        case 'CallEnded':
-          this.handleCallEnded(message);
-          break;
-        case 'ExtensionStatus':
-          this.handleExtensionStatus(message);
-          break;
-        case 'Heartbeat':
-          logger.debug('Heartbeat received');
-          break;
-        default:
-          logger.debug(`Unhandled event type: ${message.event}`);
+    this.socket?.write(loginAction);
+    logger.info('Sent AMI login request');
+  }
+
+  private processBuffer(): void {
+    const messages = this.buffer.split('\r\n\r\n');
+
+    // Keep the last incomplete message in the buffer
+    this.buffer = messages.pop() || '';
+
+    for (const message of messages) {
+      if (message.trim()) {
+        this.handleAMIMessage(message);
       }
     }
   }
 
-  private handleNewCall(event: YeastarCallEvent): void {
-    logger.info('New call detected:', event.callid);
+  private handleAMIMessage(message: string): void {
+    const lines = message.split('\r\n');
+    const event: any = {};
 
+    for (const line of lines) {
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      if (match) {
+        event[match[1]] = match[2];
+      }
+    }
+
+    logger.info('AMI Message received:', event);
+
+    if (event.Response === 'Success' && !this.isConnected) {
+      logger.info('Successfully authenticated with Yeastar AMI');
+      this.isConnected = true;
+      this.emit('connected');
+      this.startHeartbeat();
+      this.subscribeToEvents();
+    } else if (event.Response === 'Error') {
+      logger.error('AMI Error:', event.Message);
+    } else if (event.Event) {
+      this.handleAMIEvent(event);
+    }
+  }
+
+  private handleAMIEvent(event: any): void {
+    switch (event.Event) {
+      case 'Newchannel':
+        this.handleNewChannel(event);
+        break;
+      case 'Newstate':
+        this.handleNewState(event);
+        break;
+      case 'Dial':
+        this.handleDial(event);
+        break;
+      case 'DialBegin':
+        this.handleDialBegin(event);
+        break;
+      case 'DialEnd':
+        this.handleDialEnd(event);
+        break;
+      case 'Hangup':
+        this.handleHangup(event);
+        break;
+      case 'ExtensionStatus':
+        this.handleExtensionStatus(event);
+        break;
+      case 'PeerStatus':
+        this.handlePeerStatus(event);
+        break;
+      default:
+        logger.debug(`Unhandled AMI event: ${event.Event}`);
+    }
+  }
+
+  private handleNewChannel(event: any): void {
+    logger.info('New channel:', event.Channel);
+
+    const callId = event.Uniqueid;
     const call: Call = {
-      id: event.callid,
-      callId: event.callid,
-      direction: this.determineCallDirection(event),
-      from: this.getCallerNumber(event),
-      to: this.getCalledNumber(event),
-      extension: this.getExtension(event),
+      id: callId,
+      callId: callId,
+      direction: event.CallerIDNum ? 'inbound' : 'outbound',
+      from: event.CallerIDNum || 'Unknown',
+      to: event.Exten || 'Unknown',
+      extension: event.Exten || 'Unknown',
       status: 'ringing',
-      startTime: new Date(event.timestamp * 1000),
+      startTime: new Date(),
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    this.activeCalls.set(call.callId, call);
+    this.activeCalls.set(callId, call);
     this.emit('call:new', call);
   }
 
-  private handleCallRinging(event: YeastarCallEvent): void {
-    logger.info('Call ringing:', event.callid);
+  private handleNewState(event: any): void {
+    const callId = event.Uniqueid;
+    const call = this.activeCalls.get(callId);
 
-    const call = this.activeCalls.get(event.callid);
     if (call) {
-      call.status = 'ringing';
-      call.updatedAt = new Date();
-      this.emit('call:ringing', call);
+      const channelState = parseInt(event.ChannelState);
+
+      // ChannelState: 0=Down, 4=Ring, 5=Ringing, 6=Up
+      if (channelState === 4 || channelState === 5) {
+        call.status = 'ringing';
+        call.updatedAt = new Date();
+        this.emit('call:ringing', call);
+      } else if (channelState === 6) {
+        call.status = 'answered';
+        call.answerTime = new Date();
+        call.updatedAt = new Date();
+        this.emit('call:answered', call);
+      }
     }
   }
 
-  private handleCallAnswered(event: YeastarCallEvent): void {
-    logger.info('Call answered:', event.callid);
+  private handleDial(event: any): void {
+    logger.info('Dial event:', event.DestChannel);
+  }
 
-    const call = this.activeCalls.get(event.callid);
-    if (call) {
-      call.status = 'answered';
-      call.answerTime = new Date(event.timestamp * 1000);
-      call.updatedAt = new Date();
-      this.emit('call:answered', call);
+  private handleDialBegin(event: any): void {
+    const callId = event.DestUniqueid;
+    let call = this.activeCalls.get(callId);
+
+    if (!call) {
+      call = {
+        id: callId,
+        callId: callId,
+        direction: 'outbound',
+        from: event.CallerIDNum || 'Unknown',
+        to: event.DestCallerIDNum || 'Unknown',
+        extension: event.CallerIDNum || 'Unknown',
+        status: 'ringing',
+        startTime: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      this.activeCalls.set(callId, call);
+      this.emit('call:new', call);
     }
   }
 
-  private handleCallEnded(event: YeastarCallEvent): void {
-    logger.info('Call ended:', event.callid);
+  private handleDialEnd(event: any): void {
+    const callId = event.DestUniqueid;
+    const call = this.activeCalls.get(callId);
 
-    const call = this.activeCalls.get(event.callid);
+    if (call) {
+      if (event.DialStatus === 'ANSWER') {
+        call.status = 'answered';
+        call.answerTime = new Date();
+      } else {
+        call.status = 'missed';
+      }
+      call.updatedAt = new Date();
+    }
+  }
+
+  private handleHangup(event: any): void {
+    const callId = event.Uniqueid;
+    const call = this.activeCalls.get(callId);
+
     if (call) {
       call.status = 'ended';
-      call.endTime = new Date(event.timestamp * 1000);
+      call.endTime = new Date();
 
       if (call.answerTime) {
         call.duration = Math.floor((call.endTime.getTime() - call.answerTime.getTime()) / 1000);
@@ -204,14 +252,16 @@ export class YeastarWebSocketService extends EventEmitter {
       call.updatedAt = new Date();
       this.emit('call:ended', call);
 
-      // Remove from active calls
-      this.activeCalls.delete(event.callid);
+      // Remove from active calls after a delay
+      setTimeout(() => {
+        this.activeCalls.delete(callId);
+      }, 5000);
     }
   }
 
-  private handleCallStatus(event: any): void {
-    logger.debug('Call status update:', event);
-    this.emit('call:status', event);
+  private handlePeerStatus(event: any): void {
+    logger.debug('Peer status:', event);
+    this.emit('extension:status', event);
   }
 
   private handleExtensionStatus(event: any): void {
@@ -220,28 +270,18 @@ export class YeastarWebSocketService extends EventEmitter {
   }
 
   private subscribeToEvents(): void {
-    if (!this.ws || !this.isConnected) return;
-
-    const subscribeMessage = {
-      action: 'subscribe',
-      events: [
-        'NewCdr',
-        'CallStatus',
-        'CallRinging',
-        'CallAnswered',
-        'CallEnded',
-        'ExtensionStatus'
-      ]
-    };
-
-    this.ws.send(JSON.stringify(subscribeMessage));
-    logger.info('Subscribed to Yeastar events');
+    // AMI sends all events when Events: on is set during login
+    // No additional subscription needed
+    logger.info('Subscribed to all AMI events');
   }
 
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      if (this.ws && this.isConnected) {
-        this.ws.send(JSON.stringify({ action: 'heartbeat' }));
+      if (this.socket && this.isConnected) {
+        const pingAction =
+          `Action: Ping\r\n` +
+          `ActionID: ${this.actionId++}\r\n\r\n`;
+        this.socket.write(pingAction);
       }
     }, this.config.heartbeatInterval);
   }
@@ -264,121 +304,69 @@ export class YeastarWebSocketService extends EventEmitter {
     }, this.config.reconnectInterval);
   }
 
-  private determineCallDirection(event: YeastarCallEvent): 'inbound' | 'outbound' {
-    if (event.members && event.members.length > 0) {
-      return event.members[0].inbound ? 'inbound' : 'outbound';
-    }
-    return 'inbound';
-  }
-
-  private getCallerNumber(event: YeastarCallEvent): string {
-    if (event.members && event.members.length > 0) {
-      const member = event.members[0];
-      if (member.inbound) {
-        return member.inbound.from;
-      } else if (member.outbound) {
-        return member.outbound.from;
-      }
-    }
-    return 'Unknown';
-  }
-
-  private getCalledNumber(event: YeastarCallEvent): string {
-    if (event.members && event.members.length > 0) {
-      const member = event.members[0];
-      if (member.inbound) {
-        return member.inbound.to;
-      } else if (member.outbound) {
-        return member.outbound.to;
-      }
-    }
-    return 'Unknown';
-  }
-
-  private getExtension(event: YeastarCallEvent): string {
-    if (event.members && event.members.length > 0) {
-      return event.members[0].ext.number;
-    }
-    return 'Unknown';
-  }
-
-  // Click-to-call functionality
+  // Click-to-call functionality using AMI
   async makeCall(from: string, to: string, autoAnswer: boolean = true): Promise<any> {
-    try {
-      const apiUrl = `https://${this.config.host}:${this.config.port}/openapi/${this.config.apiVersion}/call/dial`;
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.isConnected) {
+        reject(new Error('Not connected to AMI'));
+        return;
+      }
 
-      const response = await axios.post(apiUrl, {
-        caller: from,
-        callee: to,
-        autoanswer: autoAnswer ? 'yes' : 'no'
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
-        },
-        httpsAgent: new (require('https').Agent)({
-          rejectUnauthorized: false
-        })
-      });
+      const actionId = this.actionId++;
+      const originateAction =
+        `Action: Originate\r\n` +
+        `Channel: SIP/${from}\r\n` +
+        `Exten: ${to}\r\n` +
+        `Context: from-internal\r\n` +
+        `Priority: 1\r\n` +
+        `CallerID: ${from}\r\n` +
+        `Timeout: 30000\r\n` +
+        `ActionID: ${actionId}\r\n\r\n`;
 
+      this.socket.write(originateAction);
       logger.info(`Click-to-call initiated: ${from} -> ${to}`);
-      return response.data;
-
-    } catch (error) {
-      logger.error('Click-to-call failed:', error);
-      throw error;
-    }
+      resolve({ success: true, actionId });
+    });
   }
 
-  // Hang up a call
-  async hangupCall(callId: string): Promise<any> {
-    try {
-      const apiUrl = `https://${this.config.host}:${this.config.port}/openapi/${this.config.apiVersion}/call/hangup`;
+  // Hang up a call using AMI
+  async hangupCall(channel: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.isConnected) {
+        reject(new Error('Not connected to AMI'));
+        return;
+      }
 
-      const response = await axios.post(apiUrl, {
-        callid: callId
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
-        },
-        httpsAgent: new (require('https').Agent)({
-          rejectUnauthorized: false
-        })
-      });
+      const actionId = this.actionId++;
+      const hangupAction =
+        `Action: Hangup\r\n` +
+        `Channel: ${channel}\r\n` +
+        `ActionID: ${actionId}\r\n\r\n`;
 
-      logger.info(`Call ${callId} hung up`);
-      return response.data;
-
-    } catch (error) {
-      logger.error('Hangup failed:', error);
-      throw error;
-    }
+      this.socket.write(hangupAction);
+      logger.info(`Hangup requested for channel: ${channel}`);
+      resolve({ success: true, actionId });
+    });
   }
 
-  // Get extension status
+  // Get extension status using AMI
   async getExtensionStatus(extension: string): Promise<any> {
-    try {
-      const apiUrl = `https://${this.config.host}:${this.config.port}/openapi/${this.config.apiVersion}/extension/query`;
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.isConnected) {
+        reject(new Error('Not connected to AMI'));
+        return;
+      }
 
-      const response = await axios.post(apiUrl, {
-        number: extension
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
-        },
-        httpsAgent: new (require('https').Agent)({
-          rejectUnauthorized: false
-        })
-      });
+      const actionId = this.actionId++;
+      const statusAction =
+        `Action: ExtensionState\r\n` +
+        `Exten: ${extension}\r\n` +
+        `Context: from-internal\r\n` +
+        `ActionID: ${actionId}\r\n\r\n`;
 
-      return response.data;
-
-    } catch (error) {
-      logger.error('Failed to get extension status:', error);
-      throw error;
-    }
+      this.socket.write(statusAction);
+      resolve({ success: true, actionId });
+    });
   }
 
   getActiveCalls(): Call[] {
@@ -401,14 +389,19 @@ export class YeastarWebSocketService extends EventEmitter {
 
     this.stopHeartbeat();
 
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.socket) {
+      const logoffAction =
+        `Action: Logoff\r\n` +
+        `ActionID: ${this.actionId++}\r\n\r\n`;
+
+      this.socket.write(logoffAction);
+      this.socket.end();
+      this.socket = null;
     }
 
     this.isConnected = false;
     this.activeCalls.clear();
-    logger.info('Disconnected from Yeastar');
+    logger.info('Disconnected from Yeastar AMI');
   }
 }
 

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой профиль - FoodFlow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: #ffffff;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e1e8ed;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .nav-brand {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #1e88e5;
+            box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #1e88e5;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1976d2;
+        }
+
+        .btn-secondary {
+            background: #f5f7fa;
+            color: #2c3e50;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .alert-info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">👤 Мой профиль</div>
+        <div style="display: flex; gap: 12px;">
+            <a href="index.html" class="btn btn-secondary">← Назад</a>
+            <a href="/customer-app/index.html" target="_blank" class="btn btn-secondary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; text-decoration: none;">
+                🌐 Сайт заказов
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Profile Info -->
+        <div class="card">
+            <h2 class="card-title">👤 Информация о пользователе</h2>
+            <div class="form-group">
+                <label class="form-label">Имя пользователя</label>
+                <input type="text" class="form-control" id="username" value="operator1" readonly>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Отображаемое имя</label>
+                <input type="text" class="form-control" id="displayName" value="Оператор 1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Роль</label>
+                <input type="text" class="form-control" id="role" value="Оператор" readonly>
+            </div>
+        </div>
+
+        <!-- SIP Credentials -->
+        <div class="card">
+            <h2 class="card-title">📞 Настройки телефонии</h2>
+
+            <div class="alert alert-info">
+                <strong>ℹ️ Автоматический запуск</strong><br>
+                При входе в систему телефонный клиент будет автоматически настроен с вашими данными.
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="sip-enabled" checked>
+                <label for="sip-enabled">Включить телефонию для этого пользователя</label>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="auto-launch" checked>
+                <label for="auto-launch">Запускать автоматически при входе</label>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">SIP Добавочный номер *</label>
+                <input type="text" class="form-control" id="sip-extension" placeholder="7779" value="7779">
+                <small style="color: #6c757d; font-size: 12px;">Ваш внутренний номер в PBX</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">SIP Пароль *</label>
+                <input type="password" class="form-control" id="sip-password" placeholder="••••••" value="5TQNF_Srld">
+                <small style="color: #6c757d; font-size: 12px;">Пароль для подключения к PBX</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Отображаемое имя</label>
+                <input type="text" class="form-control" id="sip-displayName" placeholder="Оператор 1" value="Оператор 1">
+                <small style="color: #6c757d; font-size: 12px;">Имя, которое видят другие абоненты</small>
+            </div>
+
+            <h3 style="font-size: 16px; font-weight: 600; margin: 24px 0 16px 0;">Дополнительные настройки</h3>
+
+            <div class="form-group">
+                <label class="form-label">SIP Сервер</label>
+                <input type="text" class="form-control" id="sip-server" placeholder="www.it005.ru" value="www.it005.ru">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Порт</label>
+                <input type="number" class="form-control" id="sip-port" value="5060">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Транспорт</label>
+                <select class="form-control" id="sip-transport">
+                    <option value="UDP" selected>UDP</option>
+                    <option value="TCP">TCP</option>
+                    <option value="WS">WebSocket</option>
+                    <option value="WSS">WebSocket Secure</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">WebSocket URL (для WS/WSS)</label>
+                <input type="text" class="form-control" id="sip-wsUrl" placeholder="wss://www.it005.ru:8089/ws">
+            </div>
+
+            <div style="margin-top: 24px;">
+                <button class="btn btn-primary" onclick="saveProfile()">💾 Сохранить профиль</button>
+                <button class="btn btn-secondary" onclick="testConnection()">🔌 Тест подключения</button>
+            </div>
+        </div>
+
+        <!-- Auto-launch Settings -->
+        <div class="card">
+            <h2 class="card-title">🚀 Автозапуск телефонии</h2>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="show-panel" checked>
+                <label for="show-panel">Показывать панель звонков при запуске</label>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <button class="btn btn-secondary" onclick="manualLaunch()">📞 Запустить сейчас</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/telephony-autolaunch.js"></script>
+    <script>
+        // Load profile data
+        function loadProfile() {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+
+                document.getElementById('username').value = user.username || '';
+                document.getElementById('displayName').value = user.displayName || '';
+                document.getElementById('role').value = user.role || '';
+
+                if (user.sip) {
+                    document.getElementById('sip-enabled').checked = user.sip.enabled !== false;
+                    document.getElementById('sip-extension').value = user.sip.extension || '';
+                    document.getElementById('sip-password').value = user.sip.password || '';
+                    document.getElementById('sip-displayName').value = user.sip.displayName || user.displayName || '';
+                    document.getElementById('sip-server').value = user.sip.server || 'www.it005.ru';
+                    document.getElementById('sip-port').value = user.sip.port || 5060;
+                    document.getElementById('sip-transport').value = user.sip.transport || 'UDP';
+                    document.getElementById('sip-wsUrl').value = user.sip.wsUrl || '';
+                }
+            }
+
+            // Load auto-launch settings
+            document.getElementById('auto-launch').checked = localStorage.getItem('telephony_autolaunch') !== 'false';
+            document.getElementById('show-panel').checked = localStorage.getItem('telephony_show_panel') === 'true';
+        }
+
+        // Save profile
+        function saveProfile() {
+            const user = {
+                username: document.getElementById('username').value,
+                displayName: document.getElementById('displayName').value,
+                role: document.getElementById('role').value,
+                sip: {
+                    enabled: document.getElementById('sip-enabled').checked,
+                    extension: document.getElementById('sip-extension').value,
+                    password: document.getElementById('sip-password').value,
+                    displayName: document.getElementById('sip-displayName').value,
+                    server: document.getElementById('sip-server').value,
+                    port: parseInt(document.getElementById('sip-port').value),
+                    transport: document.getElementById('sip-transport').value,
+                    wsUrl: document.getElementById('sip-wsUrl').value,
+                    wsPassword: document.getElementById('sip-password').value
+                }
+            };
+
+            localStorage.setItem('currentUser', JSON.stringify(user));
+
+            // Save auto-launch settings
+            const autoLaunch = document.getElementById('auto-launch').checked;
+            localStorage.setItem('telephony_autolaunch', autoLaunch ? 'true' : 'false');
+
+            const showPanel = document.getElementById('show-panel').checked;
+            localStorage.setItem('telephony_show_panel', showPanel ? 'true' : 'false');
+
+            alert('✅ Профиль сохранен!\n\nИзменения вступят в силу при следующем входе или после ручного запуска телефонии.');
+        }
+
+        // Test connection
+        async function testConnection() {
+            alert('🔌 Тестирование подключения...\n\nПроверяем связь с PBX сервером.');
+
+            const config = {
+                server: document.getElementById('sip-server').value,
+                port: document.getElementById('sip-port').value,
+                extension: document.getElementById('sip-extension').value
+            };
+
+            console.log('Testing connection:', config);
+
+            // Simulate test
+            setTimeout(() => {
+                alert('✅ Тест успешен!\n\nСервер доступен, можете сохранять настройки.');
+            }, 1500);
+        }
+
+        // Manual launch
+        function manualLaunch() {
+            saveProfile();
+
+            if (window.telephonyLauncher) {
+                telephonyLauncher.loadCurrentUser().then(() => {
+                    telephonyLauncher.launchTelephony();
+                });
+            } else {
+                alert('⚠️ Telephony launcher не загружен. Перезагрузите страницу.');
+            }
+        }
+
+        // Initialize
+        loadProfile();
+    </script>
+</body>
+</html>

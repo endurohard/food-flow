@@ -7,6 +7,7 @@ import { setupSwagger } from './swagger';
 import { setupMetrics } from './metrics';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import enterpriseRoutes from './routes/enterprise.routes';
 
 const app = express();
 
@@ -43,6 +44,7 @@ setupSwagger(app);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/enterprises', enterpriseRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

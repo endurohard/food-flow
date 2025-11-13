@@ -11,12 +11,14 @@ import { logger } from '../utils/logger';
 
 export class BotService {
   private bot: Telegraf;
+  private botToken: string;
   private allowedUserIds: number[];
   private uploadDir: string;
   private invoices: Map<string, Invoice> = new Map();
 
   constructor(botToken: string, allowedUserIds: number[], uploadDir: string) {
     this.bot = new Telegraf(botToken);
+    this.botToken = botToken;
     this.allowedUserIds = allowedUserIds;
     this.uploadDir = uploadDir;
     this.setupHandlers();
@@ -200,7 +202,7 @@ export class BotService {
       }
 
       // Download photo
-      const fileUrl = `https://api.telegram.org/file/bot${this.bot.token}/${file.file_path}`;
+      const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
       const fileName = `invoice_${Date.now()}_${userId}.jpg`;
       const filePath = path.join(this.uploadDir, fileName);
 
@@ -297,7 +299,7 @@ export class BotService {
       }
 
       // Download document
-      const fileUrl = `https://api.telegram.org/file/bot${this.bot.token}/${file.file_path}`;
+      const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
       const ext = path.extname(fileName) || (mimeType === 'application/pdf' ? '.pdf' : '.jpg');
       const localFileName = `invoice_${Date.now()}_${userId}${ext}`;
       const filePath = path.join(this.uploadDir, localFileName);

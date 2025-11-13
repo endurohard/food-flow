@@ -836,6 +836,17 @@
         <span class="sidebar-icon">🖨️</span>
         <span>Принтеры</span>
       </a>
+      <a href="settings.html" class="sidebar-item">
+        <span class="sidebar-icon">⚙️</span>
+        <span>Настройки</span>
+      </a>
+            <div style="border-top: 1px solid #e1e8ed; margin: 12px 0;"></div>
+            <a href="/customer-app/index.html" class="sidebar-item" target="_blank" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 8px; border-radius: 8px;">
+                <span class="sidebar-icon">🌐</span>
+                <span>Сайт заказов</span>
+                <span style="margin-left: auto; font-size: 12px;">↗</span>
+            </a>
+
     </div>
   </div>
 
@@ -862,6 +873,8 @@
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" onclick="switchTab('inventory')">📦 Остатки</button>
+      <button class="tab" onclick="switchTab('production')">🏭 Производство</button>
+      <button class="tab" onclick="switchTab('wholesale')">📤 Опт и отгрузка</button>
       <button class="tab" onclick="switchTab('suppliers')">🏢 Поставщики</button>
       <button class="tab" onclick="switchTab('orders')">📋 История заказов</button>
       <button class="tab" onclick="switchTab('reports')">📊 Отчёты</button>
@@ -946,6 +959,124 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Production Tab -->
+    <div id="productionTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">🏭 Производство</h2>
+        <button class="btn btn-primary" onclick="openNewProductionModal()">➕ Новое производство</button>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon total">🏭</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего производств</div>
+            <div class="stat-value" id="totalProductions">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon in-stock">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">Завершено</div>
+            <div class="stat-value" id="completedProductions">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon low-stock">⏳</div>
+          <div class="stat-info">
+            <div class="stat-label">В процессе</div>
+            <div class="stat-value" id="inProgressProductions">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info" style="flex: 1;">
+            <div class="stat-label">Произведено за месяц</div>
+            <div class="stat-value" id="monthlyProduction">0 ₽</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>Дата</th>
+              <th>Продукт</th>
+              <th>Количество</th>
+              <th>Использовано материалов</th>
+              <th>Стоимость</th>
+              <th>Ответственный</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="productionTableBody">
+            <!-- Production records will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Wholesale and Shipping Tab -->
+    <div id="wholesaleTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">📤 Оптовая отгрузка</h2>
+        <button class="btn btn-primary" onclick="openNewShipmentModal()">➕ Новая отгрузка</button>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon total">📤</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего отгрузок</div>
+            <div class="stat-value" id="totalShipments">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon in-stock">✅</div>
+          <div class="stat-info">
+            <div class="stat-label">Завершено</div>
+            <div class="stat-value" id="completedShipments">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon low-stock">🚚</div>
+          <div class="stat-info">
+            <div class="stat-label">В пути</div>
+            <div class="stat-value" id="inTransitShipments">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info" style="flex: 1;">
+            <div class="stat-label">Сумма за месяц</div>
+            <div class="stat-value" id="monthlyRevenue">0 ₽</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>№ Заказа</th>
+              <th>Дата</th>
+              <th>Клиент</th>
+              <th>Товары</th>
+              <th>Количество</th>
+              <th>Сумма</th>
+              <th>Путевой лист</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="shipmentsTableBody">
+            <!-- Shipment records will be rendered here -->
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -1197,6 +1328,8 @@
     let inventory = [];
     let suppliers = [];
     let purchaseOrders = [];
+    let productions = [];
+    let shipments = [];
     let currentFilter = 'all';
     let editingItemId = null;
 
@@ -1262,6 +1395,32 @@
         ];
       }
 
+      // Initialize production data
+      const savedProductions = localStorage.getItem('restaurantProductions');
+      if (savedProductions) {
+        productions = JSON.parse(savedProductions);
+      } else {
+        productions = [
+          { id: 1, date: '2024-11-05', product: 'Пицца Маргарита (заготовки)', quantity: 50, unit: 'шт', materialsCost: 12500, totalCost: 15000, responsible: 'Иванов И.П.', status: 'completed' },
+          { id: 2, date: '2024-11-08', product: 'Соус томатный (домашний)', quantity: 20, unit: 'л', materialsCost: 3000, totalCost: 4200, responsible: 'Петрова А.С.', status: 'completed' },
+          { id: 3, date: '2024-11-10', product: 'Тесто для пиццы', quantity: 100, unit: 'кг', materialsCost: 8500, totalCost: 10000, responsible: 'Сидоров П.К.', status: 'in-progress' },
+          { id: 4, date: '2024-11-12', product: 'Котлеты (полуфабрикат)', quantity: 200, unit: 'шт', materialsCost: 15000, totalCost: 18500, responsible: 'Иванов И.П.', status: 'planned' }
+        ];
+      }
+
+      // Initialize shipments data
+      const savedShipments = localStorage.getItem('restaurantShipments');
+      if (savedShipments) {
+        shipments = JSON.parse(savedShipments);
+      } else {
+        shipments = [
+          { id: 1, orderNumber: 'OPT-2024-001', date: '2024-11-01', client: 'Кафе "Уют"', clientPhone: '+7 999 444-44-44', items: ['Пицца Маргарита', 'Соус томатный'], totalQuantity: 30, totalAmount: 45000, waybillNumber: 'ПЛ-110124', status: 'delivered' },
+          { id: 2, orderNumber: 'OPT-2024-002', date: '2024-11-05', client: 'Ресторан "Вкус"', clientPhone: '+7 999 555-55-55', items: ['Пицца 4 сыра', 'Пицца Пепперони', 'Котлеты'], totalQuantity: 75, totalAmount: 98500, waybillNumber: 'ПЛ-110524', status: 'in-transit' },
+          { id: 3, orderNumber: 'OPT-2024-003', date: '2024-11-08', client: 'Столовая №5', clientPhone: '+7 999 666-66-66', items: ['Котлеты', 'Тесто для пиццы'], totalQuantity: 120, totalAmount: 62000, waybillNumber: null, status: 'pending' },
+          { id: 4, orderNumber: 'OPT-2024-004', date: '2024-11-10', client: 'Кафе "Завтрак"', clientPhone: '+7 999 777-77-77', items: ['Соус томатный', 'Сыр Моцарелла'], totalQuantity: 45, totalAmount: 35000, waybillNumber: 'ПЛ-111024', status: 'delivered' }
+        ];
+      }
+
       saveData();
       updateSupplierOptions();
       updateOrderItemOptions();
@@ -1271,6 +1430,8 @@
       localStorage.setItem('inventory', JSON.stringify(inventory));
       localStorage.setItem('restaurantSuppliers', JSON.stringify(suppliers));
       localStorage.setItem('restaurantPurchaseOrders', JSON.stringify(purchaseOrders));
+      localStorage.setItem('restaurantProductions', JSON.stringify(productions));
+      localStorage.setItem('restaurantShipments', JSON.stringify(shipments));
     }
 
     function switchTab(tab) {
@@ -1283,6 +1444,8 @@
       if (tab === 'suppliers') renderSuppliers();
       else if (tab === 'orders') renderOrders();
       else if (tab === 'reports') renderReports();
+      else if (tab === 'production') renderProduction();
+      else if (tab === 'wholesale') renderWholesale();
     }
 
     function getItemStatus(item) {
@@ -1683,6 +1846,182 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // Production rendering
+    function renderProduction() {
+      const tbody = document.getElementById('productionTableBody');
+
+      if (productions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #999;">Нет данных о производстве</td></tr>';
+        document.getElementById('totalProductions').textContent = '0';
+        document.getElementById('completedProductions').textContent = '0';
+        document.getElementById('inProgressProductions').textContent = '0';
+        document.getElementById('monthlyProduction').textContent = '0 ₽';
+        return;
+      }
+
+      tbody.innerHTML = productions.map(p => {
+        const statusColors = {
+          'completed': '#4caf50',
+          'in-progress': '#fb8c00',
+          'planned': '#1e88e5'
+        };
+        const statusLabels = {
+          'completed': 'Завершено',
+          'in-progress': 'В процессе',
+          'planned': 'Запланировано'
+        };
+
+        return `
+          <tr>
+            <td><strong>#${p.id}</strong></td>
+            <td>${new Date(p.date).toLocaleDateString('ru-RU')}</td>
+            <td><strong>${p.product}</strong></td>
+            <td>${p.quantity} ${p.unit}</td>
+            <td>${p.materialsCost.toLocaleString('ru-RU')} ₽</td>
+            <td><strong>${p.totalCost.toLocaleString('ru-RU')} ₽</strong></td>
+            <td>${p.responsible}</td>
+            <td><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${statusColors[p.status]}22; color: ${statusColors[p.status]};">${statusLabels[p.status]}</span></td>
+            <td>
+              <button class="btn btn-primary btn-small" onclick="viewProductionDetails(${p.id})">📋 Детали</button>
+              ${p.status !== 'completed' ? `<button class="btn btn-success btn-small" onclick="completeProduction(${p.id})">✅ Завершить</button>` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update stats
+      document.getElementById('totalProductions').textContent = productions.length;
+      document.getElementById('completedProductions').textContent = productions.filter(p => p.status === 'completed').length;
+      document.getElementById('inProgressProductions').textContent = productions.filter(p => p.status === 'in-progress').length;
+
+      const monthlyTotal = productions
+        .filter(p => new Date(p.date).getMonth() === new Date().getMonth() && p.status === 'completed')
+        .reduce((sum, p) => sum + p.totalCost, 0);
+      document.getElementById('monthlyProduction').textContent = monthlyTotal.toLocaleString('ru-RU') + ' ₽';
+    }
+
+    // Wholesale/Shipping rendering
+    function renderWholesale() {
+      const tbody = document.getElementById('shipmentsTableBody');
+
+      if (shipments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #999;">Нет данных об отгрузках</td></tr>';
+        document.getElementById('totalShipments').textContent = '0';
+        document.getElementById('completedShipments').textContent = '0';
+        document.getElementById('inTransitShipments').textContent = '0';
+        document.getElementById('monthlyRevenue').textContent = '0 ₽';
+        return;
+      }
+
+      tbody.innerHTML = shipments.map(s => {
+        const statusColors = {
+          'delivered': '#4caf50',
+          'in-transit': '#fb8c00',
+          'pending': '#1e88e5',
+          'cancelled': '#f44336'
+        };
+        const statusLabels = {
+          'delivered': 'Доставлено',
+          'in-transit': 'В пути',
+          'pending': 'Ожидает',
+          'cancelled': 'Отменено'
+        };
+
+        return `
+          <tr>
+            <td><strong>#${s.orderNumber}</strong></td>
+            <td>${new Date(s.date).toLocaleDateString('ru-RU')}</td>
+            <td><strong>${s.client}</strong><br><small style="color: #999;">${s.clientPhone}</small></td>
+            <td>${s.items.slice(0, 2).join(', ')}${s.items.length > 2 ? '...' : ''}</td>
+            <td>${s.totalQuantity} шт</td>
+            <td><strong>${s.totalAmount.toLocaleString('ru-RU')} ₽</strong></td>
+            <td>
+              ${s.waybillNumber ? `<a href="#" onclick="printWaybill('${s.waybillNumber}'); return false;" style="color: #1e88e5;">📄 ${s.waybillNumber}</a>` : '<button class="btn btn-secondary btn-small" onclick="generateWaybill(' + s.id + ')">📄 Создать</button>'}
+            </td>
+            <td><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${statusColors[s.status]}22; color: ${statusColors[s.status]};">${statusLabels[s.status]}</span></td>
+            <td>
+              <button class="btn btn-primary btn-small" onclick="viewShipmentDetails(${s.id})">📋 Детали</button>
+              ${s.status === 'pending' ? `<button class="btn btn-success btn-small" onclick="markInTransit(${s.id})">🚚 В путь</button>` : ''}
+              ${s.status === 'in-transit' ? `<button class="btn btn-success btn-small" onclick="markDelivered(${s.id})">✅ Доставлено</button>` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Update stats
+      document.getElementById('totalShipments').textContent = shipments.length;
+      document.getElementById('completedShipments').textContent = shipments.filter(s => s.status === 'delivered').length;
+      document.getElementById('inTransitShipments').textContent = shipments.filter(s => s.status === 'in-transit').length;
+
+      const monthlyRevenue = shipments
+        .filter(s => new Date(s.date).getMonth() === new Date().getMonth() && s.status === 'delivered')
+        .reduce((sum, s) => sum + s.totalAmount, 0);
+      document.getElementById('monthlyRevenue').textContent = monthlyRevenue.toLocaleString('ru-RU') + ' ₽';
+    }
+
+    // Modal stubs for new functionality
+    function openNewProductionModal() {
+      alert('🏭 Модальное окно для создания производства\n\nЗдесь можно будет:\n- Выбрать продукт\n- Указать количество\n- Выбрать материалы\n- Назначить ответственного');
+    }
+
+    function openNewShipmentModal() {
+      alert('📤 Модальное окно для новой отгрузки\n\nЗдесь можно будет:\n- Выбрать клиента\n- Добавить товары\n- Указать количество\n- Сформировать путевой лист');
+    }
+
+    function viewProductionDetails(id) {
+      const prod = productions.find(p => p.id === id);
+      if (prod) {
+        alert(`📋 Детали производства #${id}\n\nПродукт: ${prod.product}\nКоличество: ${prod.quantity} ${prod.unit}\nМатериалы: ${prod.materialsCost} ₽\nСтоимость: ${prod.totalCost} ₽\nОтветственный: ${prod.responsible}\nСтатус: ${prod.status}`);
+      }
+    }
+
+    function completeProduction(id) {
+      const prod = productions.find(p => p.id === id);
+      if (prod && confirm(`Завершить производство #${id}?`)) {
+        prod.status = 'completed';
+        renderProduction();
+        showNotification('✅ Производство завершено');
+      }
+    }
+
+    function viewShipmentDetails(id) {
+      const ship = shipments.find(s => s.id === id);
+      if (ship) {
+        alert(`📋 Детали отгрузки #${id}\n\nКлиент: ${ship.client}\nТелефон: ${ship.clientPhone}\nТовары: ${ship.items.join(', ')}\nСумма: ${ship.totalAmount} ₽\nПутевой лист: ${ship.waybillNumber || 'Не создан'}\nСтатус: ${ship.status}`);
+      }
+    }
+
+    function generateWaybill(id) {
+      const ship = shipments.find(s => s.id === id);
+      if (ship) {
+        ship.waybillNumber = 'ПЛ-' + Date.now().toString().slice(-6);
+        renderWholesale();
+        showNotification(`📄 Путевой лист ${ship.waybillNumber} создан`);
+      }
+    }
+
+    function printWaybill(number) {
+      alert(`🖨️ Печать путевого листа ${number}\n\nЗдесь будет открыта форма путевого листа для печати`);
+    }
+
+    function markInTransit(id) {
+      const ship = shipments.find(s => s.id === id);
+      if (ship && confirm('Отметить отгрузку как "В пути"?')) {
+        ship.status = 'in-transit';
+        renderWholesale();
+        showNotification('🚚 Отгрузка отправлена в путь');
+      }
+    }
+
+    function markDelivered(id) {
+      const ship = shipments.find(s => s.id === id);
+      if (ship && confirm('Отметить отгрузку как "Доставлено"?')) {
+        ship.status = 'delivered';
+        renderWholesale();
+        showNotification('✅ Отгрузка доставлена');
+      }
     }
 
     function showNotification(message) {

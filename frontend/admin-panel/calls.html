@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мониторинг звонков - FoodFlow</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📞</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .navbar {
+            background: #ffffff;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e1e8ed;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .nav-brand {
+            font-size: 20px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #1e88e5;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1976d2;
+        }
+
+        .btn-secondary {
+            background: #f5f7fa;
+            color: #2c3e50;
+        }
+
+        .btn-secondary:hover {
+            background: #e1e8ed;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #2c3e50;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-badge.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .calls-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #2c3e50;
+        }
+
+        .call-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+
+        .call-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .call-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 16px;
+        }
+
+        .call-icon.inbound {
+            background: #d4edda;
+        }
+
+        .call-icon.outbound {
+            background: #cce5ff;
+        }
+
+        .call-info {
+            flex: 1;
+        }
+
+        .call-from-to {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .call-details {
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .call-status {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .call-status.ringing {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .call-status.answered {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .call-status.ended {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .call-status.missed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-dot.active {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.inactive {
+            background: #dc3545;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6c757d;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        .modal-close:hover {
+            background: #f5f7fa;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #1e88e5;
+            box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .call-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-brand">📞 FoodFlow - Мониторинг звонков</div>
+        <div class="nav-actions">
+            <a href="/customer-app/index.html" target="_blank" style="text-decoration: none;">
+                <button class="btn btn-secondary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                    🌐 Сайт заказов
+                </button>
+            </a>
+            <button class="btn btn-primary" onclick="showDialModal()">
+                📞 Позвонить
+            </button>
+            <div id="connection-status" class="status-badge disconnected">
+                <span class="status-dot inactive"></span>
+                Подключение...
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container">
+        <div class="header">
+            <h1>Мониторинг звонков</h1>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Активные звонки</div>
+                <div class="stat-value" id="active-calls-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Всего звонков сегодня</div>
+                <div class="stat-value" id="total-calls-today">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Пропущенные</div>
+                <div class="stat-value" id="missed-calls-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Средняя длительность</div>
+                <div class="stat-value" id="avg-duration">0с</div>
+            </div>
+        </div>
+
+        <!-- Active Calls -->
+        <div class="calls-section">
+            <div class="section-title">Активные звонки</div>
+            <div id="active-calls-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📞</div>
+                    <p>Нет активных звонков</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Calls -->
+        <div class="calls-section">
+            <div class="section-title">Последние звонки</div>
+            <div id="recent-calls-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>Загрузка...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let activeCalls = [];
+        let recentCalls = [];
+
+        // Format time
+        function formatTime(date) {
+            return new Date(date).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // Format duration
+        function formatDuration(seconds) {
+            if (!seconds) return '0с';
+            if (seconds < 60) return `${seconds}с`;
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${minutes}м ${secs}с`;
+        }
+
+        // Render active calls
+        function renderActiveCalls() {
+            const container = document.getElementById('active-calls-list');
+
+            if (activeCalls.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📞</div>
+                        <p>Нет активных звонков</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = activeCalls.map(call => `
+                <div class="call-item">
+                    <div class="call-icon ${call.direction}">
+                        ${call.direction === 'inbound' ? '📲' : '📞'}
+                    </div>
+                    <div class="call-info">
+                        <div class="call-from-to">
+                            ${call.from} → ${call.to}
+                        </div>
+                        <div class="call-details">
+                            Добавочный: ${call.extension} • ${formatTime(call.startTime)}
+                        </div>
+                    </div>
+                    <div class="call-status ${call.status}">
+                        ${call.status === 'ringing' ? 'Звонит' : 'Разговор'}
+                    </div>
+                    <div class="call-actions">
+                        <button class="btn btn-danger btn-sm" onclick="hangupCall('${call.callId}')">
+                            Завершить
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Render recent calls
+        function renderRecentCalls() {
+            const container = document.getElementById('recent-calls-list');
+
+            if (recentCalls.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>Нет записей</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = recentCalls.slice(0, 10).map(call => `
+                <div class="call-item">
+                    <div class="call-icon ${call.direction}">
+                        ${call.direction === 'inbound' ? '📲' : '📞'}
+                    </div>
+                    <div class="call-info">
+                        <div class="call-from-to">
+                            ${call.from} → ${call.to}
+                        </div>
+                        <div class="call-details">
+                            ${formatTime(call.startTime)} • ${call.duration ? formatDuration(call.duration) : 'Нет данных'}
+                        </div>
+                    </div>
+                    <div class="call-status ${call.status}">
+                        ${call.status === 'ended' ? 'Завершён' : call.status === 'missed' ? 'Пропущен' : call.status}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('active-calls-count').textContent = activeCalls.length;
+
+            const missedToday = recentCalls.filter(c => {
+                const today = new Date().toDateString();
+                return c.status === 'missed' && new Date(c.startTime).toDateString() === today;
+            }).length;
+            document.getElementById('missed-calls-count').textContent = missedToday;
+
+            const callsWithDuration = recentCalls.filter(c => c.duration > 0);
+            const avgDuration = callsWithDuration.length > 0
+                ? Math.round(callsWithDuration.reduce((sum, c) => sum + c.duration, 0) / callsWithDuration.length)
+                : 0;
+            document.getElementById('avg-duration').textContent = formatDuration(avgDuration);
+
+            const callsToday = recentCalls.filter(c => {
+                const today = new Date().toDateString();
+                return new Date(c.startTime).toDateString() === today;
+            }).length;
+            document.getElementById('total-calls-today').textContent = callsToday;
+        }
+
+        // Fetch active calls
+        async function fetchActiveCalls() {
+            try {
+                const response = await fetch(`${API_BASE}/api/calls/active`);
+                const data = await response.json();
+                activeCalls = data.calls || [];
+                renderActiveCalls();
+                updateStats();
+                updateConnectionStatus(true);
+            } catch (error) {
+                console.error('Error fetching active calls:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Fetch recent calls
+        async function fetchRecentCalls() {
+            try {
+                const response = await fetch(`${API_BASE}/api/calls/logs?limit=50`);
+                const data = await response.json();
+                recentCalls = data.logs || [];
+                renderRecentCalls();
+                updateStats();
+            } catch (error) {
+                console.error('Error fetching recent calls:', error);
+            }
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusBadge = document.getElementById('connection-status');
+            const statusDot = statusBadge.querySelector('.status-dot');
+
+            if (connected) {
+                statusBadge.className = 'status-badge connected';
+                statusBadge.innerHTML = '<span class="status-dot active"></span> Подключено';
+            } else {
+                statusBadge.className = 'status-badge disconnected';
+                statusBadge.innerHTML = '<span class="status-dot inactive"></span> Нет подключения';
+            }
+        }
+
+        // Initialize
+        async function init() {
+            await fetchActiveCalls();
+            await fetchRecentCalls();
+
+            // Auto-refresh every 2 seconds
+            setInterval(fetchActiveCalls, 2000);
+            setInterval(fetchRecentCalls, 10000);
+        }
+
+        // Start
+        init();
+
+        // ========== Click-to-Call Functions ==========
+
+        function showDialModal() {
+            document.getElementById('dial-modal').classList.add('active');
+        }
+
+        function closeDialModal() {
+            document.getElementById('dial-modal').classList.remove('active');
+        }
+
+        async function makeCall() {
+            const from = document.getElementById('dial-from').value;
+            const to = document.getElementById('dial-to').value;
+
+            if (!from || !to) {
+                alert('Пожалуйста, заполните все поля');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/calls/dial`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from, to, autoAnswer: true })
+                });
+
+                if (response.ok) {
+                    alert('Звонок инициирован');
+                    closeDialModal();
+                    document.getElementById('dial-from').value = '';
+                    document.getElementById('dial-to').value = '';
+                } else {
+                    alert('Ошибка при совершении звонка');
+                }
+            } catch (error) {
+                console.error('Error making call:', error);
+                alert('Ошибка при совершении звонка');
+            }
+        }
+
+        async function hangupCall(callId) {
+            if (!confirm('Завершить звонок?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/calls/hangup/${callId}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    console.log('Call hung up');
+                } else {
+                    alert('Ошибка при завершении звонка');
+                }
+            } catch (error) {
+                console.error('Error hanging up call:', error);
+                alert('Ошибка при завершении звонка');
+            }
+        }
+
+        // Close modal on background click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+    </script>
+
+    <!-- Dial Modal -->
+    <div id="dial-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📞 Совершить звонок</div>
+                <button class="modal-close" onclick="closeDialModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="dial-from">С добавочного</label>
+                    <input type="text" id="dial-from" class="form-control" placeholder="7779" value="7779">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="dial-to">Номер телефона</label>
+                    <input type="tel" id="dial-to" class="form-control" placeholder="+7 (900) 123-45-67">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDialModal()">Отмена</button>
+                <button class="btn btn-primary" onclick="makeCall()">📞 Позвонить</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

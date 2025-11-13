@@ -59,7 +59,7 @@ async function start() {
     await callLogger.initialize();
 
     // Initialize Yeastar WebSocket service
-    yeastar Service = new YeastarWebSocketService(yeastarConfig);
+    yeastarService = new YeastarWebSocketService(yeastarConfig);
 
     // Setup event handlers
     setupYeastarEventHandlers();

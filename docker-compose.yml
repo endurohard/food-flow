@@ -297,11 +297,11 @@ services:
       context: ./services/telegram-bot-service
       dockerfile: Dockerfile
     container_name: telegram-bot-service
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 3007
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS}
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       MONGODB_URI: mongodb://mongodb:27017/telegram-bot
       INVENTORY_API_URL: http://restaurant-service:3002/api/inventory
@@ -320,6 +320,70 @@ services:
         condition: service_healthy
       restaurant-service:
         condition: service_started
+    restart: unless-stopped
+
+  # PJSIP Telephony Service - Connected to Yeastar PBX
+  pjsip-service:
+    build:
+      context: ./services/pjsip-service
+      dockerfile: Dockerfile
+    container_name: pjsip-service
+    environment:
+      NODE_ENV: production
+      PORT: 3009
+      SIP_SERVER: 192.168.5.150
+      SIP_PORT: 5060
+      SIP_TRANSPORT: UDP
+      SIP_USE_WEBSOCKET: "false"
+      SIP_USERS: 1cuser:1csecret:7779:Restaurant Operator
+      RTP_PORT_MIN: 5700
+      RTP_PORT_MAX: 5750
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: "*"
+      SOCKETIO_PATH: /socket.io
+    expose:
+      - "3009"
+    ports:
+      - "5060:5060/udp"
+      - "5700-5750:5700-5750/udp"
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Yeastar PBX Integration Service (AMI)
+  yeastar-service:
+    build:
+      context: ./services/yeastar-service
+      dockerfile: Dockerfile
+    container_name: yeastar-service
+    environment:
+      NODE_ENV: production
+      PORT: 3008
+      YEASTAR_HOST: www.it005.ru
+      YEASTAR_PORT: 5038
+      YEASTAR_USERNAME: 7779
+      YEASTAR_PASSWORD: 5TQNF_Srld
+      YEASTAR_API_VERSION: v2.0.0
+      YEASTAR_RECONNECT_INTERVAL: 10000
+      YEASTAR_HEARTBEAT_INTERVAL: 30000
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      CORS_ORIGIN: "*"
+      SOCKETIO_PATH: /socket.io
+    expose:
+      - "3008"
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

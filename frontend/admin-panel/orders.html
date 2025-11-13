@@ -893,6 +893,16 @@
         <span class="sidebar-icon">🖨️</span>
         <span>Принтеры</span>
       </a>
+      <a href="settings.html" class="sidebar-item">
+        <span class="sidebar-icon">⚙️</span>
+        <span>Настройки</span>
+      </a>
+      <div style="border-top: 1px solid #e1e8ed; margin: 12px 0;"></div>
+      <a href="/customer-app/index.html" class="sidebar-item" target="_blank" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 8px; border-radius: 8px;">
+        <span class="sidebar-icon">🌐</span>
+        <span>Сайт заказов</span>
+        <span style="margin-left: auto; font-size: 12px;">↗</span>
+      </a>
     </div>
   </div>
 
@@ -963,6 +973,85 @@
         <div class="stat-info">
           <div class="stat-label">Доставл.</div>
           <div class="stat-value" id="headerDelivered" style="color: #22c55e;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+        <!-- Date Filter -->
+        <div style="flex: 1; min-width: 200px;">
+          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+            📅 Дата
+          </label>
+          <input type="date" id="filterDate" class="search-input" style="width: 100%;">
+        </div>
+
+        <!-- Shift Filter -->
+        <div style="flex: 1; min-width: 200px;">
+          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+            🕐 Смена
+          </label>
+          <select id="filterShift" class="search-input" style="width: 100%; cursor: pointer;">
+            <option value="all">Все смены</option>
+            <option value="current">Текущая смена</option>
+            <option value="morning">Утренняя (08:00 - 16:00)</option>
+            <option value="day">Дневная (16:00 - 23:59)</option>
+            <option value="custom">Своя смена...</option>
+          </select>
+        </div>
+
+        <!-- Custom Shift Times -->
+        <div id="customShiftTimes" style="display: none; flex: 2; min-width: 300px; gap: 12px;">
+          <div style="display: flex; gap: 12px; align-items: flex-end;">
+            <div style="flex: 1;">
+              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+                От
+              </label>
+              <input type="time" id="customShiftStart" class="search-input" value="08:00" style="width: 100%;">
+            </div>
+            <div style="flex: 1;">
+              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+                До
+              </label>
+              <input type="time" id="customShiftEnd" class="search-input" value="23:59" style="width: 100%;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Apply Filters Button -->
+        <div>
+          <button class="btn btn-primary" onclick="applyFilters()" style="height: 44px;">
+            🔍 Применить
+          </button>
+          <button class="btn btn-secondary" onclick="resetFilters()" style="height: 44px; margin-left: 8px;">
+            ↺ Сбросить
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Filters Display -->
+      <div id="activeFilters" style="margin-top: 16px; display: none;">
+        <div style="font-size: 13px; color: #6c757d; margin-bottom: 8px;">Активные фильтры:</div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="activeFiltersContainer"></div>
+      </div>
+
+      <!-- Shift Statistics -->
+      <div id="shiftStats" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e1e8ed; display: none;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+          <div>
+            <div style="font-size: 13px; color: #6c757d;">Заказов за период</div>
+            <div style="font-size: 24px; font-weight: 700; color: #1e88e5;" id="shiftOrderCount">0</div>
+          </div>
+          <div>
+            <div style="font-size: 13px; color: #6c757d;">Сумма заказов</div>
+            <div style="font-size: 24px; font-weight: 700; color: #22c55e;" id="shiftTotalAmount">0 ₽</div>
+          </div>
+          <div>
+            <div style="font-size: 13px; color: #6c757d;">Средний чек</div>
+            <div style="font-size: 24px; font-weight: 700; color: #8b5cf6;" id="shiftAvgAmount">0 ₽</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1125,8 +1214,17 @@
   <script>
     const API_BASE_URL = 'http://localhost/api';
     let orders = [];
+    let allOrders = []; // Хранит все заказы до фильтрации
     let searchTerm = '';
     let selectedOrderIdForCourier = null;
+
+    // Filter state
+    let filters = {
+      date: null,
+      shift: 'all',
+      customShiftStart: '08:00',
+      customShiftEnd: '23:59'
+    };
 
     const allCouriers = {
       '1': { name: 'Александр Иванов', phone: '+7 (999) 111-11-11' },
@@ -1156,9 +1254,11 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
+      initializeFilters();
       loadOrders();
       setupSearch();
       setupDragAndDrop();
+      setupShiftFilter();
       // Auto-refresh every 5 seconds
       setInterval(loadOrders, 5000);
       // Play sound for new orders
@@ -1180,9 +1280,8 @@
             showNotification('🔔 Новый заказ получен!');
           }
 
-          orders = newOrders;
-          updateStats();
-          renderKanban();
+          allOrders = newOrders; // Сохраняем все заказы
+          applyFilters(); // Применяем фильтры
         }
       } catch (error) {
         console.error('Error loading orders:', error);
@@ -1742,6 +1841,262 @@
           document.title = 'Управление заказами - FoodFlow';
         }
       }, 1000);
+    }
+
+    // ===== ФИЛЬТРАЦИЯ ЗАКАЗОВ =====
+
+    // Initialize filters
+    function initializeFilters() {
+      // Set today's date as default
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('filterDate').value = today;
+      filters.date = today;
+
+      // Load saved filters from localStorage
+      const savedFilters = localStorage.getItem('orderFilters');
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters);
+        filters = { ...filters, ...parsed };
+
+        if (filters.date) {
+          document.getElementById('filterDate').value = filters.date;
+        }
+        if (filters.shift) {
+          document.getElementById('filterShift').value = filters.shift;
+        }
+        if (filters.customShiftStart) {
+          document.getElementById('customShiftStart').value = filters.customShiftStart;
+        }
+        if (filters.customShiftEnd) {
+          document.getElementById('customShiftEnd').value = filters.customShiftEnd;
+        }
+      }
+    }
+
+    // Setup shift filter dropdown handler
+    function setupShiftFilter() {
+      const shiftSelect = document.getElementById('filterShift');
+      const customTimes = document.getElementById('customShiftTimes');
+
+      shiftSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+          customTimes.style.display = 'flex';
+        } else {
+          customTimes.style.display = 'none';
+        }
+      });
+
+      // Trigger on load if custom is selected
+      if (shiftSelect.value === 'custom') {
+        customTimes.style.display = 'flex';
+      }
+    }
+
+    // Apply filters
+    function applyFilters() {
+      // Get filter values
+      const dateInput = document.getElementById('filterDate').value;
+      const shiftSelect = document.getElementById('filterShift').value;
+      const customStart = document.getElementById('customShiftStart').value;
+      const customEnd = document.getElementById('customShiftEnd').value;
+
+      // Update filters state
+      filters = {
+        date: dateInput || null,
+        shift: shiftSelect,
+        customShiftStart: customStart,
+        customShiftEnd: customEnd
+      };
+
+      // Save to localStorage
+      localStorage.setItem('orderFilters', JSON.stringify(filters));
+
+      // Filter orders
+      orders = filterOrders(allOrders);
+
+      // Update UI
+      updateStats();
+      renderKanban();
+      updateActiveFiltersDisplay();
+      updateShiftStatistics();
+    }
+
+    // Filter orders based on current filters
+    function filterOrders(ordersList) {
+      let filtered = [...ordersList];
+
+      // Filter by date
+      if (filters.date) {
+        filtered = filtered.filter(order => {
+          const orderDate = new Date(order.createdAt || order.created_at).toISOString().split('T')[0];
+          return orderDate === filters.date;
+        });
+      }
+
+      // Filter by shift
+      if (filters.shift !== 'all') {
+        filtered = filtered.filter(order => {
+          return isOrderInShift(order, filters.shift);
+        });
+      }
+
+      return filtered;
+    }
+
+    // Check if order is in specified shift
+    function isOrderInShift(order, shiftType) {
+      const orderDate = new Date(order.createdAt || order.created_at);
+      const orderTime = orderDate.toTimeString().slice(0, 5); // HH:MM
+
+      let shiftStart, shiftEnd;
+
+      switch (shiftType) {
+        case 'current':
+          // Current shift - from start of current shift to now
+          const now = new Date();
+          const currentHour = now.getHours();
+
+          if (currentHour >= 8 && currentHour < 16) {
+            // Morning shift
+            shiftStart = '08:00';
+            shiftEnd = '16:00';
+          } else if (currentHour >= 16 || currentHour < 8) {
+            // Day/Night shift
+            shiftStart = '16:00';
+            shiftEnd = '23:59';
+          }
+          break;
+
+        case 'morning':
+          shiftStart = '08:00';
+          shiftEnd = '16:00';
+          break;
+
+        case 'day':
+          shiftStart = '16:00';
+          shiftEnd = '23:59';
+          break;
+
+        case 'custom':
+          shiftStart = filters.customShiftStart;
+          shiftEnd = filters.customShiftEnd;
+          break;
+
+        default:
+          return true;
+      }
+
+      // Handle shifts that span midnight
+      if (shiftStart > shiftEnd) {
+        return orderTime >= shiftStart || orderTime <= shiftEnd;
+      } else {
+        return orderTime >= shiftStart && orderTime <= shiftEnd;
+      }
+    }
+
+    // Reset filters
+    function resetFilters() {
+      // Reset to defaults
+      const today = new Date().toISOString().split('T')[0];
+
+      filters = {
+        date: today,
+        shift: 'all',
+        customShiftStart: '08:00',
+        customShiftEnd: '23:59'
+      };
+
+      // Update UI
+      document.getElementById('filterDate').value = today;
+      document.getElementById('filterShift').value = 'all';
+      document.getElementById('customShiftStart').value = '08:00';
+      document.getElementById('customShiftEnd').value = '23:59';
+      document.getElementById('customShiftTimes').style.display = 'none';
+
+      // Clear localStorage
+      localStorage.removeItem('orderFilters');
+
+      // Apply reset filters
+      applyFilters();
+
+      showNotification('✅ Фильтры сброшены');
+    }
+
+    // Update active filters display
+    function updateActiveFiltersDisplay() {
+      const container = document.getElementById('activeFiltersContainer');
+      const activeFiltersDiv = document.getElementById('activeFilters');
+
+      const badges = [];
+
+      // Date badge
+      if (filters.date) {
+        const date = new Date(filters.date);
+        const dateStr = date.toLocaleDateString('ru-RU', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        });
+        badges.push(`📅 ${dateStr}`);
+      }
+
+      // Shift badge
+      if (filters.shift !== 'all') {
+        let shiftLabel;
+        switch (filters.shift) {
+          case 'current':
+            shiftLabel = '🕐 Текущая смена';
+            break;
+          case 'morning':
+            shiftLabel = '🕐 Утренняя смена (08:00 - 16:00)';
+            break;
+          case 'day':
+            shiftLabel = '🕐 Дневная смена (16:00 - 23:59)';
+            break;
+          case 'custom':
+            shiftLabel = `🕐 Своя смена (${filters.customShiftStart} - ${filters.customShiftEnd})`;
+            break;
+        }
+        badges.push(shiftLabel);
+      }
+
+      // Show or hide
+      if (badges.length > 0) {
+        container.innerHTML = badges.map(badge => `
+          <span style="
+            display: inline-block;
+            padding: 6px 12px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+          ">${badge}</span>
+        `).join('');
+        activeFiltersDiv.style.display = 'block';
+      } else {
+        activeFiltersDiv.style.display = 'none';
+      }
+    }
+
+    // Update shift statistics
+    function updateShiftStatistics() {
+      const statsDiv = document.getElementById('shiftStats');
+
+      // Only show stats if filters are applied
+      if (filters.shift !== 'all' || filters.date) {
+        const orderCount = orders.length;
+        const totalAmount = orders.reduce((sum, order) => sum + (order.total || 0), 0);
+        const avgAmount = orderCount > 0 ? totalAmount / orderCount : 0;
+
+        document.getElementById('shiftOrderCount').textContent = orderCount;
+        document.getElementById('shiftTotalAmount').textContent = totalAmount.toLocaleString('ru-RU') + ' ₽';
+        document.getElementById('shiftAvgAmount').textContent = Math.round(avgAmount).toLocaleString('ru-RU') + ' ₽';
+
+        statsDiv.style.display = 'block';
+      } else {
+        statsDiv.style.display = 'none';
+      }
     }
   </script>
 </body>

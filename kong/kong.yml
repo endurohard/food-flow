@@ -61,6 +61,30 @@ services:
           - /api/printers
         strip_path: false
 
+  - name: pjsip-service
+    url: http://pjsip-service:3009
+    routes:
+      - name: pbx-routes
+        paths:
+          - /api/pbx
+        strip_path: false
+
+  - name: yeastar-service
+    url: http://yeastar-service:3008
+    routes:
+      - name: yeastar-calls-routes
+        paths:
+          - /api/calls
+        strip_path: false
+      - name: yeastar-extensions-routes
+        paths:
+          - /api/extensions
+        strip_path: false
+      - name: yeastar-health-routes
+        paths:
+          - /api/yeastar/health
+        strip_path: false
+
   # Frontend static files
   - name: frontend-service
     url: http://frontend-service:3000
