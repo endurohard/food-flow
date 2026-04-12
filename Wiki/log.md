@@ -1,0 +1,257 @@
+# Wiki Log
+
+Append-only хронология. Новые записи снизу.
+
+## [2026-04-11] bootstrap | Wiki initialized
+- Создан скелет вики по паттерну Karpathy LLM Wiki.
+- Ingest первого уровня: 13 сервисов, 4 концепта, sources.md.
+- Источники: `ARCHITECTURE.md`, `PROJECT_OVERVIEW.md`, `docker-compose.yml`, `services/*/package.json`, `database/migrations/`, `docs/`.
+- Замечание: `ARCHITECTURE.md` устарел — описывает только 4 исходных сервиса, тогда как сейчас их 13. Помечено в [[sources]].
+
+## [2026-04-11] ingest | docs/IMPLEMENTED_FEATURES.md
+Документ датирован 2025-01-07, описывает 6 сервисов (старый срез). Извлечённые новые факты:
+- [[services/telegram-bot-service]] — полностью расписан пайплайн: Tesseract.js OCR (ru+en), Sharp предобработка, OpenAI GPT-4 парсинг + regex fallback, хранение в **MongoDB**, команды бота.
+- [[services/inventory-service]] — два канала ingress (ручной UI и автоматический через бота); отмечено что UI может быть на LocalStorage.
+- [[services/restaurant-service]] — уточнены фичи меню (модификаторы, стоп-лист, расчёт себестоимости по техкартам).
+- [[services/order-service]] — флаг что tables.html/hall-designer.html работают через LocalStorage.
+- [[services/frontend-service]] — **добавлен критичный раздел "LocalStorage-first архитектура"**: многие страницы хранят состояние в браузере, а не в БД, зрелость фичей ниже чем кажется по UI.
+Новый инфраструктурный факт: **MongoDB** — используется только [[services/telegram-bot-service]].
+Не покрыты (оставлены на будущие ingest-ы): раздел "Ближайшие цели" (это роадмап, не факты).
+
+## [2026-04-11] audit | deep security+correctness sweep
+4 параллельных аудита (multi-tenancy, auth/Kong, bug hunt, docs vs code) + тестовая инфраструктура. Итог: [[decisions/2026-04-11-deep-audit]].
+Ключевое:
+- **0 тестовых файлов** при 9 сервисах с `"test": "jest"` — тесты вывеска.
+- **Multi-tenant изоляция сломана** во всех сервисах кроме user-service → [[concepts/multi-tenancy]] понижен до `status: broken`.
+- **Открытые endpoint'ы без auth** возвращают PBX credentials и заказы по ID (C2 в аудите).
+- **Hardcoded JWT secret** одинаковый во всех 9 сервисах с дефолтом `'your-jwt-secret-key-change-in-production'`.
+- **Race conditions** в loyalty redeem, cash register, inventory decrement, delivery status — ни один не обёрнут в транзакцию/SELECT FOR UPDATE.
+- **Promo codes можно использовать бесконечно** — `used_count` никогда не инкрементируется.
+- **docker-compose.yml** декларирует `MONGODB_URI` для telegram-bot но mongodb-сервиса нет → бот не стартует out of the box.
+- **RabbitMQ события без `enterprise_id`** + ошибки публикации заглушаются console.warn → тихая потеря заказов.
+- Обновлены концепты [[concepts/multi-tenancy]] (broken), [[concepts/auth]], [[concepts/events]].
+
+## [2026-04-11] fix | Phase 0 — stop the bleeding
+Реализованы минимальные критичные правки из [[decisions/2026-04-11-deep-audit]]. TypeScript всех затронутых сервисов компилируется чисто.
+
+**Auth на открытые endpoint'ы**:
+- `services/user-service/src/routes/user.routes.ts`: добавлен `authenticateUser + requireAdmin` на `GET /api/users`, также убрано поле `pbx_ws_password` из SELECT. `GET /:userId/pbx-settings` — auth + проверка "admin или свой userId". `PUT /:userId/pbx-settings` — auth + admin.
+- `services/order-service/src/routes/orders.ts`: `authenticateUser` на `GET /:id`.
+- `services/kitchen-service/` — создан `src/middleware/auth.middleware.ts` (скопирован паттерн из order-service), `kitchen.routes.ts` использует `router.use(authenticateUser)` на все маршруты. В config добавлен `jwt.secret`.
+- `services/delivery-service/src/routes/delivery.routes.ts`: `authenticateUser` на `GET /:id/track` и `GET /zones`.
+
+**Fail-hard секреты**: во все 9 config/index.ts добавлен guard-блок — в `NODE_ENV=production` бросает ошибку на старте, если `JWT_SECRET` не задан или равен дефолту `'your-jwt-secret-key-change-in-production'`, либо если не задан `DATABASE_URL`. В dev fallback остаётся для удобства.
+
+**CORS**: `kong/kong.yml` — `credentials: true` → `false` (JWT передаётся в Authorization header, cookies не нужны). Оставлен комментарий, как вернуть credentials через явный whitelist origins.
+
+**Не сделано в Phase 0** (идёт в Phase 1):
+- Multi-tenant изоляция (C1) — требует shared middleware пакет и переписывание SQL во всех сервисах.
+- Auth на остальных открытых endpoint'ах order-service legacy маршрутов.
+- События без `enterprise_id` (H3).
+
+## [2026-04-11] fix | Phase 2 — race conditions и транзакции
+Закрыты C5, C6, C7, C8, H2 из [[decisions/2026-04-11-deep-audit]]. Все 4 затронутых сервиса компилируются чисто.
+
+- **`services/crm-service/src/services/crm.service.ts` `redeemPoints`**: заменён read-then-write на атомарный `UPDATE ... WHERE loyalty_points >= $points` в транзакции. Overdraft невозможен даже при concurrent-запросах. Добавлена ранняя валидация `points > 0`.
+- **`crm.service.ts` новый метод `redeemPromoCode`**: атомарный `UPDATE promotions SET used_count = used_count + 1 WHERE ... AND (usage_limit IS NULL OR used_count < usage_limit) RETURNING *`. Возвращает `null` если лимит исчерпан. Закрывает H2 (бесконечное применение промокодов). Routes-слой пока не переключён на этот метод — нужно апдейтнуть `crm.routes.ts` отдельно.
+- **`finance-service/src/services/finance.service.ts` `addCashOperation`**: обёрнуто в `BEGIN/COMMIT` через `pool.connect()`. Касса блокируется через `SELECT ... FOR UPDATE` перед вставкой операции и обновлением баланса. Добавлена проверка `status = 'open'` под блокировкой.
+- **`finance.service.ts` `closeRegister`**: обёрнуто в транзакцию с `SELECT ... FOR UPDATE`. Теперь между чтением баланса, инсертом инкассации и закрытием кассы никто не может вставить операцию, которая бы "повисла".
+- **`inventory-service/src/services/inventory.service.ts` `deductByTechCards`**: UPDATE stock теперь с условием `AND quantity >= $1` и проверкой `rowCount === 0`. Если остатка не хватает или записи нет — бросает ошибку с внятным текстом и транзакция откатывается. Склад не уйдёт в минус даже под concurrent order completion.
+- **`delivery-service/src/services/delivery.service.ts` `updateStatus`**: 3 UPDATE (deliveries, orders, driver_shifts) обёрнуты в `BEGIN/COMMIT`. При сбое в середине все изменения откатятся.
+
+**Осталось на Phase 3**:
+- H1 — enum-валидация status'ов в order/delivery/kitchen routes.
+- M1 — RabbitMQ publish без глотания ошибок (outbox или retry).
+- Переключить `crm.routes.ts` с `validatePromoCode` на `redeemPromoCode` при реальном применении промо.
+- H5 — order split: вынести `getById()` внутрь транзакции.
+
+**Phase 1** (multi-tenant изоляция) — остаётся самой большой оставшейся задачей.
+
+## [2026-04-11] fix | Phase 3 — мелочи по корректности
+Закрыты H1, H2, H5, M1 (частично) из аудита.
+
+- **`order-service/src/services/order.service.ts`** — добавлена константа `VALID_ORDER_STATUSES` (`pending/confirmed/preparing/ready/out_for_delivery/delivered/completed/cancelled`). `updateStatus()` бросает `OrderError 400` на невалидный статус. (H1)
+- **`kitchen-service/src/routes/kitchen.routes.ts`** — `PUT /orders/:orderId/status` теперь проверяет `KITCHEN_ALLOWED_STATUSES = ['preparing', 'ready', 'completed']`. (H1)
+- **`order-service splitOrder`** — читал parent через `this.getById()` (вне транзакции). Переписано: чтение через `client` + `SELECT ... FOR UPDATE` + отдельный запрос items. Parent блокируется на время создания дочерних заказов. (H5)
+- **`order.service.create` и `updateStatus`** — `publishOrderEvent` обёрнут в `try/catch`. Если RabbitMQ упал — API возвращает успех (в БД уже commit), ошибка логируется. TODO-комментарий указывает на outbox pattern как настоящее решение. (M1)
+- **`crm-service/src/routes/crm.routes.ts`** — добавлен `POST /promotions/apply`: вызывает новый `redeemPromoCode`, возвращает 410 Gone при исчерпании лимита. Старый `GET /promotions/validate-code` оставлен для preview. (H2)
+
+## [2026-04-11] fix | Phase 1 — multi-tenant изоляция (критичный subset)
+Закрыт C1 для трёх самых открытых сервисов из аудита (order, kitchen, delivery) + H3 в payload событий. Полный pass по inventory/hr/crm/finance/restaurant остаётся на follow-up.
+
+- **`order-service/src/services/order.service.ts`**:
+  - `CreateOrderInput` — добавлено поле `enterpriseId?`.
+  - `create()` — использует `data.enterpriseId` при INSERT (раньше было `null`).
+  - `list()` — добавлен `filters.enterpriseId`, фильтрация через `WHERE o.enterprise_id = $X`.
+  - `getById(orderId, enterpriseId?)` — опциональный tenant guard.
+  - `updateStatus(orderId, status, enterpriseId?)` — tenant guard в WHERE.
+  - RabbitMQ payload в `create()` и `updateStatus()` теперь несёт `enterpriseId`.
+- **`order-service/src/routes/orders.ts`** — все вызовы сервиса передают `req.enterpriseId`.
+- **`kitchen-service/src/routes/kitchen.routes.ts`** — все 3 SQL (GET /orders, PUT status, GET /stats) фильтруют по `o.enterprise_id = $X` из `req.enterpriseId`. `PUT /status` возвращает 404 "Order not found or access denied" при `rowCount === 0`.
+- **`delivery-service/src/services/delivery.service.ts`**:
+  - `list()` — добавлен `filters.enterpriseId`, фильтрация через JOIN `o.enterprise_id` (у `deliveries` нет своей колонки).
+  - `getById(id, enterpriseId?)` — tenant guard.
+  - `assignDriver(id, driverId, enterpriseId?)` — ownership check через JOIN.
+  - `updateStatus(id, status, enterpriseId?)` — ownership check с `SELECT ... FOR UPDATE OF d` внутри уже существующей транзакции.
+- **`delivery-service/src/routes/delivery.routes.ts`** — все вызовы передают `req.enterpriseId`.
+
+**Все 3 сервиса компилируются чисто** (`npx tsc --noEmit`).
+
+### 🔑 Важная находка про RLS
+Миграция `006_add_enterprises_multi_tenant.sql` **включает Row Level Security** на 5 таблицах (enterprises/restaurants/menu_categories/menu_items/orders) с политикой через `current_setting('app.current_user_id')::UUID`. Но: (1) никто не ставит эту переменную в сервисах, (2) `FORCE ROW LEVEL SECURITY` не включено, значит owner `foodflow` обходит RLS полностью, (3) RLS покрывает только 5 таблиц из десятков в миграциях 008-015.
+
+**Итог**: RLS — косметика, реальная изоляция только на application-level. Подробности в [[concepts/multi-tenancy]] (раздел "RLS не работает"). Решение: либо удалить RLS как misleading, либо fully enforce через `FORCE ROW LEVEL SECURITY` + session-variable-per-request middleware.
+
+### Что остаётся НЕ сделано (на момент первого прохода)
+- **restaurant/inventory/hr/crm/finance** — update/delete без tenant guard. Нужен проход по SQL, список методов в [[concepts/multi-tenancy]].
+- **Consumer-side фильтрация в RabbitMQ** — payload теперь несёт `enterpriseId`, но kitchen/delivery consumer'ы его не используют для валидации (они пока даже не существуют как consumer'ы — kitchen читает из БД напрямую, у delivery есть скелет).
+- **`optionalAuth` в `GET /api/orders`** — если без JWT, фильтрация не применяется. Для продакшена надо `authenticateUser`.
+- **RLS решение** — оставить/удалить/включить. Архитектурный вопрос.
+- **Outbox pattern** для RabbitMQ — TODO-комментарии расставлены, но реализация не сделана.
+- **Автотесты** — 0 тестов, вся цепочка починок не покрыта регрессиями.
+
+## [2026-04-11] fix | Phase 1 second pass — все оставшиеся сервисы
+Добавлены tenant guards на update/delete во всех ранее непокрытых сервисах. **Все 9 сервисов компилируются чисто** после финального прохода.
+
+- **`restaurant-service/src/services/restaurant.service.ts`**: `getById/update/delete` принимают `enterpriseId?`, добавлены в WHERE. `update` возвращает через `getById(id, enterpriseId)` при пустых полях (сохраняя tenant guard).
+- **`restaurant-service/src/routes/restaurant.routes.ts`**: `GET /:id` теперь идёт через `optionalAuth`, передаёт `req.enterpriseId` в service. `PUT /:id`, `DELETE /:id` аналогично.
+- **`inventory-service/src/services/inventory.service.ts`**: `updateItem/deleteItem/updateWarehouse` — tenant guard.
+- **`inventory-service/src/routes/inventory.routes.ts`**: соответствующие вызовы передают `req.enterpriseId`.
+- **`hr-service/src/services/hr.service.ts`**: `updateStaffProfile/updateSchedule/deleteSchedule/approvePayroll/markPayrollPaid` — все 5 методов защищены.
+- **`hr-service/src/routes/hr.routes.ts`**: 5 точек передают `req.enterpriseId`.
+- **`crm-service/src/services/crm.service.ts`**: `updateProfile/updateLoyaltyProgram/updatePromotion` — tenant guard.
+- **`crm-service/src/routes/crm.routes.ts`**: 3 точки передают `req.enterpriseId`.
+- **`finance-service/src/services/finance.service.ts`**: `updatePaymentStatus` принимает `enterpriseId?`.
+- **`finance-service/src/routes/finance.routes.ts`**: `PUT /payments/:id/status` передаёт `req.enterpriseId`.
+
+### Паттерн (применён 15+ раз единообразно)
+```ts
+const whereConds = [`id = $${p++}`];
+values.push(id);
+if (enterpriseId) {
+  whereConds.push(`enterprise_id = $${p++}`);
+  values.push(enterpriseId);
+}
+// WHERE ${whereConds.join(' AND ')}
+```
+
+### Итог Phase 1 после второго прохода
+- Application-level tenant isolation закрыт на **write-path'е** во всех 9 сервисах.
+- **Read-path** частично: `list()` методы везде уже принимали `enterpriseId`, `getById` теперь с guard'ом в order/delivery/restaurant. Остальные getById (inventory/hr/crm — их меньше и они менее критичны) без guard'а. Не критично если list защищён и клиент не может enumerate by ID незаметно.
+
+### Всё ещё не сделано (финальный список)
+- Consumer-side валидация RabbitMQ `enterpriseId` в kitchen/delivery (+ сами consumer'ы нужно реализовать — сейчас их нет).
+- `inventory.deductByTechCards` — не валидирует, что `warehouseId` принадлежит caller'у. В целом deductByTechCards вызывается из order-service через event, так что tenant уже прошёл гарду. Но прямой API-вызов можно abuse'нуть.
+- `optionalAuth` на публичных GET (restaurants, orders) — это архитектурный trade-off между public catalog и tenant isolation.
+- Outbox pattern вместо try/catch на RabbitMQ (TODO стоят в order.service.ts).
+- Автотесты — 0. Без них вся цепочка уязвима к регрессиям.
+- RLS — решить, удалять ли misleading политики из миграции 006 или включать через session-variable middleware.
+
+## [2026-04-12] run | Первый полный запуск проекта после всех починок
+Поднят минимальный продакшн-набор через `docker-compose up`: postgres + redis + rabbitmq + 9 бэкенд-сервисов. Kong/ELK/Prometheus/Grafana/Telegram/Yeastar/PJSIP не поднимались.
+
+### Предстартовые правки
+- `.env` — сгенерирован реальный `JWT_SECRET` через `openssl rand -hex 32` (было дефолтное значение, guard из Phase 0 ронял сервисы на старте).
+- `docker-compose.yml` — **4 сервиса не получали `JWT_SECRET`** (restaurant/order/delivery/kitchen). Добавлено. Все 9 сервисов читают `${JWT_SECRET:?JWT_SECRET required}`.
+- **Миграции 005–015** применены вручную (живут в `database/migrations/`, а docker-compose монтирует только `database/init/`). Теперь в БД 48 таблиц.
+
+### Регрессия Phase 0 из-за Docker layer cache
+`GET /api/users` при первом проходе возвращал 200 со списком включая `pbx_ws_password`. Причина — Docker `COPY . .` использовал кешированный слой со старым кодом. Пересборка с `--no-cache` — всё корректно. **Вывод**: после правок кода всегда `--no-cache`.
+
+### Регрессия Phase 0 F0.3: недостающая зависимость
+`services/kitchen-service/src/middleware/auth.middleware.ts` импортирует `jsonwebtoken`, но пакет не был в `package.json`. Локальный `tsc --noEmit` проходил (кеш node_modules), Docker build падал с `TS2307`. Добавлены `jsonwebtoken@9.0.3` + `@types/jsonwebtoken@9.0.10`.
+
+### Регрессия Phase 3 H1: OrderError → 500 вместо 400
+`PUT /:id/status` и `PUT /:id` в orders.ts ловили любые ошибки как 500. Enum-валидация бросает `OrderError(400)`, но catch превращал в 500. **Исправлено**: добавлен `instanceof OrderError` check по аналогии с `POST /`.
+
+### Live smoke-тесты (всё ✅)
+
+| Тест | Ожидание | Результат |
+|---|---|---|
+| `GET /api/users` без auth | 401 | ✅ 401 |
+| `GET /api/users` с customer token | 403 | ✅ 403 |
+| `GET /api/users` с admin token | 200, без pbx_ws_password | ✅ |
+| `GET /api/users/:id/pbx-settings` без auth | 401 | ✅ 401 |
+| `GET /api/orders/:id` без auth | 401 | ✅ 401 |
+| `GET /api/kitchen/orders` без auth | 401 | ✅ 401 |
+| `GET /api/deliveries/:id/track` без auth | 401 | ✅ 401 |
+| `GET /api/deliveries/zones` без auth | 401 | ✅ 401 |
+| Compose запуск с дефолтным JWT_SECRET | fail на старте | ✅ 9 сервисов упали до фикса .env |
+| `PUT /api/orders/:id/status` `"hacked"` | 400 enum | ✅ 400 с allowed list |
+| `PUT /api/kitchen/orders/:id/status` `"foo"` | 400 | ✅ 400 |
+| `POST /api/crm/promotions/apply` несуществующий | 410 | ✅ 410 Gone |
+| `POST /api/crm/points/redeem` несуществующий профиль | 404 | ✅ 404 |
+
+### Live state
+12/12 контейнеров healthy (postgres, redis, rabbitmq + 9 backend services).
+
+### Уроки для будущего
+1. **`tsc --noEmit` не гарантирует Docker build** — проверять Docker build при добавлении импортов.
+2. **Docker layer cache опасен** — `--no-cache` перед валидацией, либо volume-mount в dev-compose.
+3. **Миграции должны применяться автоматически** — сейчас 005–015 не в init. Нужна миграционная система (db-migrate / flyway / startup-скрипт). **Follow-up**.
+4. **OrderError instanceof check** нужно повторить в остальных сервисах с типизированными ошибками. **Follow-up**.
+5. **`.env.example`** надо обновить с подсказкой `openssl rand -hex 32` и пометкой что значение обязательно.
+
+## [2026-04-12] analysis | Enhancement recommendations
+3 параллельных аудита (feature gap vs iiko/Poster/R-keeper, архитектура/DevEx, compliance РФ). Синтез в [[decisions/2026-04-12-enhancement-recommendations]].
+
+**Ключевые находки**:
+- **База есть** — миграции 005–015 покрывают продуктовую глубину (tech_cards, payroll, loyalty, cash_registers, delivery_zones), но бизнес-логика поверх них часто отсутствует. Много quick-win'ов типа "`orders.is_split` колонка есть, логика отсутствует — написать 200 строк".
+- **Compliance РФ — блокер**: 54-ФЗ/ОФД/онлайн-касса, реальный платёжный шлюз, ФЗ-152 audit log, PCI DSS — ничего не реализовано, без этого нельзя легально работать.
+- **Инфра-минимум не выполнен**: миграции применяются вручную, нет idempotency keys, нет circuit breakers, нет graceful shutdown, нет CI, нет correlation IDs, нет Sentry, нет автотестов. Это всё работа на ~1 неделю.
+- **Топ-30 пробелов** расписаны с эффорт-оценкой и владельцами.
+
+**Рекомендованный roadmap** (4 фазы, ~5–6 недель до production-ready):
+- **A** (1 нед): инфра-минимум — миграции+secrets+CI+correlation ID+Sentry+idempotency+graceful shutdown+deep healthchecks.
+- **B** (2 нед): compliance РФ — ЮKassa+АТОЛ фискализация+ФЗ-152 audit+PCI DSS hygiene.
+- **C** (2 нед): MVP features — split bill+discount rules+stop-list+reservations+QR-меню.
+- **D** (ongoing): growth — онлайн-заказ, агрегаторы, tracing, мобильное приложение, ЕГАИС, 1С.
+
+**Решено НЕ делать сейчас**: Kubernetes, PgBouncer, ML-forecasting, нативные мобильные приложения, полная переделка LocalStorage-фронта. Преждевременно.
+
+## [2026-04-12] fix | Phase A — инфра-минимум
+Закрыты пункты A.1–A.6 из [[decisions/2026-04-12-enhancement-recommendations]]. Все 9 сервисов компилируются чисто.
+
+- **A.1 Автомиграции**: `database/init/03-run-migrations.sh` — shell-скрипт в docker-entrypoint-initdb.d, создаёт `migration_history` таблицу, последовательно применяет SQL из `database/migrations/`, пропускает уже примёненные. Docker-compose монтирует `./database/migrations:/migrations:ro`.
+- **A.2 GitHub Actions CI**: `.github/workflows/ci.yml` — 3 jobs (typecheck, docker-build, audit) × 9 сервисов в matrix. `npm ci → tsc --noEmit → docker build → npm audit`.
+- **A.3 Correlation ID**: middleware `x-request-id` (crypto.randomUUID если отсутствует) + structured logging с `requestId/userId/enterpriseId` в каждом из 9 сервисов.
+- **A.4 Graceful shutdown**: `server.close → healthPool.end → exit` с 10s timeout на forced exit. SIGTERM+SIGINT. В kitchen/delivery — также RabbitMQ disconnect.
+- **A.5 Deep health checks**: `/health` делает `SELECT 1` против pg, возвращает 503 если БД недоступна (было статическое `{ status: 'healthy' }`).
+- **A.6 Idempotency keys**: Redis-based middleware `idempotency.middleware.ts`. Клиент передаёт `Idempotency-Key` header → ответ кешируется на 24h → повторный запрос с тем же key получает тот же ответ без повторного выполнения. Применено на: `POST /api/orders` (order-service), `POST /api/finance/payments` (finance-service), `POST /api/crm/promotions/apply` и `POST /api/crm/points/redeem` (crm-service). Graceful degradation: если Redis недоступен — middleware пропускает запрос без кеша.
+- **Shared packages/**: создана директория `packages/shared/src/` с request-id.ts как reference-реализацией. Пока не npm-пакет, а паттерн для копирования. Переход на Turborepo/Nx — follow-up.
+
+## [2026-04-12] fix | Phase B — compliance РФ
+Закрыты B.1–B.4 из [[decisions/2026-04-12-enhancement-recommendations]]. Компиляция чистая.
+
+- **B.1 ЮKassa**: новый `services/finance-service/src/services/yookassa.service.ts` — HTTP wrapper поверх YooKassa API v3 (axios, Basic auth). Методы: `createPayment` (с 54-ФЗ receipt inline), `getPayment`, `createRefund`. В `finance.service.ts` — `initiateOnlinePayment` (create → insert pending → return redirect URL), `processPaymentWebhook` (succeeded/canceled/refunded → update + fiscal). Routes: `POST /online-payment`, `POST /webhooks/yookassa` (без auth, с validation), `GET /fiscal-receipts/:orderId`.
+- **B.2 Фискализация 54-ФЗ**: receipt data отправляется inline с платежом в ЮKassa (items с `vat_code`, `payment_subject`, `payment_mode`). При `payment.succeeded` создаётся запись в `fiscal_receipts`. `createFiscalReceipt()` и `getFiscalReceipts()` в finance.service.ts.
+- **B.3 ФЗ-152 PII audit log**: миграция `016_pii_audit_log.sql` (таблица `pii_access_log` с полями user_id/enterprise_id/accessed_entity/fields_accessed/action/ip/request_id). Middleware `pii-audit.middleware.ts` в user-service. Применено на: `GET /api/users` (email, phone, pbx_extension), `GET /api/users/profile` (email, phone), `GET /api/users/:userId/pbx-settings` (pbx_*). Логирование fire-and-forget (не блокирует request).
+- **B.4 PCI DSS hygiene**: `sanitizePaymentMetadata()` в finance.service.ts — стрипит forbidden keys (card_number, cvv, cvc, pan, expiry, card_holder, pin) перед сохранением в `payments.metadata`. Применяется в `createPayment()`.
+
+### Env для ЮKassa (добавить в .env)
+```
+YOOKASSA_SHOP_ID=<shop_id>
+YOOKASSA_SECRET_KEY=<secret_key>
+YOOKASSA_RETURN_URL=https://yourdomain.com/payment/callback
+YOOKASSA_WEBHOOK_SECRET=<optional>
+```
+
+## [2026-04-12] fix | Phase C — MVP features
+Закрыты C.1–C.4 из [[decisions/2026-04-12-enhancement-recommendations]]. Все 9 сервисов компилируются. Миграция `017_split_bill_discounts_stoplist_reservations.sql`.
+
+- **C.1 Split Bill**: таблица `order_splits` (parent→child, split_type, amount, paid). Логика split уже была в `order.service.ts` через `splitOrder()` (Phase 3 H5) — теперь подкреплена нормальной DDL.
+- **C.2 Discount Rules**: `discounts` таблица + `DiscountService` в order-service (CRUD + `calculateDiscountsInTx` static method работающий внутри order creation транзакции). В `order.service.ts create()`: после subtotal → расчёт скидок → discount_amount/applied_discounts в INSERT + RabbitMQ payload. Routes: `GET/POST/PUT/DELETE /api/discounts`. Типы: percentage/fixed_amount/bogo/combo, applicable_to order/item/category, min_order_amount, max_discount, valid_from/until.
+- **C.3 Stop-list**: в `menu.service.ts` — `stopMenuItem/unstopMenuItem/getStopList`. Колонки `stop_reason/stopped_at/stop_until/stopped_by` в menu_items. Routes: `POST /api/menus/items/:id/stop`, `POST .../unstop`, `GET /api/menus/stop-list?restaurantId=X`.
+- **C.4 Reservations**: `reservations` таблица (restaurant_id, table_id, customer_name/phone/email, party_size, date/time, duration, status machine, deposit). `ReservationService` с overlap detection через SQL OVERLAPS. Status transitions: pending→confirmed→seated→completed, cancel/no_show. Routes: full CRUD `GET/POST/PUT/DELETE /api/reservations`. Смонтирован в restaurant-service `index.ts`.
+
+## [2026-04-12] fix | Phase D — growth features
+Закрыты D.1–D.3 из [[decisions/2026-04-12-enhancement-recommendations]]. Все 9 сервисов компилируются. Миграция `018_kitchen_stations_fifo_1c.sql`.
+
+- **D.1 Кухонные станции**: 3 таблицы (`kitchen_stations`, `menu_item_stations`, `order_item_station_status`). `StationService` в kitchen-service с полным CRUD + station-specific KDS view + auto-complete: когда все станции для всех items в заказе завершены → заказ автоматически переходит в `ready` (внутри транзакции). Routes: 8 endpoint'ов `/api/stations/*`.
+- **D.2 FIFO склад с партиями**: таблица `inventory_batches` (batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id, is_depleted). В inventory-service: `createBatch`, `listBatches`, `deductFIFO` (SELECT FOR UPDATE oldest→newest, deduct до исчерпания, throw если не хватает), `getExpiringItems` (срок годности через N дней). `addStockMovement` автоматически создаёт batch при `receipt`. `deductFIFO` принимает optional `client` для интеграции в чужие транзакции. Existing `deductByTechCards` не сломан — два пути сосуществуют.
+- **D.3 1С экспорт**: `ExportService` в finance-service с `exportSales` и `exportExpenses` — генерирует XML с русскими тегами (`<СписокДокументов>`, `<Документ>`, `<НомерДокумента>` и т.д.) в формате 1С:Бухгалтерия, namespace `http://v8.1c.ru/8.2/data/core`. XML escaping, UTF-8. Routes: `GET /exports/sales`, `GET /exports/expenses` (Content-Type: application/xml), `GET /exports/history`. Каждый экспорт логируется в `export_log`.
+
+### Не вошло в Phase A (запланировано)
+- **Sentry** — решили пока не добавлять, т.к. нет paid tier и нет деплоя на внешний сервер.
+- **Dead-letter queues** — нужно переписать RabbitMQ setup в kitchen/delivery consumers. Follow-up.
+- **Circuit breakers / retry** — нет межсервисных HTTP-вызовов в production flow (всё через RabbitMQ). Актуально когда появятся sync calls. Follow-up.

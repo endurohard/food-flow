@@ -1236,6 +1236,7 @@
   <!-- Notification -->
   <div class="notification" id="notification"></div>
 
+  <script src="js/auth.js"></script>
   <script>
     let dishes = [];
     let categories = [];
@@ -1247,6 +1248,7 @@
     let currentCategory = 'all';
     let editingDishId = null;
     let ingredientRowCounter = 0;
+    let currentRestaurantId = null;
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1263,32 +1265,83 @@
       overlay.classList.remove('active');
     }
 
-    // Initialize with sample data
-    function initializeData() {
-      const savedDishes = localStorage.getItem('menuDishes');
-      const savedCategories = localStorage.getItem('menuCategories');
-      const savedModifiers = localStorage.getItem('menuModifiers');
-      const savedStoplist = localStorage.getItem('menuStoplist');
-      const savedRecipes = localStorage.getItem('menuRecipes');
-      const savedInventory = localStorage.getItem('inventory');
+    // Load data from API with localStorage fallback
+    async function initializeData() {
+      try {
+        // Get restaurant list and use first one
+        const restRes = await authFetch('/api/restaurants');
+        if (restRes.ok) {
+          const restData = await restRes.json();
+          if (restData.restaurants && restData.restaurants.length > 0) {
+            currentRestaurantId = restData.restaurants[0].id;
 
-      if (savedCategories) {
-        categories = JSON.parse(savedCategories);
-      } else {
-        categories = [
-          { id: 1, name: 'Пицца', icon: '🍕', order: 1 },
-          { id: 2, name: 'Суши', icon: '🍣', order: 2 },
-          { id: 3, name: 'Бургеры', icon: '🍔', order: 3 },
-          { id: 4, name: 'Салаты', icon: '🥗', order: 4 },
-          { id: 5, name: 'Напитки', icon: '🥤', order: 5 },
-          { id: 6, name: 'Десерты', icon: '🍰', order: 6 }
-        ];
+            // Load categories from API
+            const catRes = await authFetch(`/api/restaurants/${currentRestaurantId}/menu-categories`);
+            if (catRes.ok) {
+              const catData = await catRes.json();
+              if (catData.categories && catData.categories.length > 0) {
+                categories = catData.categories.map(c => ({
+                  id: c.id,
+                  name: c.name,
+                  icon: '',
+                  order: c.display_order
+                }));
+              }
+            }
+
+            // Load menu items from API
+            const itemsRes = await authFetch(`/api/restaurants/${currentRestaurantId}/menu-items`);
+            if (itemsRes.ok) {
+              const itemsData = await itemsRes.json();
+              if (itemsData.items && itemsData.items.length > 0) {
+                dishes = itemsData.items.map(i => ({
+                  id: i.id,
+                  name: i.name,
+                  category: i.category_id,
+                  categoryName: i.category_name,
+                  price: parseFloat(i.price),
+                  cost: i.cost_price ? parseFloat(i.cost_price) : 0,
+                  description: i.description || '',
+                  image: i.image_url || '',
+                  weight: i.weight_grams ? `${i.weight_grams}г` : '',
+                  calories: i.calories || 0,
+                  cookTime: i.preparation_time || 0,
+                  isAvailable: i.is_available,
+                  isVegetarian: i.is_vegetarian,
+                  isVegan: i.is_vegan,
+                  isGlutenFree: i.is_gluten_free
+                }));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log('API unavailable, using localStorage fallback:', e.message);
       }
 
-      if (savedDishes) {
-        dishes = JSON.parse(savedDishes);
-      } else {
-        dishes = [
+      // Fallback to localStorage if no API data
+      if (categories.length === 0) {
+        const savedCategories = localStorage.getItem('menuCategories');
+        if (savedCategories) {
+          categories = JSON.parse(savedCategories);
+        } else {
+          categories = [
+            { id: 1, name: 'Пицца', icon: '🍕', order: 1 },
+            { id: 2, name: 'Суши', icon: '🍣', order: 2 },
+            { id: 3, name: 'Бургеры', icon: '🍔', order: 3 },
+            { id: 4, name: 'Салаты', icon: '🥗', order: 4 },
+            { id: 5, name: 'Напитки', icon: '🥤', order: 5 },
+            { id: 6, name: 'Десерты', icon: '🍰', order: 6 }
+          ];
+        }
+      }
+
+      if (dishes.length === 0) {
+        const savedDishes = localStorage.getItem('menuDishes');
+        if (savedDishes) {
+          dishes = JSON.parse(savedDishes);
+        } else {
+          dishes = [
           { id: 1, name: 'Маргарита', description: 'Классическая пицца с томатами, моцареллой и базиликом', category: 1, price: 450, weight: '500 г', calories: 890, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: true, isSpicy: false },
           { id: 2, name: 'Пепперони', description: 'Пицца с острой салями', category: 1, price: 520, weight: '550 г', calories: 980, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: false, isSpicy: true },
           { id: 3, name: 'Филадельфия', description: 'Ролл с лососем и сливочным сыром', category: 2, price: 380, weight: '250 г', calories: 420, cookTime: 10, icon: '🍣', isNew: true, isHot: false, isVegetarian: false, isSpicy: false },
@@ -1296,8 +1349,10 @@
           { id: 5, name: 'Чизбургер', description: 'Сочный бургер с говядиной', category: 3, price: 320, weight: '300 г', calories: 650, cookTime: 12, icon: '🍔', isNew: false, isHot: false, isVegetarian: false, isSpicy: false },
           { id: 6, name: 'Цезарь', description: 'Салат с курицей гриль', category: 4, price: 280, weight: '250 г', calories: 340, cookTime: 8, icon: '🥗', isNew: false, isHot: true, isVegetarian: false, isSpicy: false }
         ];
+        }
       }
 
+      const savedModifiers = localStorage.getItem('menuModifiers');
       if (savedModifiers) {
         modifiers = JSON.parse(savedModifiers);
       } else {
@@ -1311,12 +1366,14 @@
         ];
       }
 
+      const savedStoplist = localStorage.getItem('menuStoplist');
       if (savedStoplist) {
         stoplist = JSON.parse(savedStoplist);
       } else {
         stoplist = [];
       }
 
+      const savedRecipes = localStorage.getItem('menuRecipes');
       if (savedRecipes) {
         recipes = JSON.parse(savedRecipes);
       } else {
@@ -1389,6 +1446,7 @@
         ];
       }
 
+      const savedInventory = localStorage.getItem('inventory');
       if (savedInventory) {
         inventory = JSON.parse(savedInventory);
       } else {
@@ -1581,7 +1639,7 @@
       document.getElementById('dishModal').classList.add('active');
     }
 
-    function saveDish(event) {
+    async function saveDish(event) {
       event.preventDefault();
 
       const formData = {
@@ -1592,21 +1650,55 @@
         weight: document.getElementById('dishWeight').value,
         calories: parseInt(document.getElementById('dishCalories').value) || null,
         cookTime: parseInt(document.getElementById('dishCookTime').value) || 15,
-        icon: document.getElementById('dishIcon').value || '🍽️',
+        icon: document.getElementById('dishIcon').value || '',
         isNew: document.getElementById('dishIsNew').checked,
         isHot: document.getElementById('dishIsHot').checked,
         isVegetarian: document.getElementById('dishIsVegetarian').checked,
         isSpicy: document.getElementById('dishIsSpicy').checked
       };
 
+      // Try API first
+      if (currentRestaurantId) {
+        try {
+          const apiData = {
+            name: formData.name,
+            description: formData.description,
+            categoryId: typeof formData.category === 'string' ? formData.category : undefined,
+            price: formData.price,
+            calories: formData.calories,
+            preparationTime: formData.cookTime,
+            isVegetarian: formData.isVegetarian,
+            weightGrams: formData.weight ? parseInt(formData.weight) : undefined
+          };
+
+          if (editingDishId) {
+            await authFetch(`/api/restaurants/menu-items/${editingDishId}`, {
+              method: 'PUT',
+              body: JSON.stringify(apiData)
+            });
+          } else {
+            const res = await authFetch(`/api/restaurants/${currentRestaurantId}/menu-items`, {
+              method: 'POST',
+              body: JSON.stringify(apiData)
+            });
+            if (res.ok) {
+              const data = await res.json();
+              formData.id = data.item.id;
+            }
+          }
+        } catch (e) {
+          console.log('API save failed, using localStorage:', e.message);
+        }
+      }
+
       if (editingDishId) {
         const index = dishes.findIndex(d => d.id === editingDishId);
         dishes[index] = { ...dishes[index], ...formData };
-        showNotification('✅ Блюдо обновлено');
+        showNotification('Блюдо обновлено');
       } else {
-        const newId = dishes.length > 0 ? Math.max(...dishes.map(d => d.id)) + 1 : 1;
+        const newId = formData.id || (dishes.length > 0 ? Math.max(...dishes.map(d => typeof d.id === 'number' ? d.id : 0)) + 1 : 1);
         dishes.push({ id: newId, ...formData });
-        showNotification('✅ Блюдо добавлено');
+        showNotification('Блюдо добавлено');
       }
 
       saveData();
@@ -1615,8 +1707,12 @@
       closeDishModal();
     }
 
-    function deleteDish(id) {
+    async function deleteDish(id) {
       if (!confirm('Удалить блюдо?')) return;
+
+      if (currentRestaurantId && typeof id === 'string') {
+        try { await authFetch(`/api/restaurants/menu-items/${id}`, { method: 'DELETE' }); } catch {}
+      }
 
       dishes = dishes.filter(d => d.id !== id);
       stoplist = stoplist.filter(sid => sid !== id);

@@ -1,229 +1,197 @@
 import { Router, Request, Response } from 'express';
+import Joi from 'joi';
+import { OrderService, OrderError } from '../services/order.service';
+import { authenticateUser, optionalAuth } from '../middleware/auth.middleware';
+import { idempotencyCheck } from '../middleware/idempotency.middleware';
+import { RabbitMQPublisher } from '../services/rabbitmq.service';
+import { config } from '../config';
 
 const router = Router();
+const rabbitmq = new RabbitMQPublisher();
+const orderService = new OrderService(config.database.url, rabbitmq);
 
-// In-memory storage (в production использовать PostgreSQL)
-interface Order {
-  id: number;
-  restaurantId: number;
-  customerId?: number | null;
-  customer: {
-    name: string;
-    phone: string;
-  };
-  deliveryAddress?: string;
-  items: Array<{
-    menuItemId: number;
-    name: string;
-    quantity: number;
-    price: number;
-    specialInstructions?: string;
-  }>;
-  subtotal: number;
-  deliveryFee: number;
-  tax: number;
-  total: number;
-  specialInstructions?: string;
-  orderType: 'delivery' | 'pickup' | 'dine-in';
-  paymentMethod: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
-  courierId?: number | null;
-  courierName?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Connect RabbitMQ on startup
+rabbitmq.connect().catch(err => console.warn('RabbitMQ not available:', err.message));
 
-let orders: Order[] = [];
-let nextOrderId = 1;
+const createOrderSchema = Joi.object({
+  restaurantId: Joi.string().uuid().required(),
+  customerId: Joi.string().uuid().optional(),
+  deliveryAddressId: Joi.string().uuid().allow(null).optional(),
+  orderType: Joi.string().valid('delivery', 'pickup', 'dine_in').optional(),
+  tableId: Joi.string().uuid().allow(null).optional(),
+  waiterId: Joi.string().uuid().allow(null).optional(),
+  guestsCount: Joi.number().integer().min(1).optional(),
+  items: Joi.array().items(Joi.object({
+    menuItemId: Joi.string().uuid().required(),
+    quantity: Joi.number().integer().min(1).required(),
+    specialInstructions: Joi.string().allow('').optional(),
+    modifiers: Joi.array().items(Joi.object({
+      modifierId: Joi.string().uuid().required(),
+      name: Joi.string().required(),
+      priceAdjustment: Joi.number().required()
+    })).optional()
+  })).min(1).required(),
+  specialInstructions: Joi.string().allow('').optional(),
+  paymentMethod: Joi.string().optional()
+});
 
 /**
  * GET /api/orders
- * Получить все заказы
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', optionalAuth, async (req: Request, res: Response) => {
   try {
-    res.json({
-      success: true,
-      data: orders,
+    const result = await orderService.list({
+      enterpriseId: req.enterpriseId,
+      restaurantId: req.query.restaurantId as string,
+      customerId: req.query.customerId as string || req.userId,
+      status: req.query.status as string,
+      orderType: req.query.orderType as string,
+      dateFrom: req.query.dateFrom as string,
+      dateTo: req.query.dateTo as string,
+      limit: parseInt(req.query.limit as string) || 50,
+      offset: parseInt(req.query.offset as string) || 0
     });
+
+    return res.json({ success: true, ...result });
   } catch (error) {
     console.error('Failed to get orders:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get orders',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to get orders' });
   }
 });
 
 /**
  * GET /api/orders/:id
- * Получить заказ по ID
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
-    const order = orders.find((o) => o.id === id);
-
+    const order = await orderService.getById(req.params.id, req.enterpriseId);
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        error: 'Order not found',
-      });
+      return res.status(404).json({ success: false, error: 'Order not found' });
     }
-
-    res.json({
-      success: true,
-      data: order,
-    });
+    return res.json({ success: true, data: order });
   } catch (error) {
     console.error('Failed to get order:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get order',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to get order' });
   }
 });
 
 /**
  * POST /api/orders
- * Создать новый заказ
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
   try {
-    const {
-      restaurantId,
-      customerId,
-      customer,
-      deliveryAddress,
-      items,
-      subtotal,
-      deliveryFee,
-      tax,
-      total,
-      specialInstructions,
-      orderType,
-      paymentMethod,
-    } = req.body;
-
-    // Валидация
-    if (!restaurantId || !customer || !items || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-      });
+    const { error, value } = createOrderSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, error: error.details[0].message });
     }
 
-    const newOrder: Order = {
-      id: nextOrderId++,
-      restaurantId,
-      customerId: customerId || null,
-      customer,
-      deliveryAddress,
-      items,
-      subtotal: subtotal || 0,
-      deliveryFee: deliveryFee || 0,
-      tax: tax || 0,
-      total: total || 0,
-      specialInstructions: specialInstructions || '',
-      orderType: orderType || 'delivery',
-      paymentMethod: paymentMethod || 'cash',
-      status: 'pending',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    // Set customerId from JWT if not provided
+    if (!value.customerId) {
+      value.customerId = req.userId;
+    }
+    // Propagate tenant from JWT claim
+    value.enterpriseId = req.enterpriseId;
 
-    orders.push(newOrder);
+    const order = await orderService.create(value);
 
-    console.log(`Order created: #${newOrder.id} - ${customer.name} - ${total} ₽`);
-
-    // TODO: Отправить заказ в RabbitMQ для kitchen-service
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      data: newOrder,
-      message: 'Order created successfully',
+      data: order,
+      message: 'Order created successfully'
     });
   } catch (error) {
+    if (error instanceof OrderError) {
+      return res.status(error.statusCode).json({ success: false, error: error.message });
+    }
     console.error('Failed to create order:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create order',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to create order' });
   }
 });
 
 /**
- * PUT /api/orders/:id
- * Обновить статус заказа
+ * PUT /api/orders/:id/status
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id/status', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
-    const index = orders.findIndex((o) => o.id === id);
-
-    if (index === -1) {
-      return res.status(404).json({
-        success: false,
-        error: 'Order not found',
-      });
+    const { status } = req.body;
+    if (!status) {
+      return res.status(400).json({ success: false, error: 'Status is required' });
     }
 
-    const { status, courierId, courierName } = req.body;
+    const order = await orderService.updateStatus(req.params.id, status, req.enterpriseId);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
 
-    orders[index] = {
-      ...orders[index],
-      status: status || orders[index].status,
-      courierId: courierId !== undefined ? courierId : orders[index].courierId,
-      courierName: courierName || orders[index].courierName,
-      updatedAt: new Date(),
-    };
-
-    console.log(`Order updated: #${orders[index].id} - status: ${orders[index].status}${orders[index].courierName ? ` - courier: ${orders[index].courierName}` : ''}`);
-
-    res.json({
-      success: true,
-      data: orders[index],
-    });
+    return res.json({ success: true, data: order });
   } catch (error) {
+    if (error instanceof OrderError) {
+      return res.status(error.statusCode).json({ success: false, error: error.message });
+    }
     console.error('Failed to update order:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update order',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to update order' });
+  }
+});
+
+/**
+ * PUT /api/orders/:id (legacy endpoint for backward compatibility)
+ */
+router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    if (status) {
+      const order = await orderService.updateStatus(req.params.id, status, req.enterpriseId);
+      if (!order) {
+        return res.status(404).json({ success: false, error: 'Order not found' });
+      }
+      return res.json({ success: true, data: order });
+    }
+
+    return res.status(400).json({ success: false, error: 'No update fields provided' });
+  } catch (error) {
+    if (error instanceof OrderError) {
+      return res.status(error.statusCode).json({ success: false, error: error.message });
+    }
+    console.error('Failed to update order:', error);
+    return res.status(500).json({ success: false, error: 'Failed to update order' });
+  }
+});
+
+/**
+ * POST /api/orders/:id/split
+ */
+router.post('/:id/split', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { itemGroups } = req.body;
+    if (!itemGroups || !Array.isArray(itemGroups)) {
+      return res.status(400).json({ success: false, error: 'itemGroups array is required' });
+    }
+
+    const childOrders = await orderService.splitOrder(req.params.id, itemGroups);
+
+    return res.json({ success: true, data: childOrders });
+  } catch (error) {
+    if (error instanceof OrderError) {
+      return res.status(error.statusCode).json({ success: false, error: error.message });
+    }
+    console.error('Failed to split order:', error);
+    return res.status(500).json({ success: false, error: 'Failed to split order' });
   }
 });
 
 /**
  * DELETE /api/orders/:id
- * Отменить заказ
  */
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
-    const index = orders.findIndex((o) => o.id === id);
-
-    if (index === -1) {
-      return res.status(404).json({
-        success: false,
-        error: 'Order not found',
-      });
+    const order = await orderService.updateStatus(req.params.id, 'cancelled');
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
     }
-
-    orders[index].status = 'cancelled';
-    orders[index].updatedAt = new Date();
-
-    console.log(`Order cancelled: #${orders[index].id}`);
-
-    res.json({
-      success: true,
-      data: orders[index],
-    });
+    return res.json({ success: true, data: order });
   } catch (error) {
     console.error('Failed to cancel order:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to cancel order',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to cancel order' });
   }
 });
 

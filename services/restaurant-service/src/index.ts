@@ -1,92 +1,94 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import crypto from 'crypto';
 import pkg from 'pg';
 const { Pool } = pkg;
+import { config } from './config';
+import { logger } from './utils/logger';
+import restaurantRoutes from './routes/restaurant.routes';
+import menuRoutes from './routes/menu.routes';
+import pbxRoutes from './routes/pbx.routes';
+import reservationRoutes from './routes/reservation.routes';
 
 const app = express();
-const PORT = process.env.PORT || 3002;
 
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
-});
+const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
 
+// Middleware
+app.use(helmet());
+app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', service: 'restaurant-service' });
+// Correlation ID middleware
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (!req.headers['x-request-id']) {
+    req.headers['x-request-id'] = crypto.randomUUID();
+  }
+  next();
 });
 
-// Get PBX settings for a restaurant
-app.get('/api/restaurants/:id/pbx-settings', async (req, res) => {
+// Structured logging middleware
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  logger.info(`${req.method} ${req.path}`, {
+    requestId: req.headers['x-request-id'],
+    userId: (req as any).userId,
+    enterpriseId: (req as any).enterpriseId
+  });
+  next();
+});
+
+// Deep health check
+app.get('/health', async (_req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const result = await pool.query(
-      `SELECT pbx_enabled, pbx_server, pbx_port, pbx_transport,
-              pbx_rtp_port_min, pbx_rtp_port_max,
-              pbx_websocket_url, pbx_use_websocket
-       FROM restaurants
-       WHERE id = $1`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Restaurant not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error: any) {
-    console.error('Failed to get PBX settings:', error);
-    res.status(500).json({ error: 'Failed to get PBX settings' });
+    await healthPool.query('SELECT 1');
+    res.json({ status: 'healthy', service: 'restaurant-service', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'unhealthy', service: 'restaurant-service', error: 'database unreachable' });
   }
 });
 
-// Update PBX settings for a restaurant
-app.put('/api/restaurants/:id/pbx-settings', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      pbx_enabled,
-      pbx_server,
-      pbx_port,
-      pbx_transport,
-      pbx_rtp_port_min,
-      pbx_rtp_port_max,
-      pbx_websocket_url,
-      pbx_use_websocket
-    } = req.body;
+// Routes
+app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/restaurants', menuRoutes);  // menu routes are nested under /api/restaurants/:id/...
+app.use('/api/restaurants', pbxRoutes);   // PBX settings (preserved from original)
+app.use('/api/reservations', reservationRoutes);
 
-    const result = await pool.query(
-      `UPDATE restaurants
-       SET pbx_enabled = $1, pbx_server = $2, pbx_port = $3,
-           pbx_transport = $4, pbx_rtp_port_min = $5, pbx_rtp_port_max = $6,
-           pbx_websocket_url = $7, pbx_use_websocket = $8,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9
-       RETURNING *`,
-      [
-        pbx_enabled,
-        pbx_server,
-        pbx_port,
-        pbx_transport,
-        pbx_rtp_port_min,
-        pbx_rtp_port_max,
-        pbx_websocket_url,
-        pbx_use_websocket,
-        id
-      ]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Restaurant not found' });
-    }
-
-    res.json({ success: true, restaurant: result.rows[0] });
-  } catch (error: any) {
-    console.error('Failed to update PBX settings:', error);
-    res.status(500).json({ error: 'Failed to update PBX settings' });
-  }
+// 404 handler
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Route not found`
+  });
 });
 
-app.listen(PORT, () => {
-  console.log(`Restaurant service listening on port ${PORT}`);
+// Error handler
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: config.nodeEnv === 'development' ? err.message : 'Something went wrong'
+  });
 });
+
+// Start server
+const PORT = config.port;
+const server = app.listen(PORT, () => {
+  logger.info(`Restaurant service listening on port ${PORT}`);
+  logger.info(`Environment: ${config.nodeEnv}`);
+});
+
+// Graceful shutdown
+const shutdown = (signal: string) => {
+  logger.info(`${signal} received, shutting down gracefully`);
+  server.close(async () => {
+    await healthPool.end().catch(() => {});
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+export default app;

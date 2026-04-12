@@ -63,7 +63,7 @@ export interface UpdateEnterpriseInput {
 }
 
 export class EnterpriseService {
-  private pool: Pool;
+  private pool: InstanceType<typeof Pool>;
 
   constructor(connectionString: string) {
     this.pool = new Pool({ connectionString });

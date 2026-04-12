@@ -3,6 +3,9 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
+import crypto from 'crypto';
+import pkg from 'pg';
+const { Pool } = pkg;
 import { config } from './config';
 import { logger } from './utils/logger';
 import { setupSwagger } from './swagger';
@@ -12,9 +15,12 @@ import { PrinterService } from './services/printer.service';
 import { KitchenDisplayService } from './services/kitchen-display.service';
 import kitchenRoutes from './routes/kitchen.routes';
 import printerRoutes from './routes/printer.routes';
+import stationRoutes from './routes/station.routes';
 
 const app = express();
 const httpServer = createServer(app);
+
+const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
 
 // Socket.IO setup for Kitchen Display System
 const io = new Server(httpServer, {
@@ -30,22 +36,32 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
-app.use((req: Request, res: Response, next: NextFunction) => {
+// Correlation ID middleware
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (!req.headers['x-request-id']) {
+    req.headers['x-request-id'] = crypto.randomUUID();
+  }
+  next();
+});
+
+// Structured logging middleware
+app.use((req: Request, _res: Response, next: NextFunction) => {
   logger.info(`${req.method} ${req.path}`, {
-    ip: req.ip,
-    userAgent: req.get('user-agent')
+    requestId: req.headers['x-request-id'],
+    userId: (req as any).userId,
+    enterpriseId: (req as any).enterpriseId
   });
   next();
 });
 
-// Health check
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'healthy',
-    service: 'kitchen-service',
-    timestamp: new Date().toISOString()
-  });
+// Deep health check
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    await healthPool.query('SELECT 1');
+    res.json({ status: 'healthy', service: 'kitchen-service', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'unhealthy', service: 'kitchen-service', error: 'database unreachable' });
+  }
 });
 
 // Metrics
@@ -60,6 +76,7 @@ app.set('io', io);
 // Routes
 app.use('/api/kitchen', kitchenRoutes);
 app.use('/api/printers', printerRoutes);
+app.use('/api/stations', stationRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -130,7 +147,7 @@ async function startServices() {
 
 // Start server
 const PORT = config.port;
-httpServer.listen(PORT, async () => {
+const server = httpServer.listen(PORT, async () => {
   logger.info(`Kitchen service listening on port ${PORT}`);
   logger.info(`Environment: ${config.nodeEnv}`);
   logger.info(`Swagger docs: http://localhost:${PORT}/api-docs`);
@@ -139,16 +156,16 @@ httpServer.listen(PORT, async () => {
 });
 
 // Graceful shutdown
-async function shutdown() {
-  logger.info('Shutting down gracefully...');
-  await rabbitmqService.disconnect();
-  httpServer.close(() => {
-    logger.info('Server closed');
+const shutdown = (signal: string) => {
+  logger.info(`${signal} received, shutting down gracefully`);
+  server.close(async () => {
+    await rabbitmqService.disconnect();
+    await healthPool.end().catch(() => {});
     process.exit(0);
   });
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+  setTimeout(() => process.exit(1), 10_000);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;

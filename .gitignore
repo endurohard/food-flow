@@ -36,3 +36,4 @@ coverage/
 # Database
 *.sqlite
 *.db
+Wiki/.obsidian/

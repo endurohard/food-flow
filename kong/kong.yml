@@ -12,6 +12,10 @@ services:
         paths:
           - /api/auth
         strip_path: false
+      - name: enterprise-routes
+        paths:
+          - /api/enterprises
+        strip_path: false
 
   - name: restaurant-service
     url: http://restaurant-service:3002
@@ -36,6 +40,26 @@ services:
         paths:
           - /api/cart
         strip_path: false
+      - name: table-routes
+        paths:
+          - /api/tables
+        strip_path: false
+
+  - name: inventory-service
+    url: http://inventory-service:3006
+    routes:
+      - name: inventory-routes
+        paths:
+          - /api/inventory
+        strip_path: false
+      - name: supplier-routes
+        paths:
+          - /api/suppliers
+        strip_path: false
+      - name: tech-card-routes
+        paths:
+          - /api/tech-cards
+        strip_path: false
 
   - name: delivery-service
     url: http://delivery-service:3004
@@ -47,6 +71,30 @@ services:
       - name: tracking-routes
         paths:
           - /api/tracking
+        strip_path: false
+
+  - name: hr-service
+    url: http://hr-service:3010
+    routes:
+      - name: hr-routes
+        paths:
+          - /api/hr
+        strip_path: false
+
+  - name: crm-service
+    url: http://crm-service:3011
+    routes:
+      - name: crm-routes
+        paths:
+          - /api/crm
+        strip_path: false
+
+  - name: finance-service
+    url: http://finance-service:3012
+    routes:
+      - name: finance-routes
+        paths:
+          - /api/finance
         strip_path: false
 
   - name: kitchen-service
@@ -103,6 +151,9 @@ services:
         strip_path: false
 
 plugins:
+  # CORS: origins="*" is incompatible with credentials=true (CVE-like).
+  # JWT is passed via Authorization header, not cookies, so credentials can be false.
+  # To allow cookie-based auth, replace origins:"*" with an explicit whitelist.
   - name: cors
     config:
       origins:
@@ -124,7 +175,7 @@ plugins:
         - Authorization
       exposed_headers:
         - X-Auth-Token
-      credentials: true
+      credentials: false
       max_age: 3600
 
   - name: rate-limiting

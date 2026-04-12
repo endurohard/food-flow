@@ -1,6 +1,29 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
+import Joi from 'joi';
+import { AuthService, AuthError } from '../services/auth.service';
+import { config } from '../config';
 
 const router = Router();
+const authService = new AuthService(config.database.url);
+
+// Validation schemas
+const registerSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).max(128).required(),
+  firstName: Joi.string().min(1).max(100).required(),
+  lastName: Joi.string().min(1).max(100).required(),
+  phone: Joi.string().max(20).optional(),
+  role: Joi.string().valid('customer', 'restaurant_owner', 'delivery_driver', 'admin').optional()
+});
+
+const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required()
+});
+
+const refreshSchema = Joi.object({
+  refreshToken: Joi.string().required()
+});
 
 /**
  * @swagger
@@ -13,33 +36,59 @@ const router = Router();
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
+ *             type: object
+ *             required: [email, password, firstName, lastName]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [customer, restaurant_owner, delivery_driver, admin]
  *     responses:
  *       201:
  *         description: User registered successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
  *       400:
  *         description: Invalid input
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  *       409:
  *         description: User already exists
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
-router.post('/register', (req, res) => {
-  // TODO: Implement registration logic
-  res.status(201).json({
-    message: 'Registration endpoint - to be implemented',
-    data: req.body
-  });
+router.post('/register', async (req: Request, res: Response) => {
+  try {
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: error.details[0].message
+      });
+    }
+
+    const result = await authService.register(value);
+
+    return res.status(201).json({
+      user: result.user,
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return res.status(error.statusCode).json({
+        error: error.name,
+        message: error.message
+      });
+    }
+    console.error('Registration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
@@ -53,27 +102,47 @@ router.post('/register', (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
  *       401:
  *         description: Invalid credentials
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
-router.post('/login', (req, res) => {
-  // TODO: Implement login logic
-  res.status(200).json({
-    message: 'Login endpoint - to be implemented',
-    data: req.body
-  });
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const { error, value } = loginSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: error.details[0].message
+      });
+    }
+
+    const result = await authService.login(value);
+
+    return res.status(200).json({
+      user: result.user,
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return res.status(error.statusCode).json({
+        error: error.name,
+        message: error.message
+      });
+    }
+    console.error('Login error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
@@ -82,30 +151,48 @@ router.post('/login', (req, res) => {
  *   post:
  *     summary: Refresh access token
  *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Token refreshed successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 token:
- *                   type: string
  *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Invalid refresh token
  */
-router.post('/refresh', (req, res) => {
-  // TODO: Implement token refresh logic
-  res.status(200).json({
-    message: 'Token refresh endpoint - to be implemented'
-  });
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const { error, value } = refreshSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: error.details[0].message
+      });
+    }
+
+    const tokens = await authService.refreshTokens(value.refreshToken);
+
+    return res.status(200).json({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return res.status(error.statusCode).json({
+        error: error.name,
+        message: error.message
+      });
+    }
+    console.error('Refresh error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
@@ -114,23 +201,33 @@ router.post('/refresh', (req, res) => {
  *   post:
  *     summary: Logout user
  *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Logout successful
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
-router.post('/logout', (req, res) => {
-  // TODO: Implement logout logic
-  res.status(200).json({
-    message: 'Logout endpoint - to be implemented'
-  });
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      await authService.logout(refreshToken);
+    }
+
+    return res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;

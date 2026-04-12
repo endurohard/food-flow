@@ -1,29 +1,59 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
+import Joi from 'joi';
 import pkg from 'pg';
 const { Pool } = pkg;
+import { UserService } from '../services/user.service';
+import { authenticateUser } from '../middleware/enterprise.middleware';
+
+const requireAdmin = (req: Request, res: Response, next: Function): any => {
+  if (req.userRole !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden', message: 'Admin role required' });
+  }
+  next();
+};
+import { config } from '../config';
+import { logPiiAccess } from '../middleware/pii-audit.middleware';
 
 const router = Router();
+const userService = new UserService(config.database.url);
 
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+// Pool for PBX queries (preserving existing functionality)
+const pool = new Pool({ connectionString: config.database.url });
+
+// Validation schemas
+const updateProfileSchema = Joi.object({
+  firstName: Joi.string().min(1).max(100).optional(),
+  lastName: Joi.string().min(1).max(100).optional(),
+  phone: Joi.string().max(20).allow('', null).optional()
+});
+
+const createAddressSchema = Joi.object({
+  title: Joi.string().max(100).optional(),
+  streetAddress: Joi.string().max(255).required(),
+  city: Joi.string().max(100).required(),
+  state: Joi.string().max(100).optional(),
+  postalCode: Joi.string().max(20).optional(),
+  country: Joi.string().max(100).required(),
+  latitude: Joi.number().min(-90).max(90).optional(),
+  longitude: Joi.number().min(-180).max(180).optional(),
+  isDefault: Joi.boolean().optional()
 });
 
 /**
  * @swagger
  * /api/users:
  *   get:
- *     summary: Get all users
+ *     summary: Get all users (admin only)
  *     tags: [Users]
  *     responses:
  *       200:
  *         description: Users list retrieved successfully
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateUser, requireAdmin, logPiiAccess('users', ['email', 'phone', 'pbx_extension']), async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT id, email, first_name, last_name, phone, role,
-              pbx_extension, pbx_username, pbx_display_name, pbx_ws_password
+              pbx_extension, pbx_username, pbx_display_name
        FROM users
        ORDER BY created_at DESC`
     );
@@ -39,36 +69,38 @@ router.get('/', async (req, res) => {
  * @swagger
  * /api/users/profile:
  *   get:
- *     summary: Get user profile
+ *     summary: Get current user profile
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: User profile retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: User not found
  */
-router.get('/profile', (req, res) => {
-  // TODO: Implement get profile logic
-  res.status(200).json({
-    message: 'Get profile endpoint - to be implemented'
-  });
+router.get('/profile', authenticateUser, logPiiAccess('users', ['email', 'phone']), async (req: Request, res: Response) => {
+  try {
+    const profile = await userService.getProfile(req.userId!);
+
+    if (!profile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json({ user: profile });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
  * @swagger
  * /api/users/profile:
  *   put:
- *     summary: Update user profile
+ *     summary: Update current user profile
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -88,23 +120,30 @@ router.get('/profile', (req, res) => {
  *     responses:
  *       200:
  *         description: Profile updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
-router.put('/profile', (req, res) => {
-  // TODO: Implement update profile logic
-  res.status(200).json({
-    message: 'Update profile endpoint - to be implemented',
-    data: req.body
-  });
+router.put('/profile', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { error, value } = updateProfileSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: error.details[0].message
+      });
+    }
+
+    const profile = await userService.updateProfile(req.userId!, value);
+
+    if (!profile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json({ user: profile });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
@@ -118,32 +157,17 @@ router.put('/profile', (req, res) => {
  *     responses:
  *       200:
  *         description: Addresses retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     format: uuid
- *                   title:
- *                     type: string
- *                   streetAddress:
- *                     type: string
- *                   city:
- *                     type: string
- *                   isDefault:
- *                     type: boolean
  *       401:
  *         description: Unauthorized
  */
-router.get('/addresses', (req, res) => {
-  // TODO: Implement get addresses logic
-  res.status(200).json({
-    message: 'Get addresses endpoint - to be implemented'
-  });
+router.get('/addresses', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const addresses = await userService.getAddresses(req.userId!);
+    return res.json({ addresses });
+  } catch (error) {
+    console.error('Get addresses error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 /**
@@ -174,6 +198,10 @@ router.get('/addresses', (req, res) => {
  *                 type: string
  *               country:
  *                 type: string
+ *               latitude:
+ *                 type: number
+ *               longitude:
+ *                 type: number
  *               isDefault:
  *                 type: boolean
  *     responses:
@@ -182,13 +210,99 @@ router.get('/addresses', (req, res) => {
  *       401:
  *         description: Unauthorized
  */
-router.post('/addresses', (req, res) => {
-  // TODO: Implement add address logic
-  res.status(201).json({
-    message: 'Add address endpoint - to be implemented',
-    data: req.body
-  });
+router.post('/addresses', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { error, value } = createAddressSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: error.details[0].message
+      });
+    }
+
+    const address = await userService.createAddress(req.userId!, value);
+    return res.status(201).json({ address });
+  } catch (error) {
+    console.error('Create address error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
+
+/**
+ * @swagger
+ * /api/users/addresses/{addressId}:
+ *   put:
+ *     summary: Update address
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: addressId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Address updated
+ *       404:
+ *         description: Address not found
+ */
+router.put('/addresses/:addressId', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const address = await userService.updateAddress(req.userId!, req.params.addressId, req.body);
+
+    if (!address) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    return res.json({ address });
+  } catch (error) {
+    console.error('Update address error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/addresses/{addressId}:
+ *   delete:
+ *     summary: Delete address
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: addressId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Address deleted
+ *       404:
+ *         description: Address not found
+ */
+router.delete('/addresses/:addressId', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const deleted = await userService.deleteAddress(req.userId!, req.params.addressId);
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    return res.json({ message: 'Address deleted successfully' });
+  } catch (error) {
+    console.error('Delete address error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================================
+// PBX Settings (preserved from existing implementation)
+// ============================================================
 
 /**
  * @swagger
@@ -207,9 +321,12 @@ router.post('/addresses', (req, res) => {
  *       200:
  *         description: PBX settings retrieved successfully
  */
-router.get('/:userId/pbx-settings', async (req, res) => {
+router.get('/:userId/pbx-settings', authenticateUser, logPiiAccess('users', ['pbx_extension', 'pbx_username', 'pbx_password', 'pbx_ws_password']), async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    if (req.userRole !== 'admin' && req.userId !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const result = await pool.query(
       `SELECT pbx_extension, pbx_username, pbx_password, pbx_display_name, pbx_ws_password
        FROM users
@@ -260,7 +377,7 @@ router.get('/:userId/pbx-settings', async (req, res) => {
  *       200:
  *         description: PBX settings updated successfully
  */
-router.put('/:userId/pbx-settings', async (req, res) => {
+router.put('/:userId/pbx-settings', authenticateUser, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const {

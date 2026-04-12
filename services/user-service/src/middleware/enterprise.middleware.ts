@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { config } from '../config';
 import { EnterpriseService } from '../services/enterprise.service';
 
 // Extend Express Request type to include enterprise context
@@ -21,7 +23,7 @@ declare global {
  * - User's default enterprise from JWT
  */
 export const enterpriseContext = (enterpriseService: EnterpriseService) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
       // Get enterprise ID from different sources
       const enterpriseId =
@@ -85,7 +87,7 @@ export const enterpriseContext = (enterpriseService: EnterpriseService) => {
  * Middleware to require specific roles for enterprise access
  */
 export const requireEnterpriseRole = (...allowedRoles: string[]) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<any> => {
     try {
       const { userId, enterpriseId, userRole } = req;
 
@@ -159,13 +161,13 @@ export const requirePermission = (...requiredPermissions: string[]) => {
 };
 
 /**
- * Simple JWT auth middleware (placeholder - implement with actual JWT library)
+ * JWT authentication middleware
  */
 export const authenticateUser = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -178,13 +180,18 @@ export const authenticateUser = async (
 
     const token = authHeader.substring(7);
 
-    // TODO: Implement actual JWT verification
-    // For now, this is a placeholder
-    // const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    // req.userId = decoded.userId;
+    const decoded = jwt.verify(token, config.jwt.secret) as {
+      userId: string;
+      email: string;
+      role: string;
+      enterpriseId?: string;
+    };
 
-    // Temporary: extract user ID from token (implement proper JWT)
-    req.userId = 'temp-user-id';
+    req.userId = decoded.userId;
+    req.userRole = decoded.role;
+    if (decoded.enterpriseId) {
+      req.enterpriseId = decoded.enterpriseId;
+    }
 
     next();
   } catch (error) {
