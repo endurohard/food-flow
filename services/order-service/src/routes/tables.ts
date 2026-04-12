@@ -21,7 +21,7 @@ const createTableSchema = Joi.object({
 /**
  * GET /api/tables?restaurantId=
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {

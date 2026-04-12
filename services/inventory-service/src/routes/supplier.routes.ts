@@ -45,7 +45,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
 
 router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const supplier = await supplierService.update(req.params.id, req.body);
+    const supplier = await supplierService.update(req.params.id, req.body, req.enterpriseId);
     if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
     return res.json({ supplier });
   } catch (error) {
@@ -56,7 +56,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
 
 router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const deleted = await supplierService.delete(req.params.id);
+    const deleted = await supplierService.delete(req.params.id, req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Supplier not found' });
     return res.json({ message: 'Supplier deactivated' });
   } catch (error) {

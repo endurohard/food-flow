@@ -360,7 +360,8 @@ export class CRMService {
     else if (thresholds.silver && totalSpent >= thresholds.silver) tier = 'silver';
 
     await this.pool.query(
-      `UPDATE customer_profiles SET loyalty_tier = $1 WHERE id = $2`, [tier, customerId]
+      `UPDATE customer_profiles SET loyalty_tier = $1 WHERE id = $2 AND enterprise_id = (SELECT enterprise_id FROM customer_profiles WHERE id = $2)`,
+      [tier, customerId]
     );
   }
 

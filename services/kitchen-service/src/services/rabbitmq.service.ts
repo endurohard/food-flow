@@ -28,17 +28,17 @@ export class RabbitMQService {
       this.channel = await (this.connection as any).createChannel();
 
       // Declare exchange
-      await this.channel.assertExchange(this.EXCHANGE, 'topic', {
+      await this.channel!.assertExchange(this.EXCHANGE, 'topic', {
         durable: true,
       });
 
       // Declare queue
-      await this.channel.assertQueue(this.KITCHEN_QUEUE, {
+      await this.channel!.assertQueue(this.KITCHEN_QUEUE, {
         durable: true,
       });
 
       // Bind queue to exchange
-      await this.channel.bindQueue(
+      await this.channel!.bindQueue(
         this.KITCHEN_QUEUE,
         this.EXCHANGE,
         this.ROUTING_KEY
@@ -57,7 +57,7 @@ export class RabbitMQService {
     }
 
     try {
-      await this.channel.consume(
+      await this.channel!.consume(
         this.KITCHEN_QUEUE,
         async (msg) => {
           if (msg) {

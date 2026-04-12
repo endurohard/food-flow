@@ -36,6 +36,11 @@ export class PrinterService {
   private printer: ThermalPrinter | null = null;
   private isConnected: boolean = false;
 
+  private get p(): ThermalPrinter {
+    if (!this.printer) throw new Error('Printer not initialized');
+    return this.printer;
+  }
+
   constructor() {
     this.initializePrinter();
   }
@@ -54,7 +59,7 @@ export class PrinterService {
         },
       });
 
-      this.isConnected = await this.printer.isPrinterConnected();
+      this.isConnected = await this.p.isPrinterConnected();
 
       if (this.isConnected) {
         logger.info('Printer connected successfully');
@@ -79,77 +84,77 @@ export class PrinterService {
         return false;
       }
 
-      this.printer.clear();
+      this.p.clear();
 
       // Order number - LARGE and centered
-      this.printer.alignCenter();
-      this.printer.setTextSize(3, 3);
-      this.printer.bold(true);
-      this.printer.println(`#${order.orderNumber}`);
-      this.printer.bold(false);
-      this.printer.setTextSize(1, 1);
-      this.printer.newLine();
+      this.p.alignCenter();
+      this.p.setTextSize(3, 3);
+      this.p.bold(true);
+      this.p.println(`#${order.orderNumber}`);
+      this.p.bold(false);
+      this.p.setTextSize(1, 1);
+      this.p.newLine();
 
       // Timestamp
-      this.printer.setTextSize(1, 1);
+      this.p.setTextSize(1, 1);
       const timeStr = order.timestamp.toLocaleTimeString('ru-RU', {
         hour: '2-digit',
         minute: '2-digit'
       });
-      this.printer.println(timeStr);
-      this.printer.drawLine();
+      this.p.println(timeStr);
+      this.p.drawLine();
 
       // Items - simple list
-      this.printer.alignLeft();
-      this.printer.newLine();
+      this.p.alignLeft();
+      this.p.newLine();
 
       order.items.forEach((item) => {
         // Quantity and item name - bold and large
-        this.printer.setTextSize(2, 2);
-        this.printer.bold(true);
-        this.printer.println(`${item.quantity}x`);
-        this.printer.bold(false);
+        this.p.setTextSize(2, 2);
+        this.p.bold(true);
+        this.p.println(`${item.quantity}x`);
+        this.p.bold(false);
 
-        this.printer.setTextSize(1, 1);
-        this.printer.bold(true);
-        this.printer.println(item.name.toUpperCase());
-        this.printer.bold(false);
+        this.p.setTextSize(1, 1);
+        this.p.bold(true);
+        this.p.println(item.name.toUpperCase());
+        this.p.bold(false);
 
         // Special instructions if any
         if (item.specialInstructions) {
-          this.printer.println(`>>> ${item.specialInstructions}`);
+          this.p.println(`>>> ${item.specialInstructions}`);
         }
 
-        this.printer.newLine();
+        this.p.newLine();
       });
 
-      this.printer.drawLine();
+      this.p.drawLine();
 
       // Order-level special instructions
       if (order.specialInstructions) {
-        this.printer.alignCenter();
-        this.printer.bold(true);
-        this.printer.println('КОММЕНТАРИЙ:');
-        this.printer.bold(false);
-        this.printer.println(order.specialInstructions);
-        this.printer.drawLine();
+        this.p.alignCenter();
+        this.p.bold(true);
+        this.p.println('КОММЕНТАРИЙ:');
+        this.p.bold(false);
+        this.p.println(order.specialInstructions);
+        this.p.drawLine();
       }
 
-      this.printer.newLine();
-      this.printer.newLine();
-      this.printer.newLine();
+      this.p.newLine();
+      this.p.newLine();
+      this.p.newLine();
 
       // Cut paper
-      this.printer.cut();
+      this.p.cut();
 
       // Execute print
       if (this.isConnected) {
-        await this.printer.execute();
+        await this.p.execute();
         logger.info(`Kitchen order ${order.orderNumber} printed successfully`);
         return true;
       } else {
         // Simulation mode - just log
-        const receipt = await this.printer.getText();
+        const receipt = await this.p.getText();
         logger.info('SIMULATION MODE - Kitchen receipt:\n' + receipt);
         return true;
       }
@@ -169,26 +174,26 @@ export class PrinterService {
         return false;
       }
 
-      this.printer.clear();
+      this.p.clear();
 
       // Header - Phone and Address
-      this.printer.alignLeft();
-      this.printer.setTextSize(1, 1);
-      this.printer.println(order.restaurant.phone);
-      this.printer.println(`Адрес: ${order.restaurant.address}`);
-      this.printer.newLine();
+      this.p.alignLeft();
+      this.p.setTextSize(1, 1);
+      this.p.println(order.restaurant.phone);
+      this.p.println(`Адрес: ${order.restaurant.address}`);
+      this.p.newLine();
 
       // Order number - centered and large
-      this.printer.alignCenter();
-      this.printer.setTextSize(2, 2);
-      this.printer.bold(true);
-      this.printer.println(`Заказ № ${order.orderNumber}`);
-      this.printer.bold(false);
-      this.printer.setTextSize(1, 1);
+      this.p.alignCenter();
+      this.p.setTextSize(2, 2);
+      this.p.bold(true);
+      this.p.println(`Заказ № ${order.orderNumber}`);
+      this.p.bold(false);
+      this.p.setTextSize(1, 1);
 
       // Courier info
-      this.printer.alignLeft();
-      this.printer.println(`Курьер: ${order.customer.name}`);
+      this.p.alignLeft();
+      this.p.println(`Курьер: ${order.customer.name}`);
 
       // Date and time
       const dateStr = order.timestamp.toLocaleString('ru-RU', {
@@ -198,29 +203,29 @@ export class PrinterService {
         month: '2-digit',
         year: 'numeric'
       });
-      this.printer.println(`Заказ принят: ${dateStr}`);
+      this.p.println(`Заказ принят: ${dateStr}`);
 
       // Number of people
-      this.printer.println('Количество человек: 1');
-      this.printer.drawLine();
+      this.p.println('Количество человек: 1');
+      this.p.drawLine();
 
       // Table header
-      this.printer.alignLeft();
-      this.printer.tableCustom([
+      this.p.alignLeft();
+      this.p.tableCustom([
         { text: 'Наименова', align: 'LEFT', width: 0.4 },
         { text: 'К-во', align: 'CENTER', width: 0.15 },
         { text: 'Цена', align: 'RIGHT', width: 0.22 },
         { text: 'Сумма', align: 'RIGHT', width: 0.23 },
       ]);
-      this.printer.drawLine();
+      this.p.drawLine();
 
       // Items
       order.items.forEach((item) => {
-        this.printer.bold(true);
-        this.printer.println(item.name.toUpperCase());
-        this.printer.bold(false);
+        this.p.bold(true);
+        this.p.println(item.name.toUpperCase());
+        this.p.bold(false);
 
-        this.printer.tableCustom([
+        this.p.tableCustom([
           { text: '', align: 'LEFT', width: 0.05 },
           { text: `${item.quantity} порц`, align: 'LEFT', width: 0.35 },
           { text: 'x', align: 'CENTER', width: 0.05 },
@@ -229,40 +234,40 @@ export class PrinterService {
         ]);
 
         if (item.specialInstructions) {
-          this.printer.println(`  >>> ${item.specialInstructions}`);
+          this.p.println(`  >>> ${item.specialInstructions}`);
         }
       });
 
-      this.printer.drawLine();
+      this.p.drawLine();
 
       // Total
-      this.printer.alignLeft();
-      this.printer.tableCustom([
+      this.p.alignLeft();
+      this.p.tableCustom([
         { text: 'Итого к оплате:', align: 'LEFT', width: 0.55 },
         { text: `${order.total.toFixed(2)}`, align: 'RIGHT', width: 0.45 },
       ]);
-      this.printer.drawLine();
+      this.p.drawLine();
 
       // Payment method
-      this.printer.println(`Карта Интернет-эква ${order.total.toFixed(2)}`);
-      this.printer.println('Яринг (проведена)');
-      this.printer.newLine();
+      this.p.println(`Карта Интернет-эква ${order.total.toFixed(2)}`);
+      this.p.println('Яринг (проведена)');
+      this.p.newLine();
 
       // Special instructions
       if (order.specialInstructions) {
-        this.printer.println('Комментарий к заказу:');
-        this.printer.println(order.specialInstructions);
-        this.printer.drawLine();
+        this.p.println('Комментарий к заказу:');
+        this.p.println(order.specialInstructions);
+        this.p.drawLine();
       }
 
       // Footer message
-      this.printer.alignCenter();
-      this.printer.println('Оставить отзыв и отзыв');
-      this.printer.println('нетмонет');
-      this.printer.newLine();
+      this.p.alignCenter();
+      this.p.println('Оставить отзыв и отзыв');
+      this.p.println('нетмонет');
+      this.p.newLine();
 
       // QR Code for reviews
-      this.printer.alignCenter();
+      this.p.alignCenter();
       const reviewUrl = `https://foodflow.com/review/${order.orderNumber}`;
       const qrCodeDataUrl = await QRCode.toDataURL(reviewUrl, {
         width: 200,
@@ -271,28 +276,28 @@ export class PrinterService {
       });
 
       try {
-        await this.printer.printImageBuffer(
+        await this.p.printImageBuffer(
           Buffer.from(qrCodeDataUrl.split(',')[1], 'base64')
         );
       } catch (error) {
         logger.warn('QR code printing not supported');
-        this.printer.println(`Отзыв: ${reviewUrl}`);
+        this.p.println(`Отзыв: ${reviewUrl}`);
       }
 
-      this.printer.newLine();
-      this.printer.newLine();
-      this.printer.newLine();
+      this.p.newLine();
+      this.p.newLine();
+      this.p.newLine();
 
       // Cut paper
-      this.printer.cut();
+      this.p.cut();
 
       // Execute print
       if (this.isConnected) {
-        await this.printer.execute();
+        await this.p.execute();
         logger.info(`Customer receipt ${order.orderNumber} printed successfully`);
         return true;
       } else {
-        const receipt = await this.printer.getText();
+        const receipt = await this.p.getText();
         logger.info('SIMULATION MODE - Receipt content:\n' + receipt);
         return true;
       }
@@ -311,24 +316,24 @@ export class PrinterService {
         return false;
       }
 
-      this.printer.clear();
-      this.printer.alignCenter();
-      this.printer.bold(true);
-      this.printer.println('PRINTER TEST');
-      this.printer.bold(false);
-      this.printer.drawLine();
-      this.printer.println('Printer is working correctly!');
-      this.printer.newLine();
-      this.printer.println(new Date().toLocaleString());
-      this.printer.newLine();
-      this.printer.cut();
+      this.p.clear();
+      this.p.alignCenter();
+      this.p.bold(true);
+      this.p.println('PRINTER TEST');
+      this.p.bold(false);
+      this.p.drawLine();
+      this.p.println('Printer is working correctly!');
+      this.p.newLine();
+      this.p.println(new Date().toLocaleString());
+      this.p.newLine();
+      this.p.cut();
 
       if (this.isConnected) {
-        await this.printer.execute();
+        await this.p.execute();
         logger.info('Test print successful');
         return true;
       } else {
-        const receipt = await this.printer.getText();
+        const receipt = await this.p.getText();
         logger.info('SIMULATION MODE - Test print:\n' + receipt);
         return true;
       }

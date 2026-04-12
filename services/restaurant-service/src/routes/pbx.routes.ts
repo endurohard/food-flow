@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 const { Pool } = pkg;
+import { authenticateUser } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
+router.use(authenticateUser);
 const pool = new Pool({ connectionString: config.database.url });
 
 // Get PBX settings for a restaurant

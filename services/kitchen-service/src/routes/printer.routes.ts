@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { PrinterService } from '../services/printer.service';
 import { PrinterStation, PrinterSettings } from '../models/printer-station.model';
+import { authenticateUser } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 
 const router = Router();
+router.use(authenticateUser);
 const printerService = new PrinterService();
 
 // In-memory storage (in production, use PostgreSQL)

@@ -25,7 +25,7 @@ export class SupplierService {
     return result.rows[0];
   }
 
-  async update(supplierId: string, data: any): Promise<any> {
+  async update(supplierId: string, data: any, enterpriseId?: string): Promise<any> {
     const map: Record<string, string> = {
       name: 'name', contactPerson: 'contact_person', phone: 'phone',
       email: 'email', taxId: 'tax_id', address: 'address', paymentTerms: 'payment_terms', isActive: 'is_active'
@@ -37,15 +37,28 @@ export class SupplierService {
       if (data[k] !== undefined) { fields.push(`${col} = $${p++}`); values.push(data[k]); }
     }
     if (!fields.length) return null;
+    const whereConds = [`id = $${p++}`];
     values.push(supplierId);
+    if (enterpriseId) {
+      whereConds.push(`enterprise_id = $${p++}`);
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
-      `UPDATE suppliers SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`, values
+      `UPDATE suppliers SET ${fields.join(', ')} WHERE ${whereConds.join(' AND ')} RETURNING *`, values
     );
     return result.rows[0] || null;
   }
 
-  async delete(supplierId: string): Promise<boolean> {
-    const r = await this.pool.query('UPDATE suppliers SET is_active = false WHERE id = $1', [supplierId]);
+  async delete(supplierId: string, enterpriseId?: string): Promise<boolean> {
+    const conds = ['id = $1'];
+    const vals: any[] = [supplierId];
+    if (enterpriseId) {
+      conds.push('enterprise_id = $2');
+      vals.push(enterpriseId);
+    }
+    const r = await this.pool.query(
+      `UPDATE suppliers SET is_active = false WHERE ${conds.join(' AND ')}`, vals
+    );
     return (r.rowCount ?? 0) > 0;
   }
 
