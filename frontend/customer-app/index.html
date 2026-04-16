@@ -940,27 +940,18 @@
 
       const orderData = {
         restaurantId: restaurantId,
-        customerId: null, // Можно добавить авторизацию позже
-        customer: {
-          name: formData.get('name'),
-          phone: formData.get('phone')
-        },
-        deliveryAddress: formData.get('address'),
-        items: cart.map(item => ({
-          menuItemId: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          specialInstructions: ''
-        })),
-        subtotal: subtotal,
-        deliveryFee: deliveryFee,
-        tax: 0,
-        total: total,
-        specialInstructions: formData.get('comment') || '',
         orderType: 'delivery',
         paymentMethod: 'card',
-        status: 'pending'
+        specialInstructions: [
+          formData.get('name'),
+          formData.get('phone'),
+          formData.get('address'),
+          formData.get('comment')
+        ].filter(Boolean).join(' | '),
+        items: cart.map(item => ({
+          menuItemId: String(item.id),
+          quantity: item.quantity
+        }))
       };
 
       try {
@@ -977,7 +968,8 @@
 
         if (response.ok) {
           const result = await response.json();
-          const orderNumber = result.id || result.orderNumber || ('ORD-' + Date.now());
+          const order = result.data || result;
+          const orderNumber = order.order_number || order.id || ('ORD-' + Date.now());
 
           console.log('Заказ успешно создан:', result);
 
