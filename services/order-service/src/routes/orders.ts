@@ -78,7 +78,7 @@ router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
 /**
  * POST /api/orders
  */
-router.post('/', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/', optionalAuth, idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const { error, value } = createOrderSchema.validate(req.body);
     if (error) {
