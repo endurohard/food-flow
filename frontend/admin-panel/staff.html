@@ -1,6 +1,243 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <style>
+    /* ══ Sedap Layout Override ══ */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-family) !important;
+      background: var(--admin-content-bg) !important;
+      color: var(--color-text-primary) !important;
+      min-height: 100vh;
+      display: flex !important;
+      overflow-x: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 250px !important;
+      flex-shrink: 0 !important;
+      background: var(--admin-sidebar-bg) !important;
+      height: 100vh !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: 300 !important;
+      box-shadow: 2px 0 8px rgba(0,0,0,.06) !important;
+      transition: transform .2s ease !important;
+      padding-top: 0 !important;
+      border-right: none !important;
+      transform: none !important;
+    }
+    /* hide old open-class behaviour */
+    .sidebar.open { left: 0 !important; transform: none !important; }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+    .sidebar-brand img { height: 40px; width: auto; display: block; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex !important;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-primary) !important;
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent !important;
+      border-left: none !important;
+    }
+    .nav-item:hover { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px; top: 50%;
+      transform: translateY(-50%);
+      width: 8px; height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 20px 20px 0;
+    }
+    .nav-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+    .nav-item span { flex: 1; }
+    .nav-badge {
+      font-size: 11px; font-weight: 600;
+      background: var(--color-danger); color: #fff;
+      border-radius: 20px; padding: 2px 7px;
+      min-width: 20px; text-align: center;
+    }
+
+    /* hide OLD sidebar items (emoji ones) */
+    .sidebar-header, .sidebar-menu, .sidebar-title, .sidebar-item, .sidebar-icon { display: none !important; }
+
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar {
+      width: 36px; height: 36px;
+      background: var(--color-primary-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 12px; color: var(--color-grey-5); }
+
+    /* ── SIDEBAR OVERLAY (mobile) ── */
+    .sidebar-overlay {
+      display: none !important;
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299;
+    }
+    .sidebar-overlay.active { display: block !important; }
+
+    /* ── MAIN WRAPPER ── */
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    /* hide OLD navbar */
+    .navbar { display: none !important; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex !important;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .topbar-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: var(--color-text-primary); padding: 4px; border-radius: 4px;
+    }
+    .topbar-hamburger:hover { background: var(--admin-content-bg); }
+    .topbar-search { flex: 1; max-width: 360px; position: relative; }
+    .topbar-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-placeholder); width: 18px; height: 18px; }
+    .topbar-search input {
+      width: 100%; height: 42px; background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border); border-radius: 8px;
+      padding: 0 16px 0 42px; font-family: var(--font-family); font-size: 14px;
+      color: var(--color-text-primary); outline: none; transition: border-color .15s;
+    }
+    .topbar-search input::placeholder { color: var(--color-text-placeholder); }
+    .topbar-search input:focus { border-color: var(--color-primary); }
+    .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .notif-group { display: flex; align-items: center; gap: 8px; }
+    .notif-btn {
+      position: relative; width: 40px; height: 40px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: filter .15s;
+    }
+    .notif-btn svg { width: 20px; height: 20px; }
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-btn.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .notif-btn.yellow { background: var(--color-warning-light); color: #c9a200;              }
+    .notif-btn:hover { filter: brightness(.92); }
+    .notif-count {
+      position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px;
+      border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #fff;
+    }
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .notif-count.red    { background: var(--color-danger);  }
+    .notif-count.yellow { background: var(--color-warning); }
+    .topbar-user {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px;
+      border-radius: 50px; cursor: pointer; transition: background .15s; text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+    .topbar-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-user-text { display: flex; flex-direction: column; }
+    .topbar-user-greeting { font-size: 11px; color: var(--color-grey-5); line-height: 1; }
+    .topbar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.3; }
+
+    /* ── Content wrapper that used to start at top ── */
+    /* Push old container below topbar via main-wrapper */
+    .container {
+      padding: 30px !important;
+    }
+
+    /* ── Sedap card style override ── */
+    .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
+      background: #fff !important;
+      border-radius: 14px !important;
+      box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
+      border: none !important;
+    }
+
+    /* ── Button primary ── */
+    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    button[style*="background: #667"], button[style*="background: linear"] {
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+    }
+
+    /* ── Color text overrides ── */
+    h1, h2, h3, .title, .page-title { color: var(--color-text-dark) !important; font-family: var(--font-family) !important; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-250px) !important; }
+      .sidebar.mobile-open { transform: translateX(0) !important; }
+      .main-wrapper { margin-left: 0 !important; }
+      .topbar-hamburger { display: flex !important; }
+      .topbar-search { max-width: 200px; }
+      .topbar-user-text { display: none; }
+    }
+  </style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Управление персоналом - FoodFlow</title>
@@ -824,79 +1061,170 @@
   </style>
 </head>
 <body>
-  <!-- Sidebar Overlay -->
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
 
-  <!-- Sidebar -->
-  <div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-title">Навигация</div>
-    </div>
-    <div class="sidebar-menu">
-      <a href="orders.html" class="sidebar-item">
-        <span class="sidebar-icon">📦</span>
-        <span>Заказы</span>
-      </a>
-      <a href="tables.html" class="sidebar-item">
-        <span class="sidebar-icon">🍽️</span>
-        <span>Столы</span>
-      </a>
-      <a href="kds.html" class="sidebar-item">
-        <span class="sidebar-icon">👨‍🍳</span>
-        <span>KDS (Кухня)</span>
-      </a>
-      <a href="staff.html" class="sidebar-item active">
-        <span class="sidebar-icon">👥</span>
-        <span>Персонал</span>
-      </a>
-      <a href="inventory.html" class="sidebar-item">
-        <span class="sidebar-icon">📦</span>
-        <span>Склад</span>
-      </a>
-      <a href="menu.html" class="sidebar-item">
-        <span class="sidebar-icon">🍕</span>
-        <span>Меню</span>
-      </a>
-      <a href="loyalty.html" class="sidebar-item">
-        <span class="sidebar-icon">🎁</span>
-        <span>Лояльность</span>
-      </a>
-      <a href="analytics.html" class="sidebar-item">
-        <span class="sidebar-icon">📊</span>
-        <span>Аналитика</span>
-      </a>
-      <a href="index.html" class="sidebar-item">
-        <span class="sidebar-icon">🖨️</span>
-        <span>Принтеры</span>
-      </a>
-      <a href="settings.html" class="sidebar-item">
-        <span class="sidebar-icon">⚙️</span>
-        <span>Настройки</span>
-      </a>
-            <div style="border-top: 1px solid #e1e8ed; margin: 12px 0;"></div>
-            <a href="/customer-app/index.html" class="sidebar-item" target="_blank" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 8px; border-radius: 8px;">
-                <span class="sidebar-icon">🌐</span>
-                <span>Сайт заказов</span>
-                <span style="margin-left: auto; font-size: 12px;">↗</span>
-            </a>
+<!-- ══════════════ SIDEBAR (Sedap) ══════════════ -->
+<aside class="sidebar" id="sidebar">
 
+  <!-- Logo -->
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/dashboard.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/><path d="M10 9v9"/><path d="M4 2v16"/><path d="M4 8h4"/></svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M2 13h16M7 8v9"/></svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
+      <span>Склад</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item active">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+      <span>Персонал</span>
+    </a>
+
+    <a href="/admin-panel/kds.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6M10 14v3"/></svg>
+      <span>KDS</span>
+    </a>
+
+    <a href="/admin-panel/calls.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4l2 5-2.5 1.5a11 11 0 005 5L13 12l5 2v4a1 1 0 01-1 1C7 19 1 13 1 4a1 1 0 011-1z"/></svg>
+      <span>Звонки</span>
+    </a>
+
+    <a href="/admin-panel/hall-designer.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="18" rx="2"/><path d="M1 7h18M1 13h18M7 1v18"/></svg>
+      <span>Дизайнер зала</span>
+    </a>
+
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <!-- Sidebar footer -->
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
     </div>
   </div>
 
-  <!-- Navigation -->
-  <nav class="navbar">
-    <div class="nav-left">
-      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
-      <div class="nav-brand">
-        🍽️ FoodFlow
-      </div>
-    </div>
-    <button class="btn btn-primary" onclick="openAddStaffModal()">
-      ➕ Сотрудник
-    </button>
-  </nav>
+</aside>
 
-  <!-- Main Content -->
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main-wrapper">
+
+  <!-- ── TOP NAVBAR (Sedap) ── -->
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebarMobile()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l3 3"/>
+      </svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+
+    <div class="topbar-right">
+      <div class="notif-group">
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/>
+          </svg>
+          <span class="notif-count green" id="topbarOrderCount">0</span>
+        </button>
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+          </svg>
+          <span class="notif-count blue">3</span>
+        </button>
+        <button class="notif-btn red" title="Предупреждения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 2L2 17h16L10 2z"/><path d="M10 8v4"/><circle cx="10" cy="14.5" r="0.5" fill="currentColor"/>
+          </svg>
+          <span class="notif-count red">1</span>
+        </button>
+        <button class="notif-btn yellow" title="Задачи">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="16" height="16" rx="2"/><path d="M6 10l3 3 5-5"/>
+          </svg>
+          <span class="notif-count yellow">7</span>
+        </button>
+      </div>
+
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+          </svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+        <!-- Main Content -->
   <div class="container">
     <!-- Header -->
     <div class="header">
@@ -1423,5 +1751,35 @@
     initializeData();
     renderStaff();
   </script>
+</div><!-- /main-wrapper -->
+
+
+<script>
+/* Sedap mobile sidebar toggle */
+function toggleSidebarMobile() {
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sidebarOverlay');
+  if (!sb) return;
+  sb.classList.toggle('mobile-open');
+  if (ov) ov.style.display = sb.classList.contains('mobile-open') ? 'block' : 'none';
+}
+function closeSidebarMobile() {
+  var sb = document.getElementById('sidebar');
+  var ov = document.getElementById('sidebarOverlay');
+  if (sb) sb.classList.remove('mobile-open');
+  if (ov) ov.style.display = 'none';
+}
+/* update sidebar user name from localStorage */
+(function() {
+  try {
+    var u = JSON.parse(localStorage.getItem('foodflow_user') || '{}');
+    var nm = u.name || u.username || 'Admin';
+    var el1 = document.getElementById('sidebarUserName');
+    var el2 = document.getElementById('topbarUserName');
+    if (el1) el1.textContent = nm;
+    if (el2) el2.textContent = nm;
+  } catch(e) {}
+})();
+</script>
 </body>
 </html>

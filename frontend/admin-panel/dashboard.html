@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Панель — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect width='32' height='32' rx='8' fill='%2300B074'/><path d='M9 10h14M9 16h10M9 22h12' stroke='white' stroke-width='2.5' stroke-linecap='round'/></svg>">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+    }
+
+    /* ════════════════════════════════════
+       SIDEBAR
+    ════════════════════════════════════ */
+    .sidebar {
+      width: 250px;
+      flex-shrink: 0;
+      background: var(--admin-sidebar-bg);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 300;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+      transition: transform var(--transition-base);
+    }
+
+    /* ── Brand / Logo ── */
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+
+    .sidebar-brand img {
+      height: 40px;
+      width: auto;
+      display: block;
+    }
+
+    /* ── Nav ── */
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: var(--font-weight-semibold);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      font-size: var(--font-size-lg);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-primary);
+      transition: background var(--transition-fast), color var(--transition-fast);
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      background: var(--admin-sidebar-active-bg);
+      color: var(--color-primary);
+    }
+
+    .nav-item.active {
+      background: var(--admin-sidebar-active-bg);
+      color: var(--color-primary);
+    }
+
+    /* Зелёная полоска слева для активного */
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 8px;
+      height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+    }
+
+    .nav-item svg {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+    }
+
+    .nav-item span {
+      flex: 1;
+    }
+
+    .nav-badge {
+      font-size: 11px;
+      font-weight: var(--font-weight-semibold);
+      background: var(--color-danger);
+      color: #fff;
+      border-radius: var(--radius-full);
+      padding: 2px 7px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    /* ── Sidebar Footer ── */
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+
+    .sidebar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-user-avatar {
+      width: 36px;
+      height: 36px;
+      background: var(--color-primary-light);
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-user-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sidebar-user-name {
+      font-size: var(--font-size-md);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-dark);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-user-role {
+      font-size: var(--font-size-xs);
+      color: var(--color-grey-5);
+    }
+
+    /* Overlay for mobile */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 299;
+    }
+
+    /* ════════════════════════════════════
+       MAIN LAYOUT
+    ════════════════════════════════════ */
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    /* ════════════════════════════════════
+       TOP NAVBAR
+    ════════════════════════════════════ */
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+
+    /* Hamburger (mobile) */
+    .topbar-hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--color-text-primary);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+    }
+    .topbar-hamburger:hover { background: var(--admin-content-bg); }
+
+    /* Search */
+    .topbar-search {
+      flex: 1;
+      max-width: 360px;
+      position: relative;
+    }
+
+    .topbar-search svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-placeholder);
+      width: 18px;
+      height: 18px;
+    }
+
+    .topbar-search input {
+      width: 100%;
+      height: 42px;
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border);
+      border-radius: var(--radius-md);
+      padding: 0 16px 0 42px;
+      font-family: var(--font-family);
+      font-size: var(--font-size-md);
+      color: var(--color-text-primary);
+      outline: none;
+      transition: border-color var(--transition-fast);
+    }
+
+    .topbar-search input::placeholder {
+      color: var(--color-text-placeholder);
+    }
+
+    .topbar-search input:focus {
+      border-color: var(--color-primary);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-left: auto;
+    }
+
+    /* Notification badges */
+    .notif-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .notif-btn {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-full);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition-fast);
+    }
+
+    .notif-btn svg { width: 20px; height: 20px; }
+
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-btn.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .notif-btn.yellow { background: var(--color-warning-light); color: #c9a200;              }
+
+    .notif-btn:hover { filter: brightness(0.92); }
+
+    .notif-count {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      min-width: 18px;
+      height: 18px;
+      border-radius: var(--radius-full);
+      font-size: 10px;
+      font-weight: var(--font-weight-bold);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      border: 2px solid #fff;
+    }
+
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .notif-count.red    { background: var(--color-danger);  }
+    .notif-count.yellow { background: var(--color-warning); }
+
+    /* User chip */
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 6px 8px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+
+    .topbar-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-full);
+      background: var(--color-primary-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .topbar-user-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar-user-greeting {
+      font-size: 11px;
+      color: var(--color-grey-5);
+      line-height: 1;
+    }
+
+    .topbar-user-name {
+      font-size: var(--font-size-md);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-dark);
+      line-height: 1.3;
+    }
+
+    /* ════════════════════════════════════
+       CONTENT AREA
+    ════════════════════════════════════ */
+    .content {
+      flex: 1;
+      padding: 30px;
+    }
+
+    /* Page heading */
+    .page-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .page-title {
+      font-size: var(--font-size-xl);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-dark);
+      line-height: var(--line-height-tight);
+    }
+
+    .page-subtitle {
+      font-size: var(--font-size-md);
+      color: var(--color-grey-5);
+      margin-top: 4px;
+    }
+
+    .page-date {
+      font-size: var(--font-size-sm);
+      color: var(--color-grey-5);
+      background: var(--admin-card-bg);
+      border: 1px solid var(--color-grey-3);
+      border-radius: var(--radius-md);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .page-date svg { width: 16px; height: 16px; color: var(--color-primary); }
+
+    /* ════════════════════════════════════
+       KPI CARDS
+    ════════════════════════════════════ */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    .kpi-card {
+      background: var(--admin-card-bg);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 24px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow var(--transition-base), transform var(--transition-base);
+    }
+
+    .kpi-card:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+
+    .kpi-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .kpi-icon {
+      width: 68px;
+      height: 68px;
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .kpi-icon svg { width: 32px; height: 32px; }
+
+    .kpi-icon.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .kpi-icon.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .kpi-icon.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .kpi-icon.yellow { background: var(--color-warning-light); color: #c9a200;              }
+
+    .kpi-numbers {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .kpi-value {
+      font-size: var(--font-size-kpi);
+      font-weight: var(--font-weight-bold);
+      color: var(--color-text-primary);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .kpi-label {
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-regular);
+      color: var(--color-text-primary);
+    }
+
+    .kpi-trend {
+      font-size: var(--font-size-xs);
+      color: var(--color-grey-5);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-grey-3);
+    }
+
+    .kpi-trend svg { width: 14px; height: 14px; }
+
+    .kpi-trend.up   { color: var(--color-primary); }
+    .kpi-trend.down { color: var(--color-danger);  }
+
+    .kpi-trend-num {
+      font-weight: var(--font-weight-semibold);
+    }
+
+    /* ════════════════════════════════════
+       CHARTS ROW
+    ════════════════════════════════════ */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    .chart-card {
+      background: var(--admin-card-bg);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .chart-card-title {
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-dark);
+    }
+
+    .chart-card-action {
+      font-size: var(--font-size-sm);
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: var(--font-weight-medium);
+    }
+    .chart-card-action:hover { text-decoration: underline; }
+
+    .chart-placeholder {
+      flex: 1;
+      min-height: 200px;
+      background: var(--admin-content-bg);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 2px dashed var(--color-grey-3);
+    }
+
+    .chart-placeholder svg {
+      width: 40px;
+      height: 40px;
+      color: var(--color-grey-4);
+    }
+
+    .chart-placeholder-text {
+      font-size: var(--font-size-sm);
+      color: var(--color-grey-5);
+      text-align: center;
+    }
+
+    /* Pie legend */
+    .pie-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .pie-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: var(--font-size-sm);
+      color: var(--color-text-primary);
+    }
+
+    .pie-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: var(--radius-full);
+      flex-shrink: 0;
+    }
+
+    .pie-legend-label { flex: 1; }
+    .pie-legend-pct   { font-weight: var(--font-weight-semibold); color: var(--color-text-dark); }
+
+    /* ════════════════════════════════════
+       BOTTOM ROW — Revenue + Map
+    ════════════════════════════════════ */
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 20px;
+    }
+
+    /* ════════════════════════════════════
+       RECENT ORDERS TABLE
+    ════════════════════════════════════ */
+    .recent-orders {
+      background: var(--admin-card-bg);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
+    }
+
+    .table-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 16px;
+    }
+
+    .table-title {
+      font-size: var(--font-size-base);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-dark);
+    }
+
+    .table-action {
+      font-size: var(--font-size-sm);
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: var(--font-weight-medium);
+    }
+    .table-action:hover { text-decoration: underline; }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table thead tr {
+      background: var(--admin-content-bg);
+    }
+
+    .data-table th {
+      font-size: var(--font-size-xs);
+      font-weight: var(--font-weight-semibold);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-grey-5);
+      padding: 10px 24px;
+      text-align: left;
+    }
+
+    .data-table td {
+      padding: 14px 24px;
+      font-size: var(--font-size-md);
+      color: var(--color-text-primary);
+      border-top: 1px solid var(--color-grey-3);
+    }
+
+    .data-table tr:hover td { background: var(--admin-content-bg); }
+
+    .order-id {
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-text-dark);
+    }
+
+    .order-customer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .order-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-full);
+      background: var(--color-primary-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: var(--font-weight-bold);
+      color: var(--color-primary);
+      flex-shrink: 0;
+    }
+
+    /* Status badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: var(--font-weight-semibold);
+      padding: 4px 12px;
+      border-radius: var(--radius-full);
+    }
+
+    .badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-full);
+      background: currentColor;
+    }
+
+    .badge-success  { background: var(--color-success-light); color: var(--color-primary); }
+    .badge-warning  { background: var(--color-warning-light); color: #c9a200;              }
+    .badge-danger   { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .badge-info     { background: var(--color-info-light);    color: var(--color-info);    }
+
+    /* ════════════════════════════════════
+       MAP PLACEHOLDER
+    ════════════════════════════════════ */
+    .map-card {
+      background: var(--admin-card-bg);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .map-placeholder {
+      flex: 1;
+      min-height: 220px;
+      background: linear-gradient(135deg, #e8f5f0 0%, #d4eee5 100%);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 2px dashed var(--color-grey-3);
+      margin-top: 16px;
+    }
+
+    .map-placeholder svg {
+      width: 44px;
+      height: 44px;
+      color: var(--color-primary);
+      opacity: 0.6;
+    }
+
+    .map-placeholder-text {
+      font-size: var(--font-size-sm);
+      color: var(--color-grey-5);
+    }
+
+    /* ════════════════════════════════════
+       MOBILE RESPONSIVE
+    ════════════════════════════════════ */
+    @media (max-width: 1280px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .bottom-row { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 1023px) {
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay.open {
+        display: block;
+      }
+
+      .main-wrapper {
+        margin-left: 0;
+      }
+
+      .topbar-hamburger {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .charts-row {
+        grid-template-columns: 1fr;
+      }
+
+      .content {
+        padding: 20px 16px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .topbar { padding: 0 16px; }
+      .topbar-user-text { display: none; }
+      .notif-group { gap: 6px; }
+      .page-date { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- ══════════════ SIDEBAR ══════════════ -->
+<aside class="sidebar" id="sidebar">
+
+  <!-- Logo -->
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/dashboard.html" class="nav-item active">
+      <!-- Grid / Dashboard icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+        <rect x="11" y="2" width="7" height="7" rx="1.5"/>
+        <rect x="2" y="11" width="7" height="7" rx="1.5"/>
+        <rect x="11" y="11" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <!-- Shopping bag icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/>
+        <path d="M3 6h14"/>
+        <path d="M13 10a3 3 0 01-6 0"/>
+      </svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <!-- Menu / fork-knife icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/>
+        <path d="M10 9v9"/>
+        <path d="M4 2v16"/>
+        <path d="M4 8h4"/>
+      </svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <!-- Table / grid icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="2" width="16" height="16" rx="2"/>
+        <path d="M2 8h16M2 13h16M7 8v9"/>
+      </svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <!-- Box / inventory icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/>
+        <path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/>
+        <path d="M8 10h4"/>
+      </svg>
+      <span>Склад</span>
+    </a>
+
+    <a href="#" class="nav-item">
+      <!-- Finance / wallet icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="18" height="13" rx="2"/>
+        <path d="M1 8h18"/>
+        <circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/>
+      </svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <!-- CRM / users icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="6" r="3"/>
+        <path d="M1 18v-1a6 6 0 0112 0v1"/>
+        <path d="M15 5a3 3 0 010 6"/>
+        <path d="M19 18v-1a4 4 0 00-4-4"/>
+      </svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item">
+      <!-- Staff / person icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="6" r="4"/>
+        <path d="M2 18v-1a7 7 0 0114 0v1"/>
+      </svg>
+      <span>Персонал</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <!-- Chart / analytics icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 16l4-6 4 3 4-8 4 4"/>
+        <path d="M2 18h16"/>
+      </svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <!-- Settings / gear icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="10" r="3"/>
+        <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/>
+      </svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <!-- Sidebar footer: user info -->
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/>
+          <path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main-wrapper">
+
+  <!-- ── TOP NAVBAR ── -->
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebar()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8.5" cy="8.5" r="5.5"/>
+        <path d="M15 15l3 3"/>
+      </svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+
+    <div class="topbar-right">
+      <div class="notif-group">
+        <!-- New orders -->
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/>
+            <path d="M3 6h14"/>
+            <path d="M13 10a3 3 0 01-6 0"/>
+          </svg>
+          <span class="notif-count green" id="topbarOrderCount">0</span>
+        </button>
+        <!-- Messages -->
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+          </svg>
+          <span class="notif-count blue">3</span>
+        </button>
+        <!-- Alerts -->
+        <button class="notif-btn red" title="Предупреждения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 2L2 17h16L10 2z"/>
+            <path d="M10 8v4"/>
+            <circle cx="10" cy="14.5" r="0.5" fill="currentColor"/>
+          </svg>
+          <span class="notif-count red">1</span>
+        </button>
+        <!-- Tasks -->
+        <button class="notif-btn yellow" title="Задачи">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="16" height="16" rx="2"/>
+            <path d="M6 10l3 3 5-5"/>
+          </svg>
+          <span class="notif-count yellow">7</span>
+        </button>
+      </div>
+
+      <!-- User -->
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="6" r="4"/>
+            <path d="M2 18v-1a7 7 0 0114 0v1"/>
+          </svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <!-- ── CONTENT ── -->
+  <main class="content">
+
+    <!-- Page heading -->
+    <div class="page-heading">
+      <div>
+        <div class="page-title">Панель управления</div>
+        <div class="page-subtitle">Обзор ресторана за сегодня</div>
+      </div>
+      <div class="page-date">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="16" height="16" rx="2"/>
+          <path d="M2 8h16M7 3v2M13 3v2"/>
+        </svg>
+        <span id="currentDate">15 апреля 2026</span>
+      </div>
+    </div>
+
+    <!-- ── KPI CARDS ── -->
+    <div class="kpi-grid">
+
+      <!-- Заказов сегодня -->
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div class="kpi-icon green">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/>
+              <path d="M3 6h14"/>
+              <path d="M13 10a3 3 0 01-6 0"/>
+            </svg>
+          </div>
+          <div class="kpi-numbers">
+            <div class="kpi-value" id="kpiOrders">—</div>
+            <div class="kpi-label">Заказов сегодня</div>
+          </div>
+        </div>
+        <div class="kpi-trend up">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 15L10 5l5 10"/>
+          </svg>
+          <span class="kpi-trend-num">+12%</span>
+          <span>по сравнению со вчера</span>
+        </div>
+      </div>
+
+      <!-- Доставлено -->
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div class="kpi-icon blue">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 3h11v9H1z"/>
+              <path d="M12 7h4l3 3v3h-7V7z"/>
+              <circle cx="4.5" cy="15" r="1.5"/>
+              <circle cx="14.5" cy="15" r="1.5"/>
+            </svg>
+          </div>
+          <div class="kpi-numbers">
+            <div class="kpi-value" id="kpiDelivered">—</div>
+            <div class="kpi-label">Доставлено</div>
+          </div>
+        </div>
+        <div class="kpi-trend up">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 15L10 5l5 10"/>
+          </svg>
+          <span class="kpi-trend-num">+8%</span>
+          <span>успешно завершены</span>
+        </div>
+      </div>
+
+      <!-- Отменено -->
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div class="kpi-icon red">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="10" cy="10" r="8"/>
+              <path d="M7 7l6 6M13 7l-6 6"/>
+            </svg>
+          </div>
+          <div class="kpi-numbers">
+            <div class="kpi-value" id="kpiCancelled">—</div>
+            <div class="kpi-label">Отменено</div>
+          </div>
+        </div>
+        <div class="kpi-trend down">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 5L10 15l5-10"/>
+          </svg>
+          <span class="kpi-trend-num">-3%</span>
+          <span>снижение отмен</span>
+        </div>
+      </div>
+
+      <!-- Выручка -->
+      <div class="kpi-card">
+        <div class="kpi-top">
+          <div class="kpi-icon yellow">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="10" cy="10" r="8"/>
+              <path d="M10 6v8M7.5 8.5c0-1.1.9-2 2.5-2s2.5.9 2.5 2-.9 2-2.5 2-2.5.9-2.5 2 .9 2 2.5 2 2.5-.9 2.5-2"/>
+            </svg>
+          </div>
+          <div class="kpi-numbers">
+            <div class="kpi-value" id="kpiRevenue">—</div>
+            <div class="kpi-label">Выручка, ₽</div>
+          </div>
+        </div>
+        <div class="kpi-trend up">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 15L10 5l5 10"/>
+          </svg>
+          <span class="kpi-trend-num">+18%</span>
+          <span>за сегодня</span>
+        </div>
+      </div>
+
+    </div><!-- /kpi-grid -->
+
+    <!-- ── CHARTS ROW ── -->
+    <div class="charts-row">
+
+      <!-- Pie Chart — Категории заказов -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Категории заказов</span>
+          <a href="#" class="chart-card-action">Подробнее</a>
+        </div>
+        <div class="chart-placeholder">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="10" cy="10" r="8"/>
+            <path d="M10 2a8 8 0 010 16"/>
+            <path d="M10 10L10 2"/>
+            <path d="M10 10L17.5 13"/>
+          </svg>
+          <span class="chart-placeholder-text">Pie Chart<br>(реализуется)</span>
+        </div>
+        <div class="pie-legend">
+          <div class="pie-legend-item">
+            <div class="pie-dot" style="background:#00B074"></div>
+            <span class="pie-legend-label">Доставка</span>
+            <span class="pie-legend-pct">45%</span>
+          </div>
+          <div class="pie-legend-item">
+            <div class="pie-dot" style="background:#2D9CDB"></div>
+            <span class="pie-legend-label">Зал</span>
+            <span class="pie-legend-pct">35%</span>
+          </div>
+          <div class="pie-legend-item">
+            <div class="pie-dot" style="background:#F7C604"></div>
+            <span class="pie-legend-label">Самовывоз</span>
+            <span class="pie-legend-pct">20%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Line Chart — Заказы за неделю -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Заказы за неделю</span>
+          <a href="/admin-panel/analytics.html" class="chart-card-action">Аналитика</a>
+        </div>
+        <div class="chart-placeholder" style="min-height:240px;">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 16l4-6 4 3 4-8 4 4"/>
+            <path d="M2 18h16"/>
+          </svg>
+          <span class="chart-placeholder-text">Chart Order<br>(реализуется)</span>
+        </div>
+      </div>
+
+    </div><!-- /charts-row -->
+
+    <!-- ── BOTTOM ROW ── -->
+    <div class="bottom-row">
+
+      <!-- Recent Orders table -->
+      <div class="recent-orders">
+        <div class="table-header">
+          <span class="table-title">Последние заказы</span>
+          <a href="/admin-panel/orders.html" class="table-action">Все заказы</a>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>№ Заказа</th>
+              <th>Клиент</th>
+              <th>Тип</th>
+              <th>Сумма</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody id="recentOrdersBody">
+            <tr>
+              <td><span class="order-id">#1042</span></td>
+              <td>
+                <div class="order-customer">
+                  <div class="order-avatar">АИ</div>
+                  Анна Иванова
+                </div>
+              </td>
+              <td>Доставка</td>
+              <td>1 850 ₽</td>
+              <td><span class="badge badge-success">Доставлен</span></td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#1041</span></td>
+              <td>
+                <div class="order-customer">
+                  <div class="order-avatar">МП</div>
+                  Михаил Петров
+                </div>
+              </td>
+              <td>Зал</td>
+              <td>3 420 ₽</td>
+              <td><span class="badge badge-warning">Готовится</span></td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#1040</span></td>
+              <td>
+                <div class="order-customer">
+                  <div class="order-avatar">СС</div>
+                  Светлана Смирнова
+                </div>
+              </td>
+              <td>Самовывоз</td>
+              <td>980 ₽</td>
+              <td><span class="badge badge-success">Выдан</span></td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#1039</span></td>
+              <td>
+                <div class="order-customer">
+                  <div class="order-avatar">ДК</div>
+                  Дмитрий Козлов
+                </div>
+              </td>
+              <td>Доставка</td>
+              <td>2 240 ₽</td>
+              <td><span class="badge badge-info">В пути</span></td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#1038</span></td>
+              <td>
+                <div class="order-customer">
+                  <div class="order-avatar">ЕВ</div>
+                  Екатерина Волкова
+                </div>
+              </td>
+              <td>Зал</td>
+              <td>4 100 ₽</td>
+              <td><span class="badge badge-danger">Отменён</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Customer Map placeholder -->
+      <div class="map-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Карта клиентов</span>
+          <a href="#" class="chart-card-action">Подробнее</a>
+        </div>
+        <div class="map-placeholder">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M10 2C7.24 2 5 4.24 5 7c0 4.25 5 11 5 11s5-6.75 5-11c0-2.76-2.24-5-5-5z"/>
+            <circle cx="10" cy="7" r="2"/>
+          </svg>
+          <span class="map-placeholder-text">Customer Map<br>(реализуется)</span>
+        </div>
+      </div>
+
+    </div><!-- /bottom-row -->
+
+  </main>
+</div><!-- /main-wrapper -->
+
+<script src="js/auth.js"></script>
+<script>
+  /* ── Sidebar toggle (mobile) ── */
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+  }
+
+  /* ── Date display ── */
+  (function renderDate() {
+    const now = new Date();
+    const opts = { day: 'numeric', month: 'long', year: 'numeric' };
+    const formatted = now.toLocaleDateString('ru-RU', opts);
+    const el = document.getElementById('currentDate');
+    if (el) el.textContent = formatted;
+  })();
+
+  /* ── Load KPI from API ── */
+  async function loadDashboardKPI() {
+    try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = { 'Authorization': 'Bearer ' + token };
+
+      /* Orders today */
+      const ordersRes = await fetch('/api/orders?date=today&limit=1', { headers }).catch(() => null);
+      if (ordersRes && ordersRes.ok) {
+        const data = await ordersRes.json();
+        const total = data.total || data.count || (data.orders && data.orders.length) || 0;
+        const el = document.getElementById('kpiOrders');
+        if (el) el.textContent = total;
+
+        /* Badge in sidebar */
+        const badge = document.getElementById('navOrdersBadge');
+        const topBadge = document.getElementById('topbarOrderCount');
+        const pending = (data.orders || []).filter(o => o.status === 'pending' || o.status === 'new').length;
+        if (badge) { badge.textContent = pending || ''; badge.style.display = pending ? '' : 'none'; }
+        if (topBadge) topBadge.textContent = pending || 0;
+      }
+
+      /* Delivered */
+      const delRes = await fetch('/api/orders?status=delivered&date=today&limit=1', { headers }).catch(() => null);
+      if (delRes && delRes.ok) {
+        const data = await delRes.json();
+        const el = document.getElementById('kpiDelivered');
+        if (el) el.textContent = data.total || data.count || 0;
+      }
+
+      /* Cancelled */
+      const canRes = await fetch('/api/orders?status=cancelled&date=today&limit=1', { headers }).catch(() => null);
+      if (canRes && canRes.ok) {
+        const data = await canRes.json();
+        const el = document.getElementById('kpiCancelled');
+        if (el) el.textContent = data.total || data.count || 0;
+      }
+
+      /* Revenue — try analytics endpoint */
+      const revRes = await fetch('/api/analytics/revenue?period=today', { headers }).catch(() => null);
+      if (revRes && revRes.ok) {
+        const data = await revRes.json();
+        const amount = data.revenue || data.total || 0;
+        const el = document.getElementById('kpiRevenue');
+        if (el) el.textContent = amount >= 1000
+          ? (amount / 1000).toFixed(1) + 'k'
+          : amount;
+      }
+
+    } catch (err) {
+      console.warn('KPI load error:', err);
+    }
+  }
+
+  /* ── User display ── */
+  (function renderUser() {
+    const userData = localStorage.getItem('user') || localStorage.getItem('userData');
+    if (!userData) return;
+    try {
+      const u = JSON.parse(userData);
+      const name = u.name || u.username || u.email || 'Admin';
+      const short = name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
+      const sidebarName = document.getElementById('sidebarUserName');
+      const topbarName  = document.getElementById('topbarUserName');
+      if (sidebarName) sidebarName.textContent = name;
+      if (topbarName)  topbarName.textContent  = name.split(' ')[0] || name;
+    } catch (_) {}
+  })();
+
+  /* Run KPI load */
+  loadDashboardKPI();
+</script>
+</body>
+</html>

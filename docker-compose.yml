@@ -55,6 +55,7 @@ services:
       - ./kong:/kong
     ports:
       - "80:8000"     # HTTP API Gateway
+      - "8000:8000"   # HTTP API Gateway (alias for frontend)
       - "443:8443"    # HTTPS API Gateway
     networks:
       - food-flow-network
