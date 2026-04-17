@@ -24,6 +24,17 @@ router.get('/items', authenticateUser, requireRole('admin', 'owner', 'manager', 
   }
 });
 
+router.get('/items/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
+  try {
+    const item = await inventoryService.getItem(req.params.id, req.enterpriseId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    return res.json({ item });
+  } catch (error) {
+    console.error('Get item error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/items', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({

@@ -31,6 +31,24 @@ export class InventoryService {
     return result.rows;
   }
 
+  async getItem(id: string, enterpriseId?: string): Promise<any> {
+    const whereConds = ['id = $1'];
+    const values: any[] = [id];
+    if (enterpriseId) {
+      whereConds.push(`enterprise_id = $${values.length + 1}`);
+      values.push(enterpriseId);
+    }
+    const result = await this.pool.query(
+      `SELECT i.*, COALESCE(SUM(s.quantity), 0) as total_stock
+       FROM inventory_items i
+       LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id
+       WHERE ${whereConds.join(' AND ')}
+       GROUP BY i.id`,
+      values
+    );
+    return result.rows[0] || null;
+  }
+
   async createItem(data: any, enterpriseId?: string): Promise<any> {
     const result = await this.pool.query(
       `INSERT INTO inventory_items (enterprise_id, name, sku, category, unit, min_stock, max_stock, cost_price)
@@ -234,10 +252,21 @@ export class InventoryService {
 
   // ========== AUTO-DEDUCTION (for order completion) ==========
 
-  async deductByTechCards(orderId: string, warehouseId: string, performedBy?: string): Promise<void> {
+  async deductByTechCards(orderId: string, warehouseId: string, performedBy?: string, enterpriseId?: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Verify the warehouse belongs to the caller's enterprise
+      if (enterpriseId) {
+        const warehouseCheck = await client.query(
+          `SELECT id FROM warehouses WHERE id = $1 AND enterprise_id = $2`,
+          [warehouseId, enterpriseId]
+        );
+        if (warehouseCheck.rowCount === 0) {
+          throw new Error(`Warehouse ${warehouseId} not found or does not belong to this enterprise`);
+        }
+      }
 
       // Get order items with their menu_item_ids
       const orderItems = await client.query(

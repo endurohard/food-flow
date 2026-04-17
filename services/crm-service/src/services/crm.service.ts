@@ -26,12 +26,19 @@ export class CRMService {
     return result.rows;
   }
 
-  async getCustomerProfile(userId: string): Promise<any> {
+  async getCustomerProfile(userId: string, enterpriseId?: string): Promise<any> {
+    const whereConds = ['cp.user_id = $1'];
+    const values: any[] = [userId];
+    if (enterpriseId) {
+      whereConds.push(`cp.enterprise_id = $${values.length + 1}`);
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
       `SELECT cp.*, u.email, u.first_name, u.last_name, u.phone
        FROM customer_profiles cp
        INNER JOIN users u ON cp.user_id = u.id
-       WHERE cp.user_id = $1`, [userId]
+       WHERE ${whereConds.join(' AND ')}`,
+      values
     );
     return result.rows[0] || null;
   }

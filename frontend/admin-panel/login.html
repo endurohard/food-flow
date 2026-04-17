@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход — FoodFlow</title>
     <link rel="stylesheet" href="/css/tokens.css">
+    <script src="../js/auth.js"></script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect width='32' height='32' rx='8' fill='%2300B074'/><path d='M9 10h14M9 16h10M9 22h12' stroke='white' stroke-width='2.5' stroke-linecap='round'/></svg>">
     <style>
         *, *::before, *::after {
@@ -444,27 +445,11 @@
     </main>
 
     <script>
-        const API_BASE_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:8000'
-            : '';
-
         let currentTab = 'login';
 
-        // Check if already logged in
-        const existingToken = localStorage.getItem('accessToken');
-        if (existingToken) {
-            // Verify token is still valid
-            fetch(`${API_BASE_URL}/api/users/profile`, {
-                headers: { 'Authorization': `Bearer ${existingToken}` }
-            }).then(res => {
-                if (res.ok) {
-                    window.location.href = '/admin-panel/orders.html';
-                } else {
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('refreshToken');
-                    localStorage.removeItem('user');
-                }
-            }).catch(() => {});
+        // If already logged in with a valid ff_token, skip the login page
+        if (AUTH.isLoggedIn()) {
+            window.location.href = '/admin-panel/dashboard.html';
         }
 
         // Tab switching
@@ -529,7 +514,7 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
-            const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            const res = await fetch(AUTH.API_BASE + '/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
@@ -542,7 +527,7 @@
             }
 
             saveAuth(data);
-            window.location.href = '/admin-panel/orders.html';
+            window.location.href = '/admin-panel/dashboard.html';
         }
 
         async function doRegister() {
@@ -552,7 +537,7 @@
             const lastName = document.getElementById('lastName').value;
             const phone = document.getElementById('phone').value;
 
-            const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+            const res = await fetch(AUTH.API_BASE + '/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, firstName, lastName, phone: phone || undefined })
@@ -565,13 +550,21 @@
             }
 
             saveAuth(data);
-            window.location.href = '/admin-panel/orders.html';
+            window.location.href = '/admin-panel/dashboard.html';
         }
 
         function saveAuth(data) {
-            localStorage.setItem('accessToken', data.accessToken);
-            localStorage.setItem('refreshToken', data.refreshToken);
-            localStorage.setItem('user', JSON.stringify(data.user));
+            // Support both flat and nested token shapes from the API
+            const accessToken  = data.accessToken  || (data.tokens && data.tokens.accessToken);
+            const refreshToken = data.refreshToken || (data.tokens && data.tokens.refreshToken);
+            const user         = data.user || {};
+
+            localStorage.setItem('ff_token', accessToken);
+            localStorage.setItem('ff_refresh_token', refreshToken);
+            localStorage.setItem('ff_user', JSON.stringify({
+                ...user,
+                enterpriseRole: user.enterprise_role || user.enterpriseRole
+            }));
         }
     </script>
 </body>

@@ -23,7 +23,7 @@ router.get('/customers', authenticateUser, requireRole('admin', 'owner', 'manage
 
 router.get('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await crmService.getCustomerProfile(req.params.userId);
+    const profile = await crmService.getCustomerProfile(req.params.userId, req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Customer profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Get customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }

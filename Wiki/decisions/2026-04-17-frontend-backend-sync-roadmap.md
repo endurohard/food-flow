@@ -36,25 +36,25 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 ## Фаза 2 — Multi-tenant Phase 1: tenantGuard везде
 **Цель**: Закрыть getById без tenant guard на inventory/hr/crm.
 
-- [ ] `inventory-service`: `getItem(id, enterpriseId?)` — tenant guard в getById
-- [ ] `hr-service`: `getStaffProfile(userId, enterpriseId?)` — tenant guard
-- [ ] `crm-service`: `getCustomerProfile(userId, enterpriseId?)` — tenant guard
-- [ ] `inventory.deductByTechCards` — проверить что warehouseId принадлежит caller'у
+- [x] `inventory-service`: `getItem(id, enterpriseId?)` — tenant guard в getById; добавлен `GET /items/:id` маршрут
+- [x] `hr-service`: `getStaffProfile(userId, enterpriseId?)` — tenant guard
+- [x] `crm-service`: `getCustomerProfile(userId, enterpriseId?)` — tenant guard
+- [x] `inventory.deductByTechCards` — warehouse ownership check перед deduction
 - [ ] Consumer-side валидация `enterpriseId` в RabbitMQ kitchen/delivery consumers
-- [ ] `GET /api/orders` — `optionalAuth` → `authenticateUser` (orphan orders закрыть)
-- [ ] Wiki log entry + commit
+- [x] `GET /api/orders` — `optionalAuth` → `authenticateUser` (orphan orders закрыты)
+- [x] Wiki log entry + commit
 
 ---
 
 ## Фаза 3 — Role-based UI + logout + единый API_BASE
 **Цель**: Frontend отражает реальные права, нет localStorage permission tricks.
 
-- [ ] `frontend/js/auth.js` (общий модуль) — создать: `getToken()`, `getUser()`, `hasRole(role)`, `logout()`, `API_BASE = 'http://localhost:8000'`
-- [ ] `admin-panel/login.html` — подключить к real API (`POST /api/auth/login`), сохранять JWT в `localStorage.token`
-- [ ] Sidebar во всех 16 страницах — скрывать пункты по роли: `chef` видит только KDS, `waiter` — заказы/столы, `manager` — всё кроме системных настроек, `admin` — всё
-- [ ] Добавить кнопку Logout в sidebar (вызов `logout()` → редирект на login.html)
+- [x] `frontend/js/auth.js` — создан: `getToken/getUser/getRole/isLoggedIn/hasRole/logout/requireAuth/fetch` + silent refresh
+- [x] `admin-panel/login.html` — подключён к `POST /api/auth/login`, сохраняет JWT в `ff_token/ff_user`
+- [x] Sidebar во всех 14 protected страницах — role-based hiding + logout кнопка
+- [x] `AUTH.requireAuth()` на всех 14 страницах — редирект на login при отсутствии токена
 - [ ] Убрать `settings.html` role editor (localStorage permissions) — он misleading, реальные права на бекенде
-- [ ] Wiki log entry + commit
+- [x] Wiki log entry + commit
 
 ---
 
@@ -99,8 +99,8 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 | Дата | Фаза | Статус |
 |------|------|--------|
 | 2026-04-17 | Phase 1 (роли) | ✅ завершено |
-| — | Phase 2 (tenant) | ⬜ не начато |
-| — | Phase 3 (UI roles) | ⬜ не начато |
+| 2026-04-17 | Phase 2 (tenant) | ✅ завершено (RabbitMQ consumer pending) |
+| 2026-04-17 | Phase 3 (UI roles) | ✅ завершено (settings.html role editor pending) |
 | — | Phase 4 (mock→API) | ⬜ не начато |
 | — | Phase 5 (new pages) | ⬜ не начато |
 | — | Phase 6 (YooKassa) | ⬜ не начато |

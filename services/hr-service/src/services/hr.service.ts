@@ -26,10 +26,18 @@ export class HRService {
     return result.rows;
   }
 
-  async getStaffProfile(userId: string): Promise<any> {
+  async getStaffProfile(userId: string, enterpriseId?: string): Promise<any> {
+    const whereConds = ['sp.user_id = $1'];
+    const values: any[] = [userId];
+    if (enterpriseId) {
+      whereConds.push(`sp.enterprise_id = $${values.length + 1}`);
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
       `SELECT sp.*, u.email, u.first_name, u.last_name, u.phone, u.role
-       FROM staff_profiles sp INNER JOIN users u ON sp.user_id = u.id WHERE sp.user_id = $1`, [userId]
+       FROM staff_profiles sp INNER JOIN users u ON sp.user_id = u.id
+       WHERE ${whereConds.join(' AND ')}`,
+      values
     );
     return result.rows[0] || null;
   }

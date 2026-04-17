@@ -342,8 +342,26 @@ INVENTORY_OPS = admin | owner | manager | operator
 STAFF         = admin | owner | manager | operator | chef | waiter | employee
 ```
 
-**Что НЕ изменилось намеренно**:
+**Что НЕ изменилось намеренно (Phase E)**:
 - `POST /api/orders` остаётся `optionalAuth` (B2C guest checkout).
 - `GET /api/restaurants`, `GET /api/restaurants/:id`, `GET /:restaurantId/menu*` — публичные (customer-app и витрина).
 - `POST /webhooks/yookassa` — без auth (внешний callback ЮKassa).
 - Глобальные роли `admin` и `restaurant_owner` в JWT автоматически bypass `requireRole` без enterprise membership.
+
+## [2026-04-17] fix | Phase 2 — Multi-tenant getById guards + orphan orders
+Закрыты оставшиеся tenant-isolation пробелы: getById без enterpriseId guard в inventory/hr/crm, warehouse ownership check, orphan orders.
+
+- **`inventory-service/src/services/inventory.service.ts`**: новый метод `getItem(id, enterpriseId?)` — dynamic WHERE с `AND enterprise_id = $2`. `deductByTechCards(orderId, warehouseId, performedBy?, enterpriseId?)` — добавлена проверка `SELECT id FROM warehouses WHERE id = $1 AND enterprise_id = $2` перед deduction, иначе 403 с rollback.
+- **`inventory-service/src/routes/inventory.routes.ts`**: добавлен `GET /items/:id` маршрут (был пропущен), передаёт `req.enterpriseId` в `getItem`.
+- **`hr-service/src/services/hr.service.ts`**: `getStaffProfile(userId, enterpriseId?)` — добавлен tenant guard.
+- **`hr-service/src/routes/hr.routes.ts`**: `GET /staff/:userId` передаёт `req.enterpriseId`.
+- **`crm-service/src/services/crm.service.ts`**: `getCustomerProfile(userId, enterpriseId?)` — tenant guard через `AND cp.enterprise_id = $2`.
+- **`crm-service/src/routes/crm.routes.ts`**: `GET /customers/:userId` передаёт `req.enterpriseId`.
+- **`order-service/src/routes/orders.ts`**: `GET /` (список заказов) — `optionalAuth` → `authenticateUser`. Анонимные пользователи больше не могут просматривать заказы. `POST /` остаётся `optionalAuth` (guest checkout).
+
+## [2026-04-17] fix | Phase 3 — Role-based UI + Auth module + Logout
+Создан общий auth-модуль, login подключён к реальному API, все 14 admin-страниц защищены и имеют role-based sidebar.
+
+- **`frontend/js/auth.js`** (новый): `AUTH.getToken/getUser/getRole/isLoggedIn/hasRole/logout/requireAuth/fetch`. Нормализует `enterpriseRole` из JWT как приоритетную роль для UI-решений. `AUTH.fetch()` добавляет `Authorization: Bearer` автоматически, поддерживает silent refresh.
+- **`frontend/admin-panel/login.html`**: подключён к `POST /api/auth/login` и `POST /api/auth/register` через `AUTH.API_BASE`. Сохраняет токены в `ff_token/ff_refresh_token/ff_user`. При наличии `ff_token` → автоматический редирект на dashboard.
+- **Все 14 protected HTML-страниц**: `AUTH.requireAuth()` — редирект на login если нет токена. Role-based sidebar filtering: chef видит только KDS; waiter — orders/tables/KDS; viewer — dashboard/analytics; operator — orders/tables/KDS/inventory/calls; manager/owner/admin — всё. Logout кнопка в sidebar footer с именем пользователя.

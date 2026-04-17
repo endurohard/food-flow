@@ -38,7 +38,7 @@ const createOrderSchema = Joi.object({
 /**
  * GET /api/orders
  */
-router.get('/', optionalAuth, async (req: Request, res: Response) => {
+router.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const result = await orderService.list({
       enterpriseId: req.enterpriseId,

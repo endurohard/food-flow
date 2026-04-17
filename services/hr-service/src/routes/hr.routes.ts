@@ -20,7 +20,7 @@ router.get('/staff', authenticateUser, requireRole('admin', 'owner', 'manager'),
 
 router.get('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await hrService.getStaffProfile(req.params.userId);
+    const profile = await hrService.getStaffProfile(req.params.userId, req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Staff profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Get staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
