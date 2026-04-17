@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Предприятия — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <script src="js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-family) !important;
+      background: var(--admin-content-bg) !important;
+      color: var(--color-text-primary) !important;
+      min-height: 100vh;
+      display: flex !important;
+      overflow-x: hidden;
+    }
+
+    .sidebar {
+      width: 250px !important;
+      flex-shrink: 0 !important;
+      background: var(--admin-sidebar-bg) !important;
+      height: 100vh !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: 300 !important;
+      box-shadow: 2px 0 8px rgba(0,0,0,.06) !important;
+      transition: transform .2s ease !important;
+    }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+    .sidebar-brand img { height: 40px; width: auto; display: block; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex !important;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-primary) !important;
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent !important;
+      border-left: none !important;
+    }
+    .nav-item:hover { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px; top: 50%;
+      transform: translateY(-50%);
+      width: 8px; height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 20px 20px 0;
+    }
+    .nav-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+    .nav-item span { flex: 1; }
+    .nav-badge {
+      font-size: 11px; font-weight: 600;
+      background: var(--color-danger); color: #fff;
+      border-radius: 20px; padding: 2px 7px;
+      min-width: 20px; text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar {
+      width: 36px; height: 36px;
+      background: var(--color-primary-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 12px; color: var(--color-grey-5); }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299;
+    }
+    .sidebar-overlay.open { display: block; }
+
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex !important;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .topbar-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: var(--color-text-primary); padding: 4px; border-radius: 4px;
+    }
+    .topbar-search { flex: 1; max-width: 360px; position: relative; }
+    .topbar-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-placeholder); width: 18px; height: 18px; }
+    .topbar-search input {
+      width: 100%; height: 42px; background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border); border-radius: 8px;
+      padding: 0 16px 0 42px; font-family: var(--font-family); font-size: 14px;
+      color: var(--color-text-primary); outline: none;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .notif-group { display: flex; align-items: center; gap: 8px; }
+    .notif-btn {
+      position: relative; width: 40px; height: 40px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .notif-btn svg { width: 20px; height: 20px; }
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-count {
+      position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px;
+      border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #fff;
+    }
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .topbar-user {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px;
+      border-radius: 50px; cursor: pointer; transition: background .15s; text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+    .topbar-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-user-text { display: flex; flex-direction: column; }
+    .topbar-user-greeting { font-size: 11px; color: var(--color-grey-5); line-height: 1; }
+    .topbar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.3; }
+
+    .content { flex: 1; padding: 30px; }
+
+    .page-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+    }
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--color-grey-5);
+      margin-top: 4px;
+    }
+
+    /* Section header */
+    .section-heading {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+      margin: 32px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-heading:first-child { margin-top: 0; }
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--color-grey-3);
+      margin: 32px 0;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--admin-card-bg);
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+      margin-bottom: 16px;
+    }
+
+    /* Enterprise cards grid */
+    .ent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .ent-card {
+      background: var(--admin-card-bg);
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 20px;
+      cursor: pointer;
+      transition: box-shadow .2s, transform .2s;
+      border: 2px solid transparent;
+    }
+    .ent-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-2px); }
+    .ent-card.selected { border-color: var(--color-primary); }
+    .ent-card-name {
+      font-size: 16px; font-weight: 700; color: var(--color-text-dark); margin-bottom: 6px;
+    }
+    .ent-card-meta {
+      font-size: 13px; color: var(--color-grey-5); margin-bottom: 10px;
+    }
+    .ent-card-expand {
+      margin-top: 12px;
+      display: none;
+      background: var(--admin-content-bg);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+    .ent-card.expanded .ent-card-expand { display: block; }
+
+    /* Badge */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+    }
+    .badge-success { background: var(--color-success-light); color: var(--color-primary); }
+    .badge-warning { background: var(--color-warning-light); color: #c9a200; }
+    .badge-danger  { background: var(--color-danger-light);  color: var(--color-danger); }
+    .badge-info    { background: var(--color-info-light);    color: var(--color-info); }
+    .badge-grey    { background: var(--color-grey-2);        color: var(--color-grey-5); }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--color-grey-5); padding: 10px 14px;
+      text-align: left; background: var(--admin-content-bg);
+    }
+    .data-table td {
+      padding: 13px 14px; border-top: 1px solid var(--color-grey-3);
+      color: var(--color-text-primary);
+    }
+    .data-table tr:hover td { background: var(--admin-content-bg); }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 18px; border: none; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: filter .15s; font-family: var(--font-family);
+    }
+    .btn:hover { filter: brightness(.92); }
+    .btn-primary { background: var(--color-primary); color: #fff; }
+    .btn-secondary { background: var(--admin-content-bg); color: var(--color-text-primary); border: 1px solid var(--color-grey-3); }
+    .btn-danger { background: var(--color-danger); color: #fff; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* Form elements */
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--color-grey-5); margin-bottom: 6px; }
+    .form-control {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--color-grey-3); border-radius: 8px;
+      font-size: 14px; font-family: var(--font-family); color: var(--color-text-primary);
+      background: var(--admin-card-bg); outline: none; transition: border-color .15s;
+    }
+    .form-control:focus { border-color: var(--color-primary); }
+
+    /* Alert */
+    .alert {
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
+    }
+    .alert-success { background: var(--color-success-light); color: var(--color-primary); }
+    .alert-error   { background: var(--color-danger-light);  color: var(--color-danger); }
+
+    /* KPI metrics */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .metric-card {
+      background: var(--admin-card-bg);
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      padding: 16px 18px;
+    }
+    .metric-label { font-size: 12px; color: var(--color-grey-5); margin-bottom: 6px; }
+    .metric-value { font-size: 20px; font-weight: 700; color: var(--color-text-dark); }
+
+    /* Enterprise select bar */
+    .ent-select-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--admin-card-bg); border-radius: 12px;
+      padding: 14px 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .ent-select-bar label { font-size: 13px; font-weight: 600; color: var(--color-grey-5); }
+
+    /* Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-box {
+      background: var(--admin-card-bg); border-radius: 16px; padding: 28px;
+      max-width: 480px; width: calc(100% - 40px); max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--color-text-dark); }
+    .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--color-grey-5); }
+
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-250px); }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .main-wrapper { margin-left: 0; }
+      .topbar-hamburger { display: flex !important; align-items: center; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/dashboard.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/><path d="M10 9v9"/><path d="M4 2v16"/><path d="M4 8h4"/></svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M2 13h16M7 8v9"/></svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
+      <span>Склад</span>
+    </a>
+
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item active">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+      <span>Персонал</span>
+    </a>
+
+    <a href="/admin-panel/kds.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6M10 14v3"/></svg>
+      <span>KDS</span>
+    </a>
+
+    <a href="/admin-panel/calls.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4l2 5-2.5 1.5a11 11 0 005 5L13 12l5 2v4a1 1 0 01-1 1C7 19 1 13 1 4a1 1 0 011-1z"/></svg>
+      <span>Звонки</span>
+    </a>
+
+    <a href="/admin-panel/hall-designer.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="18" rx="2"/><path d="M1 7h18M1 13h18M7 1v18"/></svg>
+      <span>Дизайнер зала</span>
+    </a>
+
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+AUTH.requireAuth();
+
+(function applyRoleUI() {
+  var role = AUTH.getRole();
+  if (role === 'chef') {
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('kds')) el.style.display = 'none';
+    });
+  } else if (role === 'waiter') {
+    var allowed = ['orders', 'tables', 'kds'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'viewer') {
+    var allowed = ['dashboard', 'analytics'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'operator') {
+    var allowed = ['orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  }
+
+  var footer = document.querySelector('.sidebar-footer');
+  if (footer && !footer.querySelector('.ff-logout-btn')) {
+    var user = AUTH.getUser();
+    var displayName = (user && (user.first_name || user.email)) || '';
+    var logoutDiv = document.createElement('div');
+    logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
+    logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
+      '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
+      ' onmouseout="this.style.background=\'transparent\'">' +
+      'Выйти из системы</button>';
+    footer.appendChild(logoutDiv);
+  }
+})();
+</script>
+
+<div class="main-wrapper">
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebarMobile()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l3 3"/></svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+    <div class="topbar-right">
+      <div class="notif-group">
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+          <span class="notif-count green">0</span>
+        </button>
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/></svg>
+          <span class="notif-count blue">3</span>
+        </button>
+      </div>
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="page-heading">
+      <div>
+        <div class="page-title">Предприятия</div>
+        <div class="page-subtitle">Сеть ресторанов, пользователи и бенчмарки</div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SECTION 1: СЕТЬ РЕСТОРАНОВ ═══════════ -->
+    <div class="section-heading">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      Сеть ресторанов
+    </div>
+
+    <div id="entNetworkLoading" style="padding:40px;text-align:center;color:var(--color-grey-5);">Загрузка предприятий...</div>
+    <div id="entNetworkContent" style="display:none;">
+      <div class="ent-grid" id="entGrid"></div>
+    </div>
+
+    <hr class="section-divider">
+
+    <!-- ═══════════ SECTION 2: ПОЛЬЗОВАТЕЛИ ПРЕДПРИЯТИЯ ═══════════ -->
+    <div class="section-heading">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      Пользователи предприятия
+    </div>
+
+    <div class="ent-select-bar">
+      <label for="usersEntSelect">Предприятие:</label>
+      <select class="form-control" id="usersEntSelect" style="width:260px;" onchange="loadEnterpriseUsers()">
+        <option value="">— Выберите предприятие —</option>
+      </select>
+      <button class="btn btn-sm btn-primary" onclick="openAddUserModal()">+ Добавить пользователя</button>
+    </div>
+
+    <div id="usersSection" style="display:none;">
+      <div id="usersAlert" style="display:none;" class="alert"></div>
+      <div class="card" style="overflow-x:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div class="card-title" style="margin-bottom:0;">Список пользователей</div>
+          <button class="btn btn-sm btn-secondary" onclick="loadEnterpriseUsers()">Обновить</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Имя</th>
+              <th>Роль</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody">
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Выберите предприятие</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="usersLoading" style="display:none;padding:30px;text-align:center;color:var(--color-grey-5);">Загрузка пользователей...</div>
+
+    <hr class="section-divider">
+
+    <!-- ═══════════ SECTION 3: БЕНЧМАРКИ ═══════════ -->
+    <div class="section-heading">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      Бенчмарки
+    </div>
+
+    <div class="ent-select-bar">
+      <label for="benchEntSelect">Предприятие:</label>
+      <select class="form-control" id="benchEntSelect" style="width:260px;" onchange="loadBenchmarks()">
+        <option value="">— Выберите предприятие —</option>
+      </select>
+    </div>
+
+    <div id="benchLoading" style="display:none;padding:30px;text-align:center;color:var(--color-grey-5);">Загрузка бенчмарков...</div>
+    <div id="benchContent" style="display:none;">
+      <div class="metrics-grid" id="benchGrid"></div>
+    </div>
+    <div id="benchEmpty" style="display:none;padding:20px;text-align:center;color:var(--color-grey-5);font-size:14px;">Выберите предприятие для просмотра бенчмарков</div>
+
+  </main>
+</div>
+
+<!-- Modal: Add User -->
+<div class="modal" id="addUserModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Добавить пользователя</span>
+      <button class="modal-close" onclick="closeModal('addUserModal')">&times;</button>
+    </div>
+    <div id="addUserAlert" style="display:none;" class="alert"></div>
+    <form id="addUserForm" onsubmit="submitAddUser(event)">
+      <div class="form-group">
+        <label class="form-label">ID пользователя</label>
+        <input type="text" class="form-control" id="addUserId" placeholder="UUID пользователя" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Роль</label>
+        <select class="form-control" id="addUserRole" required>
+          <option value="owner">owner</option>
+          <option value="manager">manager</option>
+          <option value="admin">admin</option>
+          <option value="operator" selected>operator</option>
+          <option value="waiter">waiter</option>
+          <option value="chef">chef</option>
+          <option value="viewer">viewer</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Добавить</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal('addUserModal')">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Change Role -->
+<div class="modal" id="changeRoleModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Изменить роль</span>
+      <button class="modal-close" onclick="closeModal('changeRoleModal')">&times;</button>
+    </div>
+    <div id="changeRoleAlert" style="display:none;" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label">Пользователь</label>
+      <input type="text" class="form-control" id="changeRoleUserEmail" readonly>
+      <input type="hidden" id="changeRoleUserId">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Новая роль</label>
+      <select class="form-control" id="changeRoleValue">
+        <option value="owner">owner</option>
+        <option value="manager">manager</option>
+        <option value="admin">admin</option>
+        <option value="operator">operator</option>
+        <option value="waiter">waiter</option>
+        <option value="chef">chef</option>
+        <option value="viewer">viewer</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmChangeRole()">Сохранить</button>
+      <button class="btn btn-secondary" onclick="closeModal('changeRoleModal')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Helpers ──
+  function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  function toggleSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (!sb) return;
+    sb.classList.toggle('mobile-open');
+    if (ov) ov.classList.toggle('open');
+  }
+  function closeSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (sb) sb.classList.remove('mobile-open');
+    if (ov) ov.classList.remove('open');
+  }
+
+  (function() {
+    try {
+      var u = AUTH.getUser() || {};
+      var nm = u.first_name || u.name || u.email || 'Admin';
+      var el1 = document.getElementById('sidebarUserName');
+      var el2 = document.getElementById('topbarUserName');
+      if (el1) el1.textContent = nm;
+      if (el2) el2.textContent = nm.split(' ')[0] || nm;
+    } catch(e) {}
+  })();
+
+  // ── State ──
+  let enterprises = [];
+  let selectedUsersEntId = null;
+
+  // ════════════════════════════════════
+  // SECTION 1: ENTERPRISE NETWORK
+  // ════════════════════════════════════
+  async function loadEnterprises() {
+    const loading = document.getElementById('entNetworkLoading');
+    const content = document.getElementById('entNetworkContent');
+    loading.style.display = '';
+    content.style.display = 'none';
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      enterprises = data.enterprises || data.data || [];
+      renderEnterpriseGrid(enterprises);
+      populateEnterpriseSelects(enterprises);
+      loading.style.display = 'none';
+      content.style.display = '';
+    } catch (e) {
+      loading.textContent = 'Ошибка загрузки: ' + e.message;
+    }
+  }
+
+  function renderEnterpriseGrid(list) {
+    const grid = document.getElementById('entGrid');
+    if (!list.length) {
+      grid.innerHTML = '<p style="color:var(--color-grey-5);font-size:14px;grid-column:1/-1;">Предприятия не найдены</p>';
+      return;
+    }
+    grid.innerHTML = list.map(ent => {
+      const statusCls = ent.status === 'active' ? 'badge-success' : 'badge-grey';
+      const statusLabel = ent.status === 'active' ? 'Активно' : (ent.status || 'Неизвестно');
+      const restCount = ent.restaurant_count || ent.restaurantCount || (ent.restaurants ? ent.restaurants.length : 0);
+      return `
+        <div class="ent-card" id="entCard-${ent.id}" onclick="toggleEntCard(${ent.id}, this)">
+          <div class="ent-card-name">${ent.name || 'Предприятие #' + ent.id}</div>
+          <div class="ent-card-meta">
+            <span class="badge ${statusCls}">${statusLabel}</span>
+            ${restCount ? `<span style="margin-left:8px;font-size:12px;color:var(--color-grey-5);">${restCount} ресторанов</span>` : ''}
+          </div>
+          ${ent.description ? `<div style="font-size:13px;color:var(--color-grey-5);">${ent.description}</div>` : ''}
+          <div class="ent-card-expand" id="entExpand-${ent.id}">
+            <div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;">Загрузка ресторанов...</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  async function toggleEntCard(id, cardEl) {
+    const isExpanded = cardEl.classList.contains('expanded');
+    // Collapse all
+    document.querySelectorAll('.ent-card.expanded').forEach(c => c.classList.remove('expanded'));
+
+    if (!isExpanded) {
+      cardEl.classList.add('expanded');
+      const expandEl = document.getElementById('entExpand-' + id);
+      expandEl.innerHTML = '<div style="font-size:12px;color:var(--color-grey-5);">Загрузка ресторанов...</div>';
+      try {
+        const res = await AUTH.fetch('/api/enterprises/' + id);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const ent = data.enterprise || data;
+        const rests = ent.restaurants || [];
+        if (!rests.length) {
+          expandEl.innerHTML = '<div style="font-size:12px;color:var(--color-grey-5);">Рестораны не найдены</div>';
+          return;
+        }
+        expandEl.innerHTML = rests.map(r => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--color-grey-3);font-size:13px;">
+            <span style="font-weight:600;">${r.name || 'Ресторан #' + r.id}</span>
+            <span class="badge ${r.status === 'active' ? 'badge-success' : 'badge-grey'}" style="font-size:11px;">${r.status || '—'}</span>
+          </div>`).join('');
+      } catch (e) {
+        expandEl.innerHTML = '<div style="color:var(--color-danger);font-size:12px;">Ошибка: ' + e.message + '</div>';
+      }
+    }
+  }
+
+  function populateEnterpriseSelects(list) {
+    const selects = [
+      document.getElementById('usersEntSelect'),
+      document.getElementById('benchEntSelect')
+    ];
+    selects.forEach(sel => {
+      if (!sel) return;
+      const currentVal = sel.value;
+      // Keep the placeholder option
+      while (sel.options.length > 1) sel.remove(1);
+      list.forEach(ent => {
+        const opt = document.createElement('option');
+        opt.value = ent.id;
+        opt.textContent = ent.name || 'Предприятие #' + ent.id;
+        sel.appendChild(opt);
+      });
+      if (currentVal) sel.value = currentVal;
+    });
+  }
+
+  // ════════════════════════════════════
+  // SECTION 2: ENTERPRISE USERS
+  // ════════════════════════════════════
+  async function loadEnterpriseUsers() {
+    const entId = document.getElementById('usersEntSelect').value;
+    if (!entId) {
+      document.getElementById('usersSection').style.display = 'none';
+      document.getElementById('usersLoading').style.display = 'none';
+      return;
+    }
+    selectedUsersEntId = entId;
+
+    document.getElementById('usersSection').style.display = 'none';
+    document.getElementById('usersLoading').style.display = '';
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + entId + '/users');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const users = data.users || [];
+      renderUsersTable(users);
+      document.getElementById('usersLoading').style.display = 'none';
+      document.getElementById('usersSection').style.display = '';
+    } catch (e) {
+      document.getElementById('usersLoading').style.display = 'none';
+      document.getElementById('usersSection').style.display = '';
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-danger);">Ошибка: ${e.message}</td></tr>`;
+    }
+  }
+
+  function renderUsersTable(users) {
+    const tbody = document.getElementById('usersTableBody');
+    if (!users.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Пользователей нет</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const isActive = u.is_active !== false && u.isActive !== false;
+      const statusBadge = isActive
+        ? '<span class="badge badge-success">Активен</span>'
+        : '<span class="badge badge-grey">Неактивен</span>';
+      const name = [u.first_name || u.firstName, u.last_name || u.lastName].filter(Boolean).join(' ') || '—';
+      return `<tr>
+        <td>${u.email || '—'}</td>
+        <td>${name}</td>
+        <td><span class="badge badge-info">${u.role || '—'}</span></td>
+        <td>${statusBadge}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-secondary" onclick="openChangeRoleModal('${u.id}', '${u.email || ''}', '${u.role || ''}')">Роль</button>
+          ${isActive
+            ? `<button class="btn btn-sm btn-danger" style="margin-left:6px;" onclick="deactivateUser('${u.id}')">Откл.</button>`
+            : `<button class="btn btn-sm btn-primary" style="margin-left:6px;" onclick="activateUser('${u.id}')">Вкл.</button>`
+          }
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openAddUserModal() {
+    if (!selectedUsersEntId) {
+      alert('Сначала выберите предприятие');
+      return;
+    }
+    document.getElementById('addUserId').value = '';
+    document.getElementById('addUserRole').value = 'operator';
+    const alertEl = document.getElementById('addUserAlert');
+    alertEl.style.display = 'none';
+    document.getElementById('addUserModal').classList.add('open');
+  }
+
+  async function submitAddUser(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('addUserAlert');
+    alertEl.style.display = 'none';
+
+    const userId = document.getElementById('addUserId').value.trim();
+    const role = document.getElementById('addUserRole').value;
+
+    if (!userId) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Введите ID пользователя';
+      alertEl.style.display = '';
+      return;
+    }
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'HTTP ' + res.status);
+      }
+      closeModal('addUserModal');
+      showUsersAlert('Пользователь добавлен', 'success');
+      await loadEnterpriseUsers();
+    } catch (e) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Ошибка: ' + e.message;
+      alertEl.style.display = '';
+    }
+  }
+
+  function openChangeRoleModal(userId, email, currentRole) {
+    document.getElementById('changeRoleUserId').value = userId;
+    document.getElementById('changeRoleUserEmail').value = email;
+    document.getElementById('changeRoleValue').value = currentRole || 'operator';
+    const alertEl = document.getElementById('changeRoleAlert');
+    alertEl.style.display = 'none';
+    document.getElementById('changeRoleModal').classList.add('open');
+  }
+
+  async function confirmChangeRole() {
+    const alertEl = document.getElementById('changeRoleAlert');
+    alertEl.style.display = 'none';
+    const userId = document.getElementById('changeRoleUserId').value;
+    const newRole = document.getElementById('changeRoleValue').value;
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/users/' + userId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'HTTP ' + res.status);
+      }
+      closeModal('changeRoleModal');
+      showUsersAlert('Роль изменена', 'success');
+      await loadEnterpriseUsers();
+    } catch (e) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Ошибка: ' + e.message;
+      alertEl.style.display = '';
+    }
+  }
+
+  async function deactivateUser(userId) {
+    if (!confirm('Деактивировать пользователя?')) return;
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/users/' + userId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: false })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      showUsersAlert('Пользователь деактивирован', 'success');
+      await loadEnterpriseUsers();
+    } catch (e) {
+      showUsersAlert('Ошибка: ' + e.message, 'error');
+    }
+  }
+
+  async function activateUser(userId) {
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/users/' + userId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: true })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      showUsersAlert('Пользователь активирован', 'success');
+      await loadEnterpriseUsers();
+    } catch (e) {
+      showUsersAlert('Ошибка: ' + e.message, 'error');
+    }
+  }
+
+  function showUsersAlert(msg, type) {
+    const el = document.getElementById('usersAlert');
+    el.className = 'alert alert-' + (type === 'success' ? 'success' : 'error');
+    el.textContent = msg;
+    el.style.display = '';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+  }
+
+  // ════════════════════════════════════
+  // SECTION 3: BENCHMARKS
+  // ════════════════════════════════════
+  async function loadBenchmarks() {
+    const entId = document.getElementById('benchEntSelect').value;
+    const loading = document.getElementById('benchLoading');
+    const content = document.getElementById('benchContent');
+    const empty = document.getElementById('benchEmpty');
+
+    if (!entId) {
+      loading.style.display = 'none';
+      content.style.display = 'none';
+      empty.style.display = '';
+      return;
+    }
+
+    loading.style.display = '';
+    content.style.display = 'none';
+    empty.style.display = 'none';
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + entId + '/benchmarks');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const benchmarks = data.benchmarks || data.metrics || data || {};
+      renderBenchmarks(benchmarks);
+      loading.style.display = 'none';
+      content.style.display = '';
+    } catch (e) {
+      loading.style.display = 'none';
+      empty.style.display = '';
+      empty.textContent = 'Ошибка загрузки бенчмарков: ' + e.message;
+    }
+  }
+
+  function renderBenchmarks(data) {
+    const grid = document.getElementById('benchGrid');
+
+    // Support both array and object formats
+    let metrics = [];
+    if (Array.isArray(data)) {
+      metrics = data.map(item => ({
+        label: item.metric_name || item.name || item.key || 'Метрика',
+        value: item.value !== undefined ? item.value : (item.metric_value || '—'),
+        unit: item.unit || ''
+      }));
+    } else if (typeof data === 'object') {
+      const labelMap = {
+        avg_order_value: 'Средний чек',
+        avg_check: 'Средний чек',
+        total_revenue: 'Выручка',
+        revenue: 'Выручка',
+        order_count: 'Заказов',
+        orders_count: 'Заказов',
+        avg_delivery_time: 'Время доставки (мин)',
+        delivery_time: 'Время доставки (мин)',
+        customer_satisfaction: 'Удовлетворённость',
+        satisfaction_score: 'Удовлетворённость',
+        repeat_customers: 'Повторных клиентов',
+        return_rate: 'Возвращаемость (%)',
+        staff_count: 'Сотрудников',
+        table_turnover: 'Оборот столов',
+        avg_wait_time: 'Среднее ожидание (мин)'
+      };
+      metrics = Object.entries(data)
+        .filter(([k, v]) => typeof v !== 'object' && v !== null && v !== undefined)
+        .map(([k, v]) => ({
+          label: labelMap[k] || k.replace(/_/g, ' '),
+          value: v,
+          unit: ''
+        }));
+    }
+
+    if (!metrics.length) {
+      grid.innerHTML = '<p style="color:var(--color-grey-5);font-size:14px;grid-column:1/-1;">Данные бенчмарков отсутствуют</p>';
+      return;
+    }
+
+    grid.innerHTML = metrics.map(m => {
+      const displayVal = typeof m.value === 'number'
+        ? m.value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+        : m.value;
+      return `
+        <div class="metric-card">
+          <div class="metric-label">${m.label}</div>
+          <div class="metric-value">${displayVal}${m.unit ? ' ' + m.unit : ''}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Init ──
+  (async function init() {
+    document.getElementById('benchEmpty').style.display = '';
+    await loadEnterprises();
+  })();
+</script>
+
+</body>
+</html>

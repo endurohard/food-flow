@@ -977,6 +977,15 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
       <span>Склад</span>
     </a>
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
 
     <a href="/admin-panel/loyalty.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
@@ -1234,10 +1243,10 @@ AUTH.requireAuth();
 
   <script src="js/auth.js"></script>
   <script>
-    const API_BASE_URL = 'http://localhost/api';
     let tables = [];
     let currentHall = 'main';
     let currentTable = null;
+    let currentRestaurantId = null;
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1254,34 +1263,74 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Initialize sample data
-    function initializeTables() {
+    // Load tables from API
+    async function initializeTables() {
+      document.getElementById('tablesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#8b95a5;">Загрузка...</div>';
+      try {
+        // Get restaurant list
+        const restRes = await AUTH.fetch('/api/restaurants');
+        if (restRes.ok) {
+          const restData = await restRes.json();
+          if (restData.restaurants && restData.restaurants.length > 0) {
+            currentRestaurantId = restData.restaurants[0].id;
+          }
+        }
+      } catch (e) {
+        console.log('Failed to load restaurants:', e.message);
+      }
+
+      if (!currentRestaurantId) {
+        // Fallback to localStorage
+        _loadTablesFromLocalStorage();
+        renderTables();
+        return;
+      }
+
+      try {
+        const res = await AUTH.fetch(`/api/tables?restaurantId=${currentRestaurantId}`);
+        if (res.ok) {
+          const data = await res.json();
+          tables = (data.tables || []).map(t => ({
+            id: t.id,
+            number: t.table_number || t.number,
+            hall: t.section || 'main',
+            seats: t.seats || t.capacity || 4,
+            status: t.status || 'free',
+            orderId: t.current_order_id || null,
+            occupiedAt: t.occupied_at || null,
+            customerName: t.reservation_name || null,
+            customerPhone: t.reservation_phone || null,
+            reservedFor: t.reserved_for || null,
+            reservationNotes: t.reservation_notes || null
+          }));
+          renderTables();
+          return;
+        }
+      } catch (e) {
+        console.log('API tables load failed:', e.message);
+      }
+
+      // Fallback
+      _loadTablesFromLocalStorage();
+      renderTables();
+    }
+
+    function _loadTablesFromLocalStorage() {
       const savedTables = localStorage.getItem('restaurantTables');
       if (savedTables) {
         tables = JSON.parse(savedTables);
       } else {
-        // Create default tables
         tables = [
-          // Main hall
           { id: 1, number: 1, hall: 'main', seats: 4, status: 'free' },
           { id: 2, number: 2, hall: 'main', seats: 2, status: 'free' },
           { id: 3, number: 3, hall: 'main', seats: 6, status: 'occupied', orderId: 1, occupiedAt: new Date().toISOString() },
           { id: 4, number: 4, hall: 'main', seats: 4, status: 'free' },
           { id: 5, number: 5, hall: 'main', seats: 8, status: 'reserved', customerName: 'Иван Петров', customerPhone: '+7 999 123-45-67', reservedFor: '18:00' },
-          { id: 6, number: 6, hall: 'main', seats: 2, status: 'free' },
-          { id: 7, number: 7, hall: 'main', seats: 4, status: 'occupied', orderId: 2, occupiedAt: new Date().toISOString() },
-          { id: 8, number: 8, hall: 'main', seats: 6, status: 'free' },
-          // VIP hall
-          { id: 9, number: 1, hall: 'vip', seats: 10, status: 'reserved', customerName: 'Анна Сидорова', customerPhone: '+7 999 987-65-43', reservedFor: '20:00' },
+          { id: 9, number: 1, hall: 'vip', seats: 10, status: 'free' },
           { id: 10, number: 2, hall: 'vip', seats: 8, status: 'free' },
-          { id: 11, number: 3, hall: 'vip', seats: 12, status: 'free' },
-          // Terrace
           { id: 12, number: 1, hall: 'terrace', seats: 4, status: 'free' },
-          { id: 13, number: 2, hall: 'terrace', seats: 4, status: 'free' },
-          { id: 14, number: 3, hall: 'terrace', seats: 6, status: 'occupied', orderId: 3, occupiedAt: new Date().toISOString() },
-          { id: 15, number: 4, hall: 'terrace', seats: 2, status: 'free' }
+          { id: 13, number: 2, hall: 'terrace', seats: 4, status: 'free' }
         ];
-        saveTables();
       }
     }
 
@@ -1472,7 +1521,7 @@ AUTH.requireAuth();
       openTableModal(currentTable.id); // Refresh modal
     }
 
-    function saveTableChanges() {
+    async function saveTableChanges() {
       if (!currentTable) return;
 
       if (currentTable.status === 'reserved') {
@@ -1482,7 +1531,7 @@ AUTH.requireAuth();
         const notes = document.getElementById('reservationNotes')?.value;
 
         if (!name || !phone || !time) {
-          showNotification('⚠️ Заполните все обязательные поля для брони');
+          showNotification('Заполните все обязательные поля для брони');
           return;
         }
 
@@ -1499,10 +1548,37 @@ AUTH.requireAuth();
         }
       }
 
+      // Try API update
+      try {
+        const payload = {
+          status: currentTable.status,
+          currentOrderId: currentTable.orderId || null,
+          reservationName: currentTable.customerName || null,
+          reservationPhone: currentTable.customerPhone || null,
+          reservedFor: currentTable.reservedFor || null,
+          reservationNotes: currentTable.reservationNotes || null
+        };
+        const res = await AUTH.fetch(`/api/tables/${currentTable.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          showNotification('Стол обновлен');
+          closeModal();
+          await initializeTables();
+          return;
+        }
+      } catch (e) {
+        console.log('API table update failed:', e.message);
+      }
+
+      // Fallback to localStorage
+      const idx = tables.findIndex(t => t.id === currentTable.id);
+      if (idx !== -1) tables[idx] = { ...currentTable };
       saveTables();
       renderTables();
       closeModal();
-      showNotification('✅ Стол обновлен');
+      showNotification('Стол обновлен');
     }
 
     function getHallName(hall) {
@@ -1514,7 +1590,11 @@ AUTH.requireAuth();
       return names[hall] || hall;
     }
 
-    function addNewTable() {
+    async function addNewTable() {
+      if (!currentRestaurantId) {
+        showNotification('Сначала загрузите данные ресторана');
+        return;
+      }
       const hallName = getHallName(currentHall);
       const hallTables = tables.filter(t => t.hall === currentHall);
       const nextNumber = hallTables.length > 0 ? Math.max(...hallTables.map(t => t.number)) + 1 : 1;
@@ -1522,18 +1602,31 @@ AUTH.requireAuth();
       const seats = prompt(`Сколько мест за столом #${nextNumber} в зале "${hallName}"?`, '4');
       if (!seats || isNaN(seats)) return;
 
-      const newTable = {
-        id: Math.max(...tables.map(t => t.id)) + 1,
-        number: nextNumber,
-        hall: currentHall,
-        seats: parseInt(seats),
-        status: 'free'
-      };
+      try {
+        const res = await AUTH.fetch('/api/tables', {
+          method: 'POST',
+          body: JSON.stringify({
+            restaurantId: currentRestaurantId,
+            tableNumber: nextNumber,
+            section: currentHall,
+            seats: parseInt(seats)
+          })
+        });
+        if (res.ok) {
+          showNotification(`Стол #${nextNumber} добавлен`);
+          await initializeTables();
+          return;
+        }
+      } catch (e) {
+        console.log('API add table failed:', e.message);
+      }
 
-      tables.push(newTable);
+      // Fallback
+      const maxId = tables.length > 0 ? Math.max(...tables.map(t => typeof t.id === 'number' ? t.id : 0)) + 1 : 1;
+      tables.push({ id: maxId, number: nextNumber, hall: currentHall, seats: parseInt(seats), status: 'free' });
       saveTables();
       renderTables();
-      showNotification(`✅ Стол #${nextNumber} добавлен`);
+      showNotification(`Стол #${nextNumber} добавлен`);
     }
 
     function closeModal() {
@@ -1541,9 +1634,9 @@ AUTH.requireAuth();
       currentTable = null;
     }
 
-    function refreshTables() {
-      renderTables();
-      showNotification('🔄 Данные обновлены');
+    async function refreshTables() {
+      await initializeTables();
+      showNotification('Данные обновлены');
     }
 
     function showNotification(message) {
@@ -1565,7 +1658,6 @@ AUTH.requireAuth();
 
     // Initialize
     initializeTables();
-    renderTables();
   </script>
 </div><!-- /main-wrapper -->
 

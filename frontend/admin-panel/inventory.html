@@ -1071,6 +1071,16 @@
       <span>Склад</span>
     </a>
 
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
     <a href="/admin-panel/loyalty.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
       <span>CRM</span>
@@ -1307,6 +1317,7 @@ AUTH.requireAuth();
             <button class="filter-btn" data-filter="in-stock" onclick="setFilter('in-stock')">В наличии</button>
             <button class="filter-btn" data-filter="low-stock" onclick="setFilter('low-stock')">Заканчиваются</button>
             <button class="filter-btn" data-filter="out-of-stock" onclick="setFilter('out-of-stock')">Нет в наличии</button>
+            <button class="btn btn-primary btn-small" onclick="openAddItemModal()">+ Добавить товар</button>
           </div>
         </div>
 
@@ -1342,6 +1353,45 @@ AUTH.requireAuth();
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Stock Movement Section -->
+      <div class="table-wrapper" style="margin-top:24px;">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:16px;">Движение товаров</h3>
+        <form id="movementForm" onsubmit="saveMovement(event)" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Склад</label>
+            <select class="form-select" id="movementWarehouse" required>
+              <option value="">Загрузка...</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Товар</label>
+            <select class="form-select" id="movementItem" required>
+              <option value="">Выберите товар</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Тип</label>
+            <select class="form-select" id="movementType" required>
+              <option value="in">Приход</option>
+              <option value="out">Расход</option>
+              <option value="adjustment">Корректировка</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Количество</label>
+            <input type="number" class="form-input" id="movementQty" step="0.01" min="0.01" required>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Примечание</label>
+            <input type="text" class="form-input" id="movementNotes" placeholder="Необязательно">
+          </div>
+          <div>
+            <button type="submit" class="btn btn-primary">Записать</button>
+          </div>
+        </form>
+        <div id="movementResult" style="margin-top:12px;font-size:14px;"></div>
       </div>
     </div>
 
@@ -1736,7 +1786,7 @@ AUTH.requireAuth();
     async function initializeData() {
       // Try loading from API
       try {
-        const suppRes = await authFetch('/api/suppliers');
+        const suppRes = await AUTH.fetch('/api/suppliers');
         if (suppRes.ok) {
           const suppData = await suppRes.json();
           if (suppData.suppliers && suppData.suppliers.length > 0) {
@@ -1748,7 +1798,7 @@ AUTH.requireAuth();
           }
         }
 
-        const invRes = await authFetch('/api/inventory/items');
+        const invRes = await AUTH.fetch('/api/inventory/items');
         if (invRes.ok) {
           const invData = await invRes.json();
           if (invData.items && invData.items.length > 0) {
@@ -1931,7 +1981,7 @@ AUTH.requireAuth();
             <td>${supplier ? supplier.name : '-'}</td>
             <td>
               <button class="btn btn-secondary btn-small" onclick="editItem(${item.id})">✏️</button>
-              <button class="btn btn-success btn-small" onclick="quickRestock(${item.id})">+</button>
+              <button class="btn btn-danger btn-small" onclick="deleteItem(${item.id})" style="margin-left:4px;">🗑</button>
             </td>
           </tr>
         `;
@@ -1994,45 +2044,154 @@ AUTH.requireAuth();
       document.getElementById('itemModal').classList.add('active');
     }
 
-    function saveItem(event) {
+    async function saveItem(event) {
       event.preventDefault();
 
       const formData = {
         name: document.getElementById('itemName').value,
         category: document.getElementById('itemCategory').value,
         unit: document.getElementById('itemUnit').value,
-        quantity: parseFloat(document.getElementById('itemQuantity').value),
-        minQuantity: parseFloat(document.getElementById('itemMinQuantity').value),
-        costPrice: parseFloat(document.getElementById('itemCostPrice').value),
-        supplierId: parseInt(document.getElementById('itemSupplier').value)
+        minStock: parseFloat(document.getElementById('itemMinQuantity').value),
+        costPrice: parseFloat(document.getElementById('itemCostPrice').value)
       };
 
-      if (editingItemId) {
-        const index = inventory.findIndex(i => i.id === editingItemId);
-        inventory[index] = { ...inventory[index], ...formData };
-        showNotification('✅ Товар обновлён');
-      } else {
-        const newId = inventory.length > 0 ? Math.max(...inventory.map(i => i.id)) + 1 : 1;
-        inventory.push({ id: newId, ...formData });
-        showNotification('✅ Товар добавлен');
+      try {
+        let res;
+        if (editingItemId) {
+          res = await AUTH.fetch('/api/inventory/items/' + editingItemId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+          });
+        } else {
+          res = await AUTH.fetch('/api/inventory/items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+          });
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'HTTP ' + res.status);
+        }
+        showNotification(editingItemId ? '✅ Товар обновлён' : '✅ Товар добавлен');
+        closeItemModal();
+        // Reload from API
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        showNotification('❌ Ошибка: ' + e.message);
+        // Fallback: local update
+        if (editingItemId) {
+          const idx = inventory.findIndex(i => i.id === editingItemId);
+          if (idx > -1) inventory[idx] = { ...inventory[idx], ...formData };
+        } else {
+          const newId = inventory.length > 0 ? Math.max(...inventory.map(i => i.id)) + 1 : 1;
+          inventory.push({ id: newId, quantity: 0, ...formData });
+        }
+        saveData();
+        renderInventory();
+        closeItemModal();
+      }
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Удалить этот товар?')) return;
+      try {
+        const res = await AUTH.fetch('/api/inventory/items/' + id, { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        showNotification('✅ Товар удалён');
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        showNotification('❌ Ошибка удаления: ' + e.message);
+        // Fallback: local delete
+        inventory = inventory.filter(i => i.id !== id);
+        saveData();
+        renderInventory();
+      }
+    }
+
+    async function reloadInventoryFromAPI() {
+      try {
+        const res = await AUTH.fetch('/api/inventory/items');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.items) {
+            inventory = data.items.map(i => ({
+              id: i.id, name: i.name, category: i.category || 'other',
+              quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
+              minQuantity: parseFloat(i.min_stock) || 0,
+              costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
+            }));
+            updateMovementItemOptions();
+          }
+        }
+      } catch (e) { /* use existing data */ }
+      renderInventory();
+    }
+
+    async function saveMovement(event) {
+      event.preventDefault();
+      const warehouseId = document.getElementById('movementWarehouse').value;
+      const itemId = document.getElementById('movementItem').value;
+      const movementType = document.getElementById('movementType').value;
+      const quantity = parseFloat(document.getElementById('movementQty').value);
+      const notes = document.getElementById('movementNotes').value;
+      const resultEl = document.getElementById('movementResult');
+
+      if (!warehouseId || !itemId) {
+        resultEl.style.color = '#e53935';
+        resultEl.textContent = 'Выберите склад и товар';
+        return;
       }
 
-      saveData();
-      renderInventory();
-      closeItemModal();
+      try {
+        const res = await AUTH.fetch('/api/inventory/movements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ warehouseId, inventoryItemId: itemId, movementType, quantity, notes })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'HTTP ' + res.status);
+        }
+        resultEl.style.color = '#22c55e';
+        resultEl.textContent = 'Движение записано';
+        document.getElementById('movementForm').reset();
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        resultEl.style.color = '#e53935';
+        resultEl.textContent = 'Ошибка: ' + e.message;
+      }
+    }
+
+    async function loadWarehouses() {
+      try {
+        const res = await AUTH.fetch('/api/inventory/warehouses');
+        if (res.ok) {
+          const data = await res.json();
+          const sel = document.getElementById('movementWarehouse');
+          const whs = data.warehouses || [];
+          sel.innerHTML = whs.length
+            ? whs.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
+            : '<option value="1">Основной склад</option>';
+        }
+      } catch (e) {
+        document.getElementById('movementWarehouse').innerHTML = '<option value="1">Основной склад</option>';
+      }
+    }
+
+    function updateMovementItemOptions() {
+      const sel = document.getElementById('movementItem');
+      if (sel) {
+        sel.innerHTML = '<option value="">Выберите товар</option>' +
+          inventory.map(i => `<option value="${i.id}">${i.name} (${i.unit})</option>`).join('');
+      }
     }
 
     function quickRestock(id) {
       const item = inventory.find(i => i.id === id);
       if (!item) return;
-
-      const amount = prompt(`Сколько ${item.unit} добавить к "${item.name}"?`, item.minQuantity * 2);
-      if (!amount || isNaN(amount)) return;
-
-      item.quantity += parseFloat(amount);
-      saveData();
-      renderInventory();
-      showNotification(`✅ Добавлено ${amount} ${item.unit} к "${item.name}"`);
+      editItem(id);
     }
 
     function closeItemModal() {
@@ -2452,8 +2611,11 @@ AUTH.requireAuth();
     }
 
     // Initialize
-    initializeData();
-    renderInventory();
+    initializeData().then(() => {
+      renderInventory();
+      loadWarehouses();
+      updateMovementItemOptions();
+    });
   </script>
 </div><!-- /main-wrapper -->
 

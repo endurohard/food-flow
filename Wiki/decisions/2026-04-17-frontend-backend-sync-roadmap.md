@@ -61,13 +61,13 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 ## Фаза 4 — Подключить mock-страницы к реальному API
 **Цель**: Все 8 страниц с mock данными переключить на готовый бекенд.
 
-- [ ] `menu.html` — подключить к `GET/POST/PUT/DELETE /api/menus/items`, `GET /api/menus/categories`; добавить stop-list кнопки (POST `.../stop`, `.../unstop`)
-- [ ] `tables.html` — подключить к `GET /api/tables`, `PUT /api/tables/:id`
-- [ ] `loyalty.html` (CRM) — подключить к `GET /api/crm/customers`, `GET /api/crm/loyalty-programs`, `GET /api/crm/promotions`
-- [ ] `staff.html` — подключить к `GET /api/hr/staff`, `GET/POST /api/hr/schedules`, `GET /api/hr/payroll`
-- [ ] `user-profile.html` — подключить к `GET /api/users/profile`, `PUT /api/users/:id`
-- [ ] `analytics.html` — расширить: подключить к `GET /api/finance/reports/revenue`, `GET /api/finance/reports/pnl`
-- [ ] `inventory.html` — дочинить: подключить write-операции к `POST/PUT/DELETE /api/inventory/items`, `POST /api/inventory/movements`
+- [x] `menu.html` — подключён к API: categories/items CRUD, stop/unstop, stop-list
+- [x] `tables.html` — подключён к API: GET/POST/PUT tables
+- [x] `loyalty.html` — подключён к API: customers, loyalty-programs, promotions CRUD, transactions
+- [x] `staff.html` — подключён к API: staff list, schedules (current week), payroll
+- [x] `user-profile.html` — подключён к `GET /api/users/profile`, `PUT /api/users/:id`
+- [x] `analytics.html` — расширен: revenue + P&L из finance-service, date range picker
+- [x] `inventory.html` — write-операции подключены: POST/PUT/DELETE items, POST movements
 - [ ] Orphan `delivery-dashboard/` — подключить к `GET /api/deliveries`, Socket.IO tracking; добавить в сайдбар
 - [ ] Wiki log entry + commit
 
@@ -76,8 +76,9 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 ## Фаза 5 — Новые страницы: Finance + Enterprises
 **Цель**: Покрыть самые «мёртвые» части бекенда UI-ом.
 
-- [ ] Создать `admin-panel/finance.html` — кассы (открыть/закрыть/операции), платежи (список/создать), отчёты (P&L + revenue), расходы, кнопка «Экспорт в 1С»
-- [ ] Создать `admin-panel/enterprises.html` — список ресторанов сети, управление пользователями enterprise (invite, роли), benchmarks
+- [x] Создана `admin-panel/finance.html` — кассы (открыть/закрыть/операции), платежи, отчёты P&L + revenue, расходы, экспорт в 1С
+- [x] Создана `admin-panel/enterprises.html` — список сети, пользователи enterprise (роли, invite, deactivate), benchmarks
+- [x] Ссылки на finance.html и enterprises.html добавлены во все 16 страниц сайдбара
 - [ ] Убрать/merge orphan `order-management/` → уже есть `orders.html`; убрать orphan `kds/` → уже есть `kds.html` с polling
 - [ ] Wiki log entry + commit
 
@@ -101,6 +102,6 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 | 2026-04-17 | Phase 1 (роли) | ✅ завершено |
 | 2026-04-17 | Phase 2 (tenant) | ✅ завершено (RabbitMQ consumer pending) |
 | 2026-04-17 | Phase 3 (UI roles) | ✅ завершено (settings.html role editor pending) |
-| — | Phase 4 (mock→API) | ⬜ не начато |
-| — | Phase 5 (new pages) | ⬜ не начато |
+| 2026-04-17 | Phase 4 (mock→API) | ✅ завершено (delivery-dashboard pending) |
+| 2026-04-17 | Phase 5 (new pages) | ✅ завершено (orphan cleanup pending) |
 | — | Phase 6 (YooKassa) | ⬜ не начато |

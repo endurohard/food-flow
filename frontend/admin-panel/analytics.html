@@ -794,6 +794,16 @@
       <span>Склад</span>
     </a>
 
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
     <a href="/admin-panel/loyalty.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
       <span>CRM</span>
@@ -1070,6 +1080,34 @@ AUTH.requireAuth();
       </div>
     </div>
 
+    <!-- Finance KPI Row -->
+    <div class="stats-grid" id="financeKpiGrid" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-label">Выручка (фин.)</div>
+        <div class="stat-value" id="finRevenue">—</div>
+        <div class="metric-small">из Finance API</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📋</div>
+        <div class="stat-label">Заказов (фин.)</div>
+        <div class="stat-value" id="finOrderCount">—</div>
+        <div class="metric-small">из Finance API</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🧾</div>
+        <div class="stat-label">Средний чек (фин.)</div>
+        <div class="stat-value" id="finAvgCheck">—</div>
+        <div class="metric-small">из Finance API</div>
+      </div>
+      <div class="stat-card" id="pnlCard">
+        <div class="stat-icon">📊</div>
+        <div class="stat-label">Прибыль (P&amp;L)</div>
+        <div class="stat-value" id="finProfit">—</div>
+        <div class="metric-small">Выручка − Расходы</div>
+      </div>
+    </div>
+
     <!-- Tables -->
     <div class="tables-grid">
       <div class="table-card">
@@ -1118,10 +1156,38 @@ AUTH.requireAuth();
 
   <script src="js/auth.js"></script>
   <script>
-    const API_BASE_URL = 'http://localhost/api';
-    let currentFilter = 'today';
+    let currentFilter = 'week';
     let orders = [];
     let charts = {};
+
+    function dateStr(d) {
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+
+    function getDateRange() {
+      const now = new Date();
+      const todayStr = dateStr(now);
+      const dfEl = document.getElementById('dateFrom');
+      const dtEl = document.getElementById('dateTo');
+      if (dfEl && dfEl.value && dtEl && dtEl.value) {
+        return { from: dfEl.value, to: dtEl.value };
+      }
+      if (currentFilter === 'today') {
+        return { from: todayStr, to: todayStr };
+      }
+      if (currentFilter === 'yesterday') {
+        const y = new Date(now); y.setDate(y.getDate()-1);
+        const ys = dateStr(y);
+        return { from: ys, to: ys };
+      }
+      if (currentFilter === 'month') {
+        const m = new Date(now); m.setDate(m.getDate()-30);
+        return { from: dateStr(m), to: todayStr };
+      }
+      // default: week
+      const w = new Date(now); w.setDate(w.getDate()-7);
+      return { from: dateStr(w), to: todayStr };
+    }
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1140,93 +1206,84 @@ AUTH.requireAuth();
 
     // Initialize
     document.addEventListener('DOMContentLoaded', async () => {
-      await loadData();
       initCharts();
+      await loadData();
       updateDashboard();
-
-      // Auto-refresh every 30 seconds
-      setInterval(async () => {
-        await loadData();
-        updateDashboard();
-      }, 30000);
+      await loadFinanceData();
     });
 
-    // Load orders data
+    // Load orders data via AUTH.fetch
     async function loadData() {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders`);
-        if (response.ok) {
-          const data = await response.json();
-          orders = data.data || [];
-          console.log('Loaded orders:', orders.length);
+        const range = getDateRange();
+        const res = await AUTH.fetch('/api/orders?dateFrom=' + range.from + '&dateTo=' + range.to + '&limit=500');
+        if (res.ok) {
+          const data = await res.json();
+          orders = data.orders || data.data || [];
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading orders:', error);
+        orders = [];
       }
     }
 
+    // Load Finance data (revenue + P&L)
+    async function loadFinanceData() {
+      const range = getDateRange();
+      const params = 'dateFrom=' + range.from + '&dateTo=' + range.to;
+
+      try {
+        const revRes = await AUTH.fetch('/api/finance/reports/revenue?' + params);
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          const r = revData.report || {};
+          const rev = Number(r.total_revenue) || 0;
+          const cnt = Number(r.order_count) || 0;
+          const avg = Number(r.avg_check) || 0;
+          document.getElementById('finRevenue').textContent = rev.toLocaleString('ru-RU') + ' ₽';
+          document.getElementById('finOrderCount').textContent = cnt;
+          document.getElementById('finAvgCheck').textContent = Math.round(avg).toLocaleString('ru-RU') + ' ₽';
+        }
+      } catch (e) { console.error('Finance revenue error:', e); }
+
+      try {
+        const pnlRes = await AUTH.fetch('/api/finance/reports/pnl?' + params);
+        if (pnlRes.ok) {
+          const pnlData = await pnlRes.json();
+          const p = pnlData.report || {};
+          const profit = Number(p.profit) || 0;
+          const el = document.getElementById('finProfit');
+          const card = document.getElementById('pnlCard');
+          el.textContent = profit.toLocaleString('ru-RU') + ' ₽';
+          el.style.color = profit >= 0 ? '#22c55e' : '#ef4444';
+        }
+      } catch (e) { console.error('Finance P&L error:', e); }
+    }
+
     // Set date filter
-    function setDateFilter(filter) {
+    async function setDateFilter(filter) {
       currentFilter = filter;
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value = '';
 
       // Update button states
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
       });
-      event.target.classList.add('active');
+      if (event && event.target) event.target.classList.add('active');
 
+      await loadData();
       updateDashboard();
+      await loadFinanceData();
     }
 
-    // Filter orders by date
-    function filterOrdersByDate(orders) {
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-      // Check if custom date range is set
-      const dateFrom = document.getElementById('dateFrom').value;
-      const dateTo = document.getElementById('dateTo').value;
-
-      if (dateFrom && dateTo) {
-        const customFrom = new Date(dateFrom);
-        customFrom.setHours(0, 0, 0, 0);
-        const customTo = new Date(dateTo);
-        customTo.setHours(23, 59, 59, 999);
-
-        return orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
-          return orderDate >= customFrom && orderDate <= customTo;
-        });
-      }
-
-      return orders.filter(order => {
-        const orderDate = new Date(order.createdAt);
-
-        switch(currentFilter) {
-          case 'today':
-            return orderDate >= todayStart;
-          case 'yesterday':
-            const yesterdayStart = new Date(todayStart);
-            yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-            return orderDate >= yesterdayStart && orderDate < todayStart;
-          case 'week':
-            const weekStart = new Date(todayStart);
-            weekStart.setDate(weekStart.getDate() - 7);
-            return orderDate >= weekStart;
-          case 'month':
-            const monthStart = new Date(todayStart);
-            monthStart.setMonth(monthStart.getMonth() - 1);
-            return orderDate >= monthStart;
-          case 'all':
-            return true;
-          default:
-            return true;
-        }
-      });
+    // Filter orders by date — orders already filtered server-side, just return all
+    function filterOrdersByDate(ordersArr) {
+      return ordersArr;
     }
 
     // Set custom date range
-    function setCustomDateRange() {
+    async function setCustomDateRange() {
       const dateFrom = document.getElementById('dateFrom').value;
       const dateTo = document.getElementById('dateTo').value;
 
@@ -1243,7 +1300,9 @@ AUTH.requireAuth();
         document.getElementById('dateTo').style.borderColor = '#1e88e5';
 
         currentFilter = 'custom';
+        await loadData();
         updateDashboard();
+        await loadFinanceData();
       }
     }
 
@@ -1268,34 +1327,34 @@ AUTH.requireAuth();
     function updateDashboard() {
       const filtered = filterOrdersByDate(orders);
 
-      // Calculate metrics
-      const revenue = filtered.reduce((sum, o) => sum + (o.total || 0), 0);
+      // Calculate metrics — support both created_at and createdAt field names
+      const revenue = filtered.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
       const ordersCount = filtered.length;
       const avgCheck = ordersCount > 0 ? revenue / ordersCount : 0;
       const completed = filtered.filter(o => o.status === 'delivered').length;
       const completionRate = ordersCount > 0 ? (completed / ordersCount * 100).toFixed(1) : 0;
 
-      // Calculate average time (mock data for now)
-      const avgTime = 35;
+      // Calculate average time (no time data in simple API)
+      const avgTime = '—';
 
       // Active couriers
-      const activeCouriers = new Set(filtered.filter(o => o.status === 'out_for_delivery').map(o => o.courierId)).size;
+      const activeCouriers = new Set(filtered.filter(o => o.status === 'out_for_delivery').map(o => o.courier_id || o.courierId)).size;
       const ordersInDelivery = filtered.filter(o => o.status === 'out_for_delivery').length;
 
       // Update UI
-      document.getElementById('revenueValue').textContent = `${revenue.toLocaleString()} ₽`;
+      document.getElementById('revenueValue').textContent = `${revenue.toLocaleString('ru-RU')} ₽`;
       document.getElementById('ordersValue').textContent = ordersCount;
-      document.getElementById('avgCheckValue').textContent = `${Math.round(avgCheck).toLocaleString()} ₽`;
+      document.getElementById('avgCheckValue').textContent = `${Math.round(avgCheck).toLocaleString('ru-RU')} ₽`;
       document.getElementById('completedValue').textContent = completed;
       document.getElementById('completionRate').textContent = `${completionRate}%`;
-      document.getElementById('avgTimeValue').textContent = `${avgTime} мин`;
+      document.getElementById('avgTimeValue').textContent = avgTime;
       document.getElementById('couriersValue').textContent = activeCouriers;
       document.getElementById('courierOrders').textContent = ordersInDelivery;
 
-      // Update change indicators (mock positive changes)
-      updateChangeIndicator('revenueChange', 15.3);
-      updateChangeIndicator('ordersChange', 8.7);
-      updateChangeIndicator('avgCheckChange', 5.2);
+      // Update change indicators (no historical comparison available)
+      updateChangeIndicator('revenueChange', 0);
+      updateChangeIndicator('ordersChange', 0);
+      updateChangeIndicator('avgCheckChange', 0);
 
       // Update charts
       updateCharts(filtered);
@@ -1454,14 +1513,16 @@ AUTH.requireAuth();
 
     // Update charts
     function updateCharts(filtered) {
-      // Group by date for revenue chart
+      // Group by date for revenue chart — support both created_at and createdAt
       const dateGroups = {};
       filtered.forEach(order => {
-        const date = new Date(order.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+        const ts = order.created_at || order.createdAt;
+        if (!ts) return;
+        const date = new Date(ts).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
         if (!dateGroups[date]) {
           dateGroups[date] = { revenue: 0, count: 0 };
         }
-        dateGroups[date].revenue += order.total || 0;
+        dateGroups[date].revenue += Number(order.total) || 0;
         dateGroups[date].count += 1;
       });
 
@@ -1477,7 +1538,9 @@ AUTH.requireAuth();
       // Hourly distribution
       const hourlyData = new Array(24).fill(0);
       filtered.forEach(order => {
-        const hour = new Date(order.createdAt).getHours();
+        const ts = order.created_at || order.createdAt;
+        if (!ts) return;
+        const hour = new Date(ts).getHours();
         hourlyData[hour]++;
       });
 
@@ -1510,12 +1573,17 @@ AUTH.requireAuth();
       const dishStats = {};
 
       filtered.forEach(order => {
-        order.items.forEach(item => {
-          if (!dishStats[item.name]) {
-            dishStats[item.name] = { count: 0, revenue: 0 };
+        const items = order.items || order.order_items || [];
+        if (!Array.isArray(items)) return;
+        items.forEach(item => {
+          const name = item.name || item.dish_name || item.product_name || 'Неизвестно';
+          const qty = Number(item.quantity) || 1;
+          const price = Number(item.price) || Number(item.unit_price) || 0;
+          if (!dishStats[name]) {
+            dishStats[name] = { count: 0, revenue: 0 };
           }
-          dishStats[item.name].count += item.quantity;
-          dishStats[item.name].revenue += item.price * item.quantity;
+          dishStats[name].count += qty;
+          dishStats[name].revenue += price * qty;
         });
       });
 
@@ -1557,11 +1625,13 @@ AUTH.requireAuth();
     function updateTopCouriers(filtered) {
       const courierStats = {};
 
-      filtered.filter(o => o.courierName && o.status === 'delivered').forEach(order => {
-        if (!courierStats[order.courierName]) {
-          courierStats[order.courierName] = { count: 0, rating: 4.5 + Math.random() * 0.5 };
+      filtered.filter(o => o.status === 'delivered').forEach(order => {
+        const name = order.courierName || order.courier_name || (order.courier && (order.courier.name || order.courier.first_name)) || null;
+        if (!name) return;
+        if (!courierStats[name]) {
+          courierStats[name] = { count: 0, rating: 4.5 + Math.random() * 0.5 };
         }
-        courierStats[order.courierName].count++;
+        courierStats[name].count++;
       });
 
       const sorted = Object.entries(courierStats)

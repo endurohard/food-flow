@@ -404,6 +404,16 @@
       <span>Склад</span>
     </a>
 
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
     <a href="/admin-panel/loyalty.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
       <span>CRM</span>
@@ -580,20 +590,38 @@ AUTH.requireAuth();
   </header>
 
         <div class="container">
+        <!-- Alert messages -->
+        <div id="profileAlert" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;"></div>
+
         <!-- Profile Info -->
         <div class="card">
-            <h2 class="card-title">👤 Информация о пользователе</h2>
-            <div class="form-group">
-                <label class="form-label">Имя пользователя</label>
-                <input type="text" class="form-control" id="username" value="operator1" readonly>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Отображаемое имя</label>
-                <input type="text" class="form-control" id="displayName" value="Оператор 1">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Роль</label>
-                <input type="text" class="form-control" id="role" value="Оператор" readonly>
+            <h2 class="card-title">Информация о пользователе</h2>
+            <div id="profileLoading" style="padding:20px;text-align:center;color:var(--color-grey-5);">Загрузка...</div>
+            <div id="profileForm" style="display:none;">
+              <input type="hidden" id="userId">
+              <div class="form-group">
+                  <label class="form-label">Email</label>
+                  <input type="text" class="form-control" id="profileEmail" readonly style="background:var(--admin-content-bg);">
+              </div>
+              <div class="form-group">
+                  <label class="form-label">Имя</label>
+                  <input type="text" class="form-control" id="profileFirstName" placeholder="Имя">
+              </div>
+              <div class="form-group">
+                  <label class="form-label">Фамилия</label>
+                  <input type="text" class="form-control" id="profileLastName" placeholder="Фамилия">
+              </div>
+              <div class="form-group">
+                  <label class="form-label">Телефон</label>
+                  <input type="text" class="form-control" id="profilePhone" placeholder="+7 999 000-00-00">
+              </div>
+              <div class="form-group">
+                  <label class="form-label">Роль</label>
+                  <input type="text" class="form-control" id="profileRole" readonly style="background:var(--admin-content-bg);">
+              </div>
+              <div style="margin-top: 20px;">
+                  <button class="btn btn-primary" onclick="saveUserProfile()">Сохранить профиль</button>
+              </div>
             </div>
         </div>
 
@@ -683,95 +711,71 @@ AUTH.requireAuth();
     </div>
 
     <script src="js/auth.js"></script>
-    <script src="js/telephony-autolaunch.js"></script>
     <script>
-        // Load profile data
-        function loadProfile() {
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                const user = JSON.parse(savedUser);
-
-                document.getElementById('username').value = user.username || '';
-                document.getElementById('displayName').value = user.displayName || '';
-                document.getElementById('role').value = user.role || '';
-
-                if (user.sip) {
-                    document.getElementById('sip-enabled').checked = user.sip.enabled !== false;
-                    document.getElementById('sip-extension').value = user.sip.extension || '';
-                    document.getElementById('sip-password').value = user.sip.password || '';
-                    document.getElementById('sip-displayName').value = user.sip.displayName || user.displayName || '';
-                    document.getElementById('sip-server').value = user.sip.server || 'www.it005.ru';
-                    document.getElementById('sip-port').value = user.sip.port || 5060;
-                    document.getElementById('sip-transport').value = user.sip.transport || 'UDP';
-                    document.getElementById('sip-wsUrl').value = user.sip.wsUrl || '';
-                }
+        // Load profile data from API
+        async function loadProfile() {
+            const loadingEl = document.getElementById('profileLoading');
+            const formEl = document.getElementById('profileForm');
+            try {
+                const res = await AUTH.fetch('/api/users/profile');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                const u = data.user || {};
+                document.getElementById('userId').value = u.id || '';
+                document.getElementById('profileEmail').value = u.email || '';
+                document.getElementById('profileFirstName').value = u.first_name || '';
+                document.getElementById('profileLastName').value = u.last_name || '';
+                document.getElementById('profilePhone').value = u.phone || '';
+                document.getElementById('profileRole').value = u.role || '';
+                loadingEl.style.display = 'none';
+                formEl.style.display = '';
+            } catch (e) {
+                loadingEl.textContent = 'Нет данных';
+                console.error('Profile load error:', e);
             }
-
-            // Load auto-launch settings
-            document.getElementById('auto-launch').checked = localStorage.getItem('telephony_autolaunch') !== 'false';
-            document.getElementById('show-panel').checked = localStorage.getItem('telephony_show_panel') === 'true';
         }
 
-        // Save profile
-        function saveProfile() {
-            const user = {
-                username: document.getElementById('username').value,
-                displayName: document.getElementById('displayName').value,
-                role: document.getElementById('role').value,
-                sip: {
-                    enabled: document.getElementById('sip-enabled').checked,
-                    extension: document.getElementById('sip-extension').value,
-                    password: document.getElementById('sip-password').value,
-                    displayName: document.getElementById('sip-displayName').value,
-                    server: document.getElementById('sip-server').value,
-                    port: parseInt(document.getElementById('sip-port').value),
-                    transport: document.getElementById('sip-transport').value,
-                    wsUrl: document.getElementById('sip-wsUrl').value,
-                    wsPassword: document.getElementById('sip-password').value
-                }
+        // Save profile via API
+        async function saveUserProfile() {
+            const alertEl = document.getElementById('profileAlert');
+            const userId = document.getElementById('userId').value;
+            if (!userId) {
+                showProfileAlert('Не удалось определить ID пользователя', 'error');
+                return;
+            }
+            const body = {
+                firstName: document.getElementById('profileFirstName').value,
+                lastName: document.getElementById('profileLastName').value,
+                phone: document.getElementById('profilePhone').value
             };
-
-            localStorage.setItem('currentUser', JSON.stringify(user));
-
-            // Save auto-launch settings
-            const autoLaunch = document.getElementById('auto-launch').checked;
-            localStorage.setItem('telephony_autolaunch', autoLaunch ? 'true' : 'false');
-
-            const showPanel = document.getElementById('show-panel').checked;
-            localStorage.setItem('telephony_show_panel', showPanel ? 'true' : 'false');
-
-            alert('✅ Профиль сохранен!\n\nИзменения вступят в силу при следующем входе или после ручного запуска телефонии.');
-        }
-
-        // Test connection
-        async function testConnection() {
-            alert('🔌 Тестирование подключения...\n\nПроверяем связь с PBX сервером.');
-
-            const config = {
-                server: document.getElementById('sip-server').value,
-                port: document.getElementById('sip-port').value,
-                extension: document.getElementById('sip-extension').value
-            };
-
-            console.log('Testing connection:', config);
-
-            // Simulate test
-            setTimeout(() => {
-                alert('✅ Тест успешен!\n\nСервер доступен, можете сохранять настройки.');
-            }, 1500);
-        }
-
-        // Manual launch
-        function manualLaunch() {
-            saveProfile();
-
-            if (window.telephonyLauncher) {
-                telephonyLauncher.loadCurrentUser().then(() => {
-                    telephonyLauncher.launchTelephony();
+            try {
+                const res = await AUTH.fetch('/api/users/' + userId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
                 });
-            } else {
-                alert('⚠️ Telephony launcher не загружен. Перезагрузите страницу.');
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || 'HTTP ' + res.status);
+                }
+                showProfileAlert('Профиль успешно сохранён', 'success');
+            } catch (e) {
+                showProfileAlert('Ошибка сохранения: ' + e.message, 'error');
             }
+        }
+
+        function showProfileAlert(msg, type) {
+            const el = document.getElementById('profileAlert');
+            el.textContent = msg;
+            el.style.display = '';
+            if (type === 'success') {
+                el.style.background = '#d4edda';
+                el.style.color = '#155724';
+            } else {
+                el.style.background = '#f8d7da';
+                el.style.color = '#721c24';
+            }
+            setTimeout(() => { el.style.display = 'none'; }, 4000);
         }
 
         // Initialize

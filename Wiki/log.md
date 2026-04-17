@@ -365,3 +365,21 @@ STAFF         = admin | owner | manager | operator | chef | waiter | employee
 - **`frontend/js/auth.js`** (новый): `AUTH.getToken/getUser/getRole/isLoggedIn/hasRole/logout/requireAuth/fetch`. Нормализует `enterpriseRole` из JWT как приоритетную роль для UI-решений. `AUTH.fetch()` добавляет `Authorization: Bearer` автоматически, поддерживает silent refresh.
 - **`frontend/admin-panel/login.html`**: подключён к `POST /api/auth/login` и `POST /api/auth/register` через `AUTH.API_BASE`. Сохраняет токены в `ff_token/ff_refresh_token/ff_user`. При наличии `ff_token` → автоматический редирект на dashboard.
 - **Все 14 protected HTML-страниц**: `AUTH.requireAuth()` — редирект на login если нет токена. Role-based sidebar filtering: chef видит только KDS; waiter — orders/tables/KDS; viewer — dashboard/analytics; operator — orders/tables/KDS/inventory/calls; manager/owner/admin — всё. Logout кнопка в sidebar footer с именем пользователя.
+
+## [2026-04-17] fix | Phase 4 — Mock-страницы подключены к реальному API
+7 admin-panel страниц переключены с localStorage/mock на живые endpoint'ы.
+
+- **`menu.html`**: CRUD блюд через `POST/PUT/DELETE /api/menus/items`, категории через `GET/POST /api/restaurants/:id/menu-categories`, стоп-лист через `stop`/`unstop`/`stop-list` endpoints. Загрузка ресторана при инициализации.
+- **`tables.html`**: `GET /api/tables?restaurantId=X`, `POST /api/tables`, `PUT /api/tables/:id` — зал отображает живое состояние столов.
+- **`loyalty.html`**: customers из `GET /api/crm/customers`, loyalty-programs, promotions CRUD, транзакции клиента из `GET /api/crm/transactions?customerId=X`.
+- **`staff.html`**: staff list из `GET /api/hr/staff`, расписание текущей недели из `GET /api/hr/schedules`, payroll из `GET /api/hr/payroll`, сохранение смен через `POST /api/hr/schedules`.
+- **`user-profile.html`**: `GET /api/users/profile` при загрузке, `PUT /api/users/:id` при сохранении.
+- **`analytics.html`**: расширен — revenue/P&L из `GET /api/finance/reports/revenue` и `/pnl`, date range picker.
+- **`inventory.html`**: write-операции: `POST/PUT/DELETE /api/inventory/items`, `POST /api/inventory/movements`, склады из `GET /api/inventory/warehouses`.
+
+## [2026-04-17] feat | Phase 5 — Новые страницы Finance и Enterprises
+Созданы 2 новые страницы, покрывающие ранее недоступный из UI функционал.
+
+- **`admin-panel/finance.html`** (1167 строк): 4 таба — Кассы (открыть/закрыть/операции), Платежи (фильтр, список, статусы), Отчёты (revenue + P&L + кнопки «Экспорт в 1С» sales/expenses XML), Расходы (список + форма добавления с категориями). Все данные из finance-service.
+- **`admin-panel/enterprises.html`** (1124 строки): 3 секции — Сеть ресторанов (карточки, expand с деталями), Пользователи предприятия (таблица, смена роли, deactivate/activate, invite), Бенчмарки (select → метрики). Все данные из user-service `/api/enterprises/...`.
+- **Sidebar links**: ссылки на finance.html и enterprises.html добавлены во все 16 страниц admin-panel.

@@ -1103,6 +1103,15 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
       <span>Склад</span>
     </a>
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
 
     <a href="/admin-panel/loyalty.html" class="nav-item active">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
@@ -1558,12 +1567,7 @@ AUTH.requireAuth();
     let loyaltySettings = {
       pointsPerRuble: 1,
       rublePerPoint: 1,
-      tiers: {
-        bronze: 0,
-        silver: 500,
-        gold: 1500,
-        platinum: 3000
-      }
+      tiers: { bronze: 0, silver: 500, gold: 1500, platinum: 3000 }
     };
 
     // Sidebar functions
@@ -1581,48 +1585,93 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Initialize with sample data
-    function initializeData() {
-      const savedCustomers = localStorage.getItem('loyaltyCustomers');
-      const savedDiscounts = localStorage.getItem('loyaltyDiscounts');
-      const savedCampaigns = localStorage.getItem('loyaltyCampaigns');
+    // Initialize — load from API with localStorage fallback
+    async function initializeData() {
+      document.getElementById('customersGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8b95a5;">Загрузка...</div>';
+
+      // Load customers
+      try {
+        const res = await AUTH.fetch('/api/crm/customers');
+        if (res.ok) {
+          const data = await res.json();
+          customers = (data.customers || []).map(c => ({
+            id: c.id,
+            name: (c.first_name || '') + (c.last_name ? ' ' + c.last_name : '') || c.name || c.phone || 'Клиент',
+            phone: c.phone || '',
+            email: c.email || '',
+            points: c.loyalty_points || c.points || 0,
+            tier: (c.loyalty_tier || c.tier || 'bronze').toLowerCase(),
+            joinDate: c.created_at || c.join_date || new Date().toISOString(),
+            totalSpent: parseFloat(c.total_spent || 0)
+          }));
+        }
+      } catch (e) {
+        console.log('API customers load failed:', e.message);
+      }
+
+      // Fallback to localStorage if no customers loaded
+      if (customers.length === 0) {
+        const saved = localStorage.getItem('loyaltyCustomers');
+        if (saved) customers = JSON.parse(saved);
+      }
+
+      // Load promotions as discounts
+      try {
+        const res = await AUTH.fetch('/api/crm/promotions');
+        if (res.ok) {
+          const data = await res.json();
+          discounts = (data.promotions || []).map(p => ({
+            id: p.id,
+            name: p.name,
+            type: p.promo_type === 'percentage' ? 'percentage' : 'fixed',
+            value: parseFloat(p.discount_value || 0),
+            promoCode: p.promo_code || '',
+            appliesTo: 'all',
+            minOrder: parseFloat(p.min_order_amount || 0),
+            maxUses: p.usage_limit || 0,
+            startDate: p.start_date || new Date().toISOString().slice(0, 10),
+            endDate: p.end_date || new Date().toISOString().slice(0, 10),
+            description: p.description || '',
+            isActive: p.is_active !== false,
+            usedCount: p.usage_count || 0
+          }));
+        }
+      } catch (e) {
+        console.log('API promotions load failed:', e.message);
+      }
+
+      if (discounts.length === 0) {
+        const saved = localStorage.getItem('loyaltyDiscounts');
+        if (saved) discounts = JSON.parse(saved);
+      }
+
+      // Load loyalty programs as campaigns
+      try {
+        const res = await AUTH.fetch('/api/crm/loyalty-programs');
+        if (res.ok) {
+          const data = await res.json();
+          campaigns = (data.programs || []).map(p => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            startDate: p.start_date || new Date().toISOString().slice(0, 10),
+            endDate: p.end_date || new Date().toISOString().slice(0, 10),
+            type: p.program_type || 'loyalty',
+            bonusPoints: p.bonus_points || 0,
+            isActive: p.is_active !== false
+          }));
+        }
+      } catch (e) {
+        console.log('API loyalty-programs load failed:', e.message);
+      }
+
+      if (campaigns.length === 0) {
+        const saved = localStorage.getItem('loyaltyCampaigns');
+        if (saved) campaigns = JSON.parse(saved);
+      }
+
       const savedSettings = localStorage.getItem('loyaltySettings');
-
-      if (savedSettings) {
-        loyaltySettings = JSON.parse(savedSettings);
-      }
-
-      if (savedCustomers) {
-        customers = JSON.parse(savedCustomers);
-      } else {
-        customers = [
-          { id: 1, name: 'Иван Петров', phone: '+7 999 111-11-11', email: 'ivan@example.com', points: 1250, tier: 'silver', joinDate: '2024-01-15', totalSpent: 45000 },
-          { id: 2, name: 'Мария Сидорова', phone: '+7 999 222-22-22', email: 'maria@example.com', points: 2800, tier: 'gold', joinDate: '2023-11-20', totalSpent: 95000 },
-          { id: 3, name: 'Алексей Иванов', phone: '+7 999 333-33-33', email: 'alex@example.com', points: 450, tier: 'bronze', joinDate: '2024-05-10', totalSpent: 12000 },
-          { id: 4, name: 'Елена Кузнецова', phone: '+7 999 444-44-44', email: 'elena@example.com', points: 3500, tier: 'platinum', joinDate: '2023-08-05', totalSpent: 125000 },
-          { id: 5, name: 'Дмитрий Смирнов', phone: '+7 999 555-55-55', email: 'dmitry@example.com', points: 780, tier: 'silver', joinDate: '2024-03-22', totalSpent: 28000 }
-        ];
-      }
-
-      if (savedDiscounts) {
-        discounts = JSON.parse(savedDiscounts);
-      } else {
-        discounts = [
-          { id: 1, name: 'Летняя скидка', type: 'percentage', value: 15, appliesTo: 'all', minOrder: 1000, maxUses: 100, startDate: '2024-06-01', endDate: '2024-08-31', description: 'Скидка 15% на все заказы от 1000₽', isActive: true, usedCount: 23 },
-          { id: 2, name: 'Скидка новичкам', type: 'fixed', value: 500, appliesTo: 'all', minOrder: 0, maxUses: 0, startDate: '2024-01-01', endDate: '2024-12-31', description: 'Скидка 500₽ на первый заказ', isActive: true, usedCount: 45 }
-        ];
-      }
-
-      if (savedCampaigns) {
-        campaigns = JSON.parse(savedCampaigns);
-      } else {
-        campaigns = [
-          { id: 1, name: 'День рождения ресторана', type: 'seasonal', description: 'Скидка 20% в честь дня рождения ресторана + удвоенные баллы', startDate: '2024-12-01', endDate: '2024-12-07', bonusPoints: 100, isActive: true },
-          { id: 2, name: 'Счастливые часы', type: 'happy-hour', description: 'С 14:00 до 17:00 скидка 10% на все меню', startDate: '2024-11-01', endDate: '2024-11-30', bonusPoints: 50, isActive: true }
-        ];
-      }
-
-      saveData();
+      if (savedSettings) loyaltySettings = JSON.parse(savedSettings);
       loadSettings();
     }
 
@@ -1668,8 +1717,14 @@ AUTH.requireAuth();
       const search = document.getElementById('customerSearch').value.toLowerCase();
 
       const filteredCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(search) || c.phone.includes(search)
+        (c.name || '').toLowerCase().includes(search) || (c.phone || '').includes(search)
       );
+
+      if (filteredCustomers.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8b95a5;background:#fff;border:1px solid #e1e8ed;border-radius:16px;">Клиенты не найдены</div>';
+        updateCustomerStats();
+        return;
+      }
 
       grid.innerHTML = filteredCustomers.map(customer => {
         const tierProgress = getTierProgress(customer.points);
@@ -1728,16 +1783,18 @@ AUTH.requireAuth();
       renderCustomers();
     }
 
-    function viewCustomer(id) {
+    async function viewCustomer(id) {
       const customer = customers.find(c => c.id === id);
       if (!customer) return;
 
       const modal = document.getElementById('customerModal');
       const body = document.getElementById('customerModalBody');
 
+      const initials = (customer.name || '?').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase();
+
       body.innerHTML = `
         <div style="text-align: center; margin-bottom: 24px;">
-          <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #1e88e5 0%, #1976d2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${customer.name.split(' ').map(n => n[0]).join('')}</div>
+          <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #1e88e5 0%, #1976d2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${initials}</div>
           <h2 style="margin-bottom: 8px; color: #2c3e50;">${customer.name}</h2>
           <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
         </div>
@@ -1750,24 +1807,62 @@ AUTH.requireAuth();
             </div>
             <div>
               <div style="color: #8b95a5; font-size: 13px;">Всего потрачено</div>
-              <div style="font-size: 24px; font-weight: 700; color: #43a047;">${customer.totalSpent.toLocaleString('ru-RU')} ₽</div>
+              <div style="font-size: 24px; font-weight: 700; color: #43a047;">${(customer.totalSpent || 0).toLocaleString('ru-RU')} ₽</div>
             </div>
           </div>
         </div>
 
         <div style="color: #5a6c7d; line-height: 2;">
-          <div><strong style="color: #2c3e50;">📞 Телефон:</strong> ${customer.phone}</div>
-          <div><strong style="color: #2c3e50;">📧 Email:</strong> ${customer.email}</div>
-          <div><strong style="color: #2c3e50;">📅 Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+          ${customer.phone ? `<div><strong style="color: #2c3e50;">Телефон:</strong> ${customer.phone}</div>` : ''}
+          ${customer.email ? `<div><strong style="color: #2c3e50;">Email:</strong> ${customer.email}</div>` : ''}
+          <div><strong style="color: #2c3e50;">Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+        </div>
+
+        <div id="transactionsList" style="margin-top:20px;">
+          <div style="color:#8b95a5;font-size:13px;">Загрузка транзакций...</div>
         </div>
 
         <div style="display: flex; gap: 12px; margin-top: 24px;">
-          <button class="btn btn-success" style="flex: 1;" onclick="addPoints(${customer.id})">➕ Начислить баллы</button>
-          <button class="btn btn-warning" style="flex: 1;" onclick="deductPoints(${customer.id})">➖ Списать баллы</button>
+          <button class="btn btn-success" style="flex: 1;" onclick="addPoints(${customer.id})">Начислить баллы</button>
+          <button class="btn btn-warning" style="flex: 1;" onclick="deductPoints(${customer.id})">Списать баллы</button>
         </div>
       `;
 
       modal.classList.add('active');
+
+      // Load transactions
+      try {
+        const res = await AUTH.fetch(`/api/crm/transactions?customerId=${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          const txList = document.getElementById('transactionsList');
+          const txs = data.transactions || [];
+          if (txs.length === 0) {
+            txList.innerHTML = '<div style="color:#8b95a5;font-size:13px;">Транзакций нет</div>';
+          } else {
+            txList.innerHTML = `
+              <div style="font-weight:600;color:#2c3e50;margin-bottom:10px;font-size:14px;">История транзакций</div>
+              <div style="display:grid;gap:8px;">
+                ${txs.slice(0, 10).map(tx => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;">
+                    <div>
+                      <div style="font-weight:600;color:#2c3e50;">${tx.description || tx.type || 'Транзакция'}</div>
+                      <div style="color:#8b95a5;font-size:11px;">${tx.created_at ? new Date(tx.created_at).toLocaleDateString('ru-RU') : ''}</div>
+                    </div>
+                    <div style="font-weight:700;color:${(tx.amount || tx.points_change || 0) >= 0 ? '#43a047' : '#e53935'};">
+                      ${(tx.amount || tx.points_change || 0) >= 0 ? '+' : ''}${tx.amount || tx.points_change || 0} ${tx.currency || 'баллов'}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+        } else {
+          document.getElementById('transactionsList').innerHTML = '';
+        }
+      } catch (e) {
+        document.getElementById('transactionsList').innerHTML = '';
+      }
     }
 
     function closeCustomerModal() {
@@ -1866,7 +1961,7 @@ AUTH.requireAuth();
       document.getElementById('discountModal').classList.remove('active');
     }
 
-    function saveDiscount(event) {
+    async function saveDiscount(event) {
       event.preventDefault();
 
       const formData = {
@@ -1883,13 +1978,39 @@ AUTH.requireAuth();
         usedCount: 0
       };
 
-      const newId = discounts.length > 0 ? Math.max(...discounts.map(d => d.id)) + 1 : 1;
-      discounts.push({ id: newId, ...formData });
+      // Try API
+      try {
+        const res = await AUTH.fetch('/api/crm/promotions', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: formData.name,
+            promoType: formData.type,
+            discountValue: formData.value,
+            usageLimit: formData.maxUses || null,
+            minOrderAmount: formData.minOrder || null,
+            startDate: formData.startDate,
+            endDate: formData.endDate,
+            description: formData.description
+          })
+        });
+        if (res.ok) {
+          showNotification('Промокод создан');
+          closeDiscountModal();
+          await initializeData();
+          renderDiscounts();
+          return;
+        }
+      } catch (e) {
+        console.log('API promo create failed:', e.message);
+      }
 
+      // Fallback
+      const newId = discounts.length > 0 ? Math.max(...discounts.map(d => typeof d.id === 'number' ? d.id : 0)) + 1 : 1;
+      discounts.push({ id: newId, ...formData });
       saveData();
       renderDiscounts();
       closeDiscountModal();
-      showNotification('✅ Скидка создана');
+      showNotification('Скидка создана');
     }
 
     function toggleDiscount(id) {
@@ -2050,8 +2171,7 @@ AUTH.requireAuth();
     }
 
     // Initialize
-    initializeData();
-    renderCustomers();
+    initializeData().then(() => renderCustomers());
   </script>
 </div><!-- /main-wrapper -->
 

@@ -1103,6 +1103,15 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
       <span>Склад</span>
     </a>
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
 
     <a href="/admin-panel/loyalty.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
@@ -1478,6 +1487,8 @@ AUTH.requireAuth();
   <script>
     let staff = [];
     let schedule = {};
+    let apiSchedules = []; // raw API schedule entries
+    let payroll = [];
     let currentWeekStart = getWeekStart(new Date());
     let editingStaffId = null;
     let editingShift = null;
@@ -1497,33 +1508,80 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Initialize with sample data
-    function initializeData() {
-      const savedStaff = localStorage.getItem('restaurantStaff');
-      if (savedStaff) {
-        staff = JSON.parse(savedStaff);
-      } else {
-        staff = [
-          { id: 1, name: 'Александр Иванов', role: 'waiter', phone: '+7 999 111-11-11', email: 'alex@example.com', rate: 250, startDate: '2024-01-15', status: 'online' },
-          { id: 2, name: 'Мария Петрова', role: 'cook', phone: '+7 999 222-22-22', email: 'maria@example.com', rate: 300, startDate: '2024-02-01', status: 'online' },
-          { id: 3, name: 'Дмитрий Сидоров', role: 'courier', phone: '+7 999 333-33-33', email: 'dmitry@example.com', rate: 200, startDate: '2024-03-10', status: 'offline' },
-          { id: 4, name: 'Елена Кузнецова', role: 'waiter', phone: '+7 999 444-44-44', email: 'elena@example.com', rate: 250, startDate: '2024-01-20', status: 'online' },
-          { id: 5, name: 'Игорь Смирнов', role: 'manager', phone: '+7 999 555-55-55', email: 'igor@example.com', rate: 400, startDate: '2023-12-01', status: 'online' }
-        ];
-        saveData();
+    // Load data from API with localStorage fallback
+    async function initializeData() {
+      document.getElementById('staffGrid').innerHTML = '<div style="text-align:center;padding:40px;color:#8b95a5;">Загрузка...</div>';
+
+      // Load staff
+      try {
+        const res = await AUTH.fetch('/api/hr/staff');
+        if (res.ok) {
+          const data = await res.json();
+          staff = (data.staff || []).map(s => ({
+            id: s.id,
+            name: (s.first_name || '') + (s.last_name ? ' ' + s.last_name : '') || s.name || s.email || 'Сотрудник',
+            role: (s.position || s.role || 'employee').toLowerCase(),
+            phone: s.phone || '',
+            email: s.email || '',
+            rate: parseFloat(s.hourly_rate || s.rate || 0),
+            startDate: s.hire_date || s.start_date || new Date().toISOString().slice(0, 10),
+            status: s.is_active ? 'online' : 'offline'
+          }));
+        }
+      } catch (e) {
+        console.log('API staff load failed:', e.message);
       }
 
-      const savedSchedule = localStorage.getItem('restaurantSchedule');
-      if (savedSchedule) {
-        schedule = JSON.parse(savedSchedule);
-      } else {
-        // Initialize empty schedule
-        staff.forEach(s => {
-          schedule[s.id] = {
-            0: 'morning', 1: 'morning', 2: 'morning', 3: 'morning', 4: 'morning', 5: 'day-off', 6: 'day-off'
-          };
-        });
-        saveData();
+      if (staff.length === 0) {
+        const saved = localStorage.getItem('restaurantStaff');
+        if (saved) staff = JSON.parse(saved);
+        else staff = [];
+      }
+
+      // Load schedules for current week
+      try {
+        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
+        const dateTo = new Date(currentWeekStart.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+        const res = await AUTH.fetch(`/api/hr/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+        if (res.ok) {
+          const data = await res.json();
+          apiSchedules = data.schedules || [];
+          // Build local schedule map from API data
+          schedule = {};
+          staff.forEach(s => { schedule[s.id] = {}; });
+          apiSchedules.forEach(entry => {
+            const staffId = entry.user_id || entry.staff_id;
+            const shiftDate = new Date(entry.shift_date);
+            const dayOffset = Math.round((shiftDate - currentWeekStart) / 86400000);
+            if (dayOffset >= 0 && dayOffset <= 6 && schedule[staffId] !== undefined) {
+              // Map start/end time to shift type
+              const start = (entry.start_time || '').slice(0, 5);
+              let shiftType = 'day-off';
+              if (start === '08:00') shiftType = 'morning';
+              else if (start === '16:00') shiftType = 'evening';
+              else if (start) shiftType = 'full-day';
+              schedule[staffId][dayOffset] = shiftType;
+            }
+          });
+        }
+      } catch (e) {
+        console.log('API schedules load failed:', e.message);
+      }
+
+      if (Object.keys(schedule).length === 0) {
+        const saved = localStorage.getItem('restaurantSchedule');
+        if (saved) schedule = JSON.parse(saved);
+      }
+
+      // Load payroll
+      try {
+        const res = await AUTH.fetch('/api/hr/payroll');
+        if (res.ok) {
+          const data = await res.json();
+          payroll = data.payroll || [];
+        }
+      } catch (e) {
+        console.log('API payroll load failed:', e.message);
       }
     }
 
@@ -1548,6 +1606,12 @@ AUTH.requireAuth();
 
     function renderStaff() {
       const grid = document.getElementById('staffGrid');
+
+      if (staff.length === 0) {
+        grid.innerHTML = '<div style="text-align:center;padding:40px;color:#8b95a5;background:#fff;border:1px solid #e1e8ed;border-radius:16px;">Сотрудники не найдены</div>';
+        updateStats();
+        return;
+      }
 
       grid.innerHTML = staff.map(s => `
         <div class="staff-card">
@@ -1694,14 +1758,45 @@ AUTH.requireAuth();
       return `${start.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
     }
 
-    function previousWeek() {
-      currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+    async function previousWeek() {
+      currentWeekStart = new Date(currentWeekStart.getTime() - 7 * 86400000);
+      await loadWeekSchedules();
       renderSchedule();
     }
 
-    function nextWeek() {
-      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    async function nextWeek() {
+      currentWeekStart = new Date(currentWeekStart.getTime() + 7 * 86400000);
+      await loadWeekSchedules();
       renderSchedule();
+    }
+
+    async function loadWeekSchedules() {
+      try {
+        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
+        const dateTo = new Date(currentWeekStart.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+        const res = await AUTH.fetch(`/api/hr/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+        if (res.ok) {
+          const data = await res.json();
+          apiSchedules = data.schedules || [];
+          schedule = {};
+          staff.forEach(s => { schedule[s.id] = {}; });
+          apiSchedules.forEach(entry => {
+            const staffId = entry.user_id || entry.staff_id;
+            const shiftDate = new Date(entry.shift_date);
+            const dayOffset = Math.round((shiftDate - currentWeekStart) / 86400000);
+            if (dayOffset >= 0 && dayOffset <= 6 && schedule[staffId] !== undefined) {
+              const start = (entry.start_time || '').slice(0, 5);
+              let shiftType = 'day-off';
+              if (start === '08:00') shiftType = 'morning';
+              else if (start === '16:00') shiftType = 'evening';
+              else if (start) shiftType = 'full-day';
+              schedule[staffId][dayOffset] = shiftType;
+            }
+          });
+        }
+      } catch (e) {
+        console.log('API week schedules load failed:', e.message);
+      }
     }
 
     function renderSchedule() {
@@ -1765,20 +1860,97 @@ AUTH.requireAuth();
       editingShift = null;
     }
 
-    function saveSchedule() {
+    async function saveSchedule() {
+      // Try to save new/changed shifts to API
+      let savedToApi = false;
+      try {
+        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
+        // Build array of shifts to post
+        const shiftsToPost = [];
+        for (const staffId of Object.keys(schedule)) {
+          const staffMember = staff.find(s => String(s.id) === String(staffId));
+          if (!staffMember) continue;
+          for (let day = 0; day <= 6; day++) {
+            const shiftType = schedule[staffId][day];
+            if (!shiftType || shiftType === 'day-off') continue;
+            const shiftDate = new Date(currentWeekStart.getTime() + day * 86400000).toISOString().slice(0, 10);
+            const timeMap = { morning: ['08:00', '16:00'], evening: ['16:00', '00:00'], 'full-day': ['08:00', '20:00'] };
+            const times = timeMap[shiftType] || ['08:00', '16:00'];
+            shiftsToPost.push({
+              userId: staffId,
+              shiftDate,
+              startTime: times[0],
+              endTime: times[1],
+              restaurantId: null
+            });
+          }
+        }
+        if (shiftsToPost.length > 0) {
+          for (const shift of shiftsToPost) {
+            await AUTH.fetch('/api/hr/schedules', {
+              method: 'POST',
+              body: JSON.stringify(shift)
+            });
+          }
+          savedToApi = true;
+        }
+      } catch (e) {
+        console.log('API schedule save failed:', e.message);
+      }
+
       saveData();
-      showNotification('✅ График сохранён');
+      showNotification(savedToApi ? 'График сохранен' : 'График сохранен локально');
     }
 
     // Timesheet functions
-    function renderTimesheet() {
+    async function renderTimesheet() {
       const tbody = document.getElementById('timesheetBody');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#8b95a5;">Загрузка...</td></tr>';
 
+      // Refresh payroll from API
+      if (payroll.length === 0) {
+        try {
+          const res = await AUTH.fetch('/api/hr/payroll');
+          if (res.ok) {
+            const data = await res.json();
+            payroll = data.payroll || [];
+          }
+        } catch (e) {
+          console.log('API payroll reload failed:', e.message);
+        }
+      }
+
+      if (payroll.length > 0) {
+        // Render from API payroll data
+        tbody.innerHTML = payroll.map(p => {
+          const statusBadge = p.status === 'paid'
+            ? '<span style="background:rgba(67,160,71,0.1);color:#43a047;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">Выплачено</span>'
+            : p.status === 'pending'
+            ? '<span style="background:rgba(251,140,0,0.1);color:#fb8c00;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">Ожидает</span>'
+            : '<span style="background:rgba(139,149,165,0.1);color:#8b95a5;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">' + (p.status || '') + '</span>';
+
+          const name = p.employee_name || p.name || (staff.find(s => String(s.id) === String(p.user_id || p.staff_id)) || {}).name || 'Сотрудник';
+          const role = (staff.find(s => String(s.id) === String(p.user_id || p.staff_id)) || {}).role || '';
+
+          return `
+            <tr>
+              <td><strong>${name}</strong>${role ? `<br><small class="staff-role role-${role}">${getRoleName(role)}</small>` : ''}</td>
+              <td>${p.hours_worked || p.hours || '—'} ч</td>
+              <td>${p.shifts_count || p.shifts || '—'}</td>
+              <td>${p.late_count || 0}</td>
+              <td><strong>${(parseFloat(p.amount || p.total || 0)).toLocaleString('ru-RU')} ₽</strong> ${statusBadge}</td>
+            </tr>
+          `;
+        }).join('');
+        return;
+      }
+
+      // Fallback: calculate from local schedule
       tbody.innerHTML = staff.map(s => {
         const shifts = schedule[s.id] || {};
         const workDays = Object.values(shifts).filter(sh => sh !== 'day-off').length;
-        const hours = workDays * 8; // Average 8 hours per shift
-        const salary = hours * s.rate;
+        const hours = workDays * 8;
+        const salary = hours * (s.rate || 0);
 
         return `
           <tr>
@@ -1803,8 +1975,7 @@ AUTH.requireAuth();
     }
 
     // Initialize
-    initializeData();
-    renderStaff();
+    initializeData().then(() => renderStaff());
   </script>
 </div><!-- /main-wrapper -->
 

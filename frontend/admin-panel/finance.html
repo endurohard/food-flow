@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Финансы — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <script src="js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-family) !important;
+      background: var(--admin-content-bg) !important;
+      color: var(--color-text-primary) !important;
+      min-height: 100vh;
+      display: flex !important;
+      overflow-x: hidden;
+    }
+
+    .sidebar {
+      width: 250px !important;
+      flex-shrink: 0 !important;
+      background: var(--admin-sidebar-bg) !important;
+      height: 100vh !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: 300 !important;
+      box-shadow: 2px 0 8px rgba(0,0,0,.06) !important;
+      transition: transform .2s ease !important;
+    }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+    .sidebar-brand img { height: 40px; width: auto; display: block; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex !important;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-primary) !important;
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent !important;
+      border-left: none !important;
+    }
+    .nav-item:hover { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px; top: 50%;
+      transform: translateY(-50%);
+      width: 8px; height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 20px 20px 0;
+    }
+    .nav-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+    .nav-item span { flex: 1; }
+    .nav-badge {
+      font-size: 11px; font-weight: 600;
+      background: var(--color-danger); color: #fff;
+      border-radius: 20px; padding: 2px 7px;
+      min-width: 20px; text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar {
+      width: 36px; height: 36px;
+      background: var(--color-primary-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 12px; color: var(--color-grey-5); }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299;
+    }
+    .sidebar-overlay.open { display: block; }
+
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex !important;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .topbar-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: var(--color-text-primary); padding: 4px; border-radius: 4px;
+    }
+    .topbar-search { flex: 1; max-width: 360px; position: relative; }
+    .topbar-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-placeholder); width: 18px; height: 18px; }
+    .topbar-search input {
+      width: 100%; height: 42px; background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border); border-radius: 8px;
+      padding: 0 16px 0 42px; font-family: var(--font-family); font-size: 14px;
+      color: var(--color-text-primary); outline: none;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .notif-group { display: flex; align-items: center; gap: 8px; }
+    .notif-btn {
+      position: relative; width: 40px; height: 40px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .notif-btn svg { width: 20px; height: 20px; }
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-btn.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .notif-btn.yellow { background: var(--color-warning-light); color: #c9a200;              }
+    .notif-count {
+      position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px;
+      border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #fff;
+    }
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .notif-count.red    { background: var(--color-danger);  }
+    .notif-count.yellow { background: var(--color-warning); }
+    .topbar-user {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px;
+      border-radius: 50px; cursor: pointer; transition: background .15s; text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+    .topbar-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-user-text { display: flex; flex-direction: column; }
+    .topbar-user-greeting { font-size: 11px; color: var(--color-grey-5); line-height: 1; }
+    .topbar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.3; }
+
+    .content { flex: 1; padding: 30px; }
+
+    .page-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+    }
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--color-grey-5);
+      margin-top: 4px;
+    }
+
+    /* Tabs */
+    .fin-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--color-grey-3);
+      overflow-x: auto;
+    }
+    .fin-tab {
+      padding: 10px 20px;
+      background: none;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-grey-5);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      font-family: var(--font-family);
+      transition: color .15s;
+    }
+    .fin-tab:hover { color: var(--color-primary); }
+    .fin-tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+    .fin-tab-content { display: none; }
+    .fin-tab-content.active { display: block; }
+
+    /* Cards */
+    .card {
+      background: var(--admin-card-bg);
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+      margin-bottom: 16px;
+    }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .kpi-mini {
+      background: var(--admin-card-bg);
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      padding: 16px 20px;
+    }
+    .kpi-mini-label { font-size: 12px; color: var(--color-grey-5); margin-bottom: 6px; }
+    .kpi-mini-value { font-size: 22px; font-weight: 700; color: var(--color-text-dark); }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--color-grey-5); padding: 10px 14px;
+      text-align: left; background: var(--admin-content-bg);
+    }
+    .data-table td {
+      padding: 13px 14px; border-top: 1px solid var(--color-grey-3);
+      color: var(--color-text-primary);
+    }
+    .data-table tr:hover td { background: var(--admin-content-bg); }
+
+    /* Badge */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+    }
+    .badge-success { background: var(--color-success-light); color: var(--color-primary); }
+    .badge-warning { background: var(--color-warning-light); color: #c9a200; }
+    .badge-danger  { background: var(--color-danger-light);  color: var(--color-danger); }
+    .badge-info    { background: var(--color-info-light);    color: var(--color-info); }
+
+    /* Register cards */
+    .register-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .register-card {
+      background: var(--admin-card-bg);
+      border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      padding: 20px;
+      cursor: pointer;
+      transition: box-shadow .2s, transform .2s;
+      border: 2px solid transparent;
+    }
+    .register-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-2px); }
+    .register-card.selected { border-color: var(--color-primary); }
+    .register-name { font-size: 16px; font-weight: 700; color: var(--color-text-dark); margin-bottom: 8px; }
+    .register-balance { font-size: 20px; font-weight: 700; color: var(--color-primary); }
+    .register-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 18px; border: none; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: filter .15s; font-family: var(--font-family);
+    }
+    .btn:hover { filter: brightness(.92); }
+    .btn-primary { background: var(--color-primary); color: #fff; }
+    .btn-secondary { background: var(--admin-content-bg); color: var(--color-text-primary); border: 1px solid var(--color-grey-3); }
+    .btn-danger { background: var(--color-danger); color: #fff; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* Form elements */
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--color-grey-5); margin-bottom: 6px; }
+    .form-control {
+      width: 100%; padding: 9px 12px; border: 1px solid var(--color-grey-3); border-radius: 8px;
+      font-size: 14px; font-family: var(--font-family); color: var(--color-text-primary);
+      background: var(--admin-card-bg); outline: none; transition: border-color .15s;
+    }
+    .form-control:focus { border-color: var(--color-primary); }
+
+    /* Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-box {
+      background: var(--admin-card-bg); border-radius: 16px; padding: 28px;
+      max-width: 480px; width: calc(100% - 40px); max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--color-text-dark); }
+    .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--color-grey-5); }
+
+    .alert {
+      padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
+    }
+    .alert-success { background: var(--color-success-light); color: var(--color-primary); }
+    .alert-error   { background: var(--color-danger-light);  color: var(--color-danger); }
+
+    /* P&L colors */
+    .profit-positive { color: #22c55e; font-weight: 700; }
+    .profit-negative { color: #ef4444; font-weight: 700; }
+
+    /* Date range */
+    .date-range-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--admin-card-bg); border-radius: 12px;
+      padding: 14px 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .date-range-bar label { font-size: 13px; font-weight: 600; color: var(--color-grey-5); }
+
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-250px); }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .main-wrapper { margin-left: 0; }
+      .topbar-hamburger { display: flex !important; align-items: center; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/dashboard.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/><path d="M10 9v9"/><path d="M4 2v16"/><path d="M4 8h4"/></svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M2 13h16M7 8v9"/></svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
+      <span>Склад</span>
+    </a>
+
+    <a href="/admin-panel/finance.html" class="nav-item active">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+      <span>Персонал</span>
+    </a>
+
+    <a href="/admin-panel/kds.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6M10 14v3"/></svg>
+      <span>KDS</span>
+    </a>
+
+    <a href="/admin-panel/calls.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4l2 5-2.5 1.5a11 11 0 005 5L13 12l5 2v4a1 1 0 01-1 1C7 19 1 13 1 4a1 1 0 011-1z"/></svg>
+      <span>Звонки</span>
+    </a>
+
+    <a href="/admin-panel/hall-designer.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="18" rx="2"/><path d="M1 7h18M1 13h18M7 1v18"/></svg>
+      <span>Дизайнер зала</span>
+    </a>
+
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+AUTH.requireAuth();
+
+(function applyRoleUI() {
+  var role = AUTH.getRole();
+  if (role === 'chef') {
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('kds')) el.style.display = 'none';
+    });
+  } else if (role === 'waiter') {
+    var allowed = ['orders', 'tables', 'kds'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'viewer') {
+    var allowed = ['dashboard', 'analytics'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'operator') {
+    var allowed = ['orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  }
+
+  var footer = document.querySelector('.sidebar-footer');
+  if (footer && !footer.querySelector('.ff-logout-btn')) {
+    var user = AUTH.getUser();
+    var displayName = (user && (user.first_name || user.email)) || '';
+    var logoutDiv = document.createElement('div');
+    logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
+    logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
+      '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
+      ' onmouseout="this.style.background=\'transparent\'">' +
+      'Выйти из системы</button>';
+    footer.appendChild(logoutDiv);
+  }
+})();
+</script>
+
+<div class="main-wrapper">
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebarMobile()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l3 3"/></svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+    <div class="topbar-right">
+      <div class="notif-group">
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+          <span class="notif-count green">0</span>
+        </button>
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/></svg>
+          <span class="notif-count blue">3</span>
+        </button>
+      </div>
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="page-heading">
+      <div>
+        <div class="page-title">Финансы</div>
+        <div class="page-subtitle">Кассы, платежи, отчёты и расходы</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="fin-tabs">
+      <button class="fin-tab active" onclick="switchTab('registers', this)">Кассы</button>
+      <button class="fin-tab" onclick="switchTab('payments', this)">Платежи</button>
+      <button class="fin-tab" onclick="switchTab('reports', this)">Отчёты</button>
+      <button class="fin-tab" onclick="switchTab('expenses', this)">Расходы</button>
+    </div>
+
+    <!-- ═══════════ TAB 1: КАССЫ ═══════════ -->
+    <div id="tab-registers" class="fin-tab-content active">
+      <div id="registersLoading" style="padding:40px;text-align:center;color:var(--color-grey-5);">Загрузка касс...</div>
+      <div id="registersContent" style="display:none;">
+        <div class="register-grid" id="registerGrid"></div>
+        <div id="registerOpsSection" style="display:none;">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <div class="card-title" style="margin-bottom:0;" id="registerOpsTitle">Операции кассы</div>
+              <button class="btn btn-sm btn-secondary" onclick="closeRegisterOps()">Закрыть</button>
+            </div>
+            <div id="registerOpsList">
+              <div style="text-align:center;padding:20px;color:var(--color-grey-5);">Загрузка...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB 2: ПЛАТЕЖИ ═══════════ -->
+    <div id="tab-payments" class="fin-tab-content">
+      <div class="date-range-bar">
+        <label>С:</label>
+        <input type="date" class="form-control" id="payDateFrom" style="width:160px;" onchange="loadPayments()">
+        <label>По:</label>
+        <input type="date" class="form-control" id="payDateTo" style="width:160px;" onchange="loadPayments()">
+        <button class="btn btn-sm btn-primary" onclick="loadPayments()">Загрузить</button>
+      </div>
+      <div class="kpi-row" id="payKpiRow" style="display:none;">
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">Всего платежей</div>
+          <div class="kpi-mini-value" id="payTotal">—</div>
+        </div>
+        <div class="kpi-mini">
+          <div class="kpi-mini-label">Кол-во</div>
+          <div class="kpi-mini-value" id="payCount">—</div>
+        </div>
+      </div>
+      <div class="card" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID заказа</th>
+              <th>Сумма</th>
+              <th>Метод</th>
+              <th>Статус</th>
+              <th>Дата</th>
+            </tr>
+          </thead>
+          <tbody id="paymentsBody">
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Выберите период для загрузки</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB 3: ОТЧЁТЫ ═══════════ -->
+    <div id="tab-reports" class="fin-tab-content">
+      <div class="date-range-bar">
+        <label>С:</label>
+        <input type="date" class="form-control" id="repDateFrom" style="width:160px;">
+        <label>По:</label>
+        <input type="date" class="form-control" id="repDateTo" style="width:160px;">
+        <button class="btn btn-sm btn-primary" onclick="loadReports()">Загрузить отчёты</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px;">
+        <!-- Revenue card -->
+        <div class="card">
+          <div class="card-title">Выручка</div>
+          <div id="revenueCardContent" style="color:var(--color-grey-5);font-size:14px;">Нажмите "Загрузить отчёты"</div>
+        </div>
+        <!-- P&L card -->
+        <div class="card">
+          <div class="card-title">Прибыли и убытки (P&amp;L)</div>
+          <div id="pnlCardContent" style="color:var(--color-grey-5);font-size:14px;">Нажмите "Загрузить отчёты"</div>
+        </div>
+      </div>
+
+      <!-- Export section -->
+      <div class="card">
+        <div class="card-title">Экспорт в 1С</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="exportData('sales')">Экспорт продаж (XML)</button>
+          <button class="btn btn-secondary" onclick="exportData('expenses')">Экспорт расходов (XML)</button>
+          <button class="btn btn-secondary" onclick="loadExportHistory()">История экспортов</button>
+        </div>
+        <div id="exportHistorySection" style="margin-top:16px;display:none;">
+          <div class="card-title" style="font-size:14px;margin-bottom:10px;">История экспортов</div>
+          <div id="exportHistoryBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB 4: РАСХОДЫ ═══════════ -->
+    <div id="tab-expenses" class="fin-tab-content">
+      <div style="display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start;" class="expenses-layout">
+        <!-- Expense list -->
+        <div class="card" style="overflow-x:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <div class="card-title" style="margin-bottom:0;">Список расходов</div>
+            <button class="btn btn-sm btn-primary" onclick="loadExpenses()">Обновить</button>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Категория</th>
+                <th>Сумма</th>
+                <th>Описание</th>
+                <th>Дата</th>
+              </tr>
+            </thead>
+            <tbody id="expensesBody">
+              <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--color-grey-5);">Загрузка...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Add expense form -->
+        <div class="card">
+          <div class="card-title">Добавить расход</div>
+          <div id="expAlert" style="display:none;" class="alert"></div>
+          <form id="expenseForm" onsubmit="addExpense(event)">
+            <div class="form-group">
+              <label class="form-label">Категория</label>
+              <select class="form-control" id="expCategory" required>
+                <option value="">Загрузка...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Сумма, ₽</label>
+              <input type="number" class="form-control" id="expAmount" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Описание</label>
+              <input type="text" class="form-control" id="expDescription">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Дата</label>
+              <input type="date" class="form-control" id="expDate" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Добавить расход</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal: Open Register -->
+<div class="modal" id="openRegisterModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Открыть кассу</span>
+      <button class="modal-close" onclick="closeModal('openRegisterModal')">&times;</button>
+    </div>
+    <div id="openRegAlert" style="display:none;" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label">Начальный баланс, ₽</label>
+      <input type="number" class="form-control" id="openingBalance" value="0" step="0.01" min="0">
+    </div>
+    <input type="hidden" id="openRegisterRestaurantId" value="">
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmOpenRegister()">Открыть</button>
+      <button class="btn btn-secondary" onclick="closeModal('openRegisterModal')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Helper ──
+  function dateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function formatMoney(v) {
+    return (Number(v) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  let selectedRegisterId = null;
+  let openRegisterData = null;
+
+  // ── Tab Switching ──
+  function switchTab(name, btn) {
+    document.querySelectorAll('.fin-tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.fin-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    if (btn) btn.classList.add('active');
+    if (name === 'registers') loadRegisters();
+    if (name === 'payments') initPaymentsDateRange();
+    if (name === 'reports') initReportsDateRange();
+    if (name === 'expenses') { loadExpenses(); loadExpenseCategories(); }
+  }
+
+  // ── Modal ──
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  // ── Mobile sidebar ──
+  function toggleSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (!sb) return;
+    sb.classList.toggle('mobile-open');
+    if (ov) ov.classList.toggle('open');
+  }
+  function closeSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (sb) sb.classList.remove('mobile-open');
+    if (ov) ov.classList.remove('open');
+  }
+
+  // ── User display ──
+  (function() {
+    try {
+      var u = AUTH.getUser() || {};
+      var nm = u.first_name || u.name || u.email || 'Admin';
+      var el1 = document.getElementById('sidebarUserName');
+      var el2 = document.getElementById('topbarUserName');
+      if (el1) el1.textContent = nm;
+      if (el2) el2.textContent = nm.split(' ')[0] || nm;
+    } catch(e) {}
+  })();
+
+  // ════════════════════════════════════
+  // TAB 1: КАССЫ
+  // ════════════════════════════════════
+  async function loadRegisters() {
+    const loading = document.getElementById('registersLoading');
+    const content = document.getElementById('registersContent');
+    loading.style.display = '';
+    content.style.display = 'none';
+    try {
+      const res = await AUTH.fetch('/api/finance/registers');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      renderRegisters(data.registers || []);
+      loading.style.display = 'none';
+      content.style.display = '';
+    } catch (e) {
+      loading.textContent = 'Нет данных: ' + e.message;
+    }
+  }
+
+  function renderRegisters(registers) {
+    const grid = document.getElementById('registerGrid');
+    if (!registers.length) {
+      grid.innerHTML = '<p style="color:var(--color-grey-5);font-size:14px;">Кассы не найдены</p>';
+      return;
+    }
+    grid.innerHTML = registers.map(r => {
+      const isOpen = r.status === 'open';
+      const badgeCls = isOpen ? 'badge-success' : 'badge-danger';
+      const badgeLabel = isOpen ? 'Открыта' : 'Закрыта';
+      return `
+        <div class="register-card" id="regCard-${r.id}" onclick="selectRegister(${r.id}, '${r.name}')">
+          <div class="register-name">${r.name || 'Касса #' + r.id}</div>
+          <div style="margin-bottom:8px;"><span class="badge ${badgeCls}">${badgeLabel}</span></div>
+          <div class="register-balance">${formatMoney(r.current_balance)}</div>
+          <div class="register-actions">
+            ${!isOpen ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openRegisterDialog(${r.id}, ${r.restaurant_id || ''})">Открыть кассу</button>` : ''}
+            ${isOpen  ? `<button class="btn btn-sm btn-danger"  onclick="event.stopPropagation(); closeRegisterAction(${r.id})">Закрыть кассу</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function selectRegister(id, name) {
+    selectedRegisterId = id;
+    document.querySelectorAll('.register-card').forEach(c => c.classList.remove('selected'));
+    const card = document.getElementById('regCard-' + id);
+    if (card) card.classList.add('selected');
+    loadRegisterOps(id, name);
+  }
+
+  async function loadRegisterOps(id, name) {
+    const section = document.getElementById('registerOpsSection');
+    const title = document.getElementById('registerOpsTitle');
+    const list = document.getElementById('registerOpsList');
+    section.style.display = '';
+    title.textContent = 'Операции кассы: ' + name;
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--color-grey-5);">Загрузка...</div>';
+
+    try {
+      const res = await AUTH.fetch('/api/finance/registers/' + id + '/operations');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const ops = data.operations || [];
+      if (!ops.length) {
+        list.innerHTML = '<p style="color:var(--color-grey-5);font-size:14px;padding:10px 0;">Операций нет</p>';
+        return;
+      }
+      list.innerHTML = `<table class="data-table">
+        <thead><tr><th>Тип</th><th>Сумма</th><th>Метод</th><th>Описание</th><th>Дата</th></tr></thead>
+        <tbody>
+          ${ops.map(op => `<tr>
+            <td>${op.operation_type || op.operationType || '—'}</td>
+            <td>${formatMoney(op.amount)}</td>
+            <td>${op.payment_method || op.paymentMethod || '—'}</td>
+            <td>${op.description || '—'}</td>
+            <td>${formatDate(op.created_at)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    } catch (e) {
+      list.innerHTML = '<p style="color:var(--color-danger);font-size:14px;">Ошибка: ' + e.message + '</p>';
+    }
+  }
+
+  function closeRegisterOps() {
+    document.getElementById('registerOpsSection').style.display = 'none';
+    selectedRegisterId = null;
+    document.querySelectorAll('.register-card').forEach(c => c.classList.remove('selected'));
+  }
+
+  function openRegisterDialog(registerId, restaurantId) {
+    openRegisterData = { registerId, restaurantId };
+    document.getElementById('openingBalance').value = '0';
+    document.getElementById('openRegisterRestaurantId').value = restaurantId || '';
+    const alertEl = document.getElementById('openRegAlert');
+    alertEl.style.display = 'none';
+    document.getElementById('openRegisterModal').classList.add('open');
+  }
+
+  async function confirmOpenRegister() {
+    const alertEl = document.getElementById('openRegAlert');
+    alertEl.style.display = 'none';
+    if (!openRegisterData) return;
+    const balance = parseFloat(document.getElementById('openingBalance').value) || 0;
+    const restaurantId = document.getElementById('openRegisterRestaurantId').value;
+    try {
+      const res = await AUTH.fetch('/api/finance/registers/' + openRegisterData.registerId + '/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantId: restaurantId || undefined, openingBalance: balance })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'HTTP ' + res.status);
+      }
+      closeModal('openRegisterModal');
+      await loadRegisters();
+    } catch (e) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Ошибка: ' + e.message;
+      alertEl.style.display = '';
+    }
+  }
+
+  async function closeRegisterAction(id) {
+    if (!confirm('Закрыть кассу?')) return;
+    try {
+      const res = await AUTH.fetch('/api/finance/registers/' + id + '/close', { method: 'POST' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      await loadRegisters();
+    } catch (e) {
+      alert('Ошибка закрытия кассы: ' + e.message);
+    }
+  }
+
+  // ════════════════════════════════════
+  // TAB 2: ПЛАТЕЖИ
+  // ════════════════════════════════════
+  function initPaymentsDateRange() {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - 7);
+    document.getElementById('payDateFrom').value = dateStr(from);
+    document.getElementById('payDateTo').value = dateStr(now);
+    loadPayments();
+  }
+
+  async function loadPayments() {
+    const from = document.getElementById('payDateFrom').value;
+    const to = document.getElementById('payDateTo').value;
+    const tbody = document.getElementById('paymentsBody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+
+    try {
+      let url = '/api/finance/payments';
+      if (from && to) url += '?dateFrom=' + from + '&dateTo=' + to;
+      const res = await AUTH.fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const payments = data.payments || [];
+
+      if (!payments.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Нет данных</td></tr>';
+        return;
+      }
+
+      // KPI
+      const total = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      document.getElementById('payTotal').textContent = formatMoney(total);
+      document.getElementById('payCount').textContent = payments.length;
+      document.getElementById('payKpiRow').style.display = '';
+
+      tbody.innerHTML = payments.map(p => {
+        const statusCls = p.status === 'completed' ? 'badge-success' : p.status === 'failed' ? 'badge-danger' : 'badge-warning';
+        return `<tr>
+          <td>${p.order_id || p.orderId || '—'}</td>
+          <td>${formatMoney(p.amount)}</td>
+          <td>${p.payment_method || p.paymentMethod || '—'}</td>
+          <td><span class="badge ${statusCls}">${p.status || '—'}</span></td>
+          <td>${formatDate(p.created_at)}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-danger);">Ошибка: ${e.message}</td></tr>`;
+    }
+  }
+
+  // ════════════════════════════════════
+  // TAB 3: ОТЧЁТЫ
+  // ════════════════════════════════════
+  function initReportsDateRange() {
+    const now = new Date();
+    const from = new Date(now); from.setDate(from.getDate() - 30);
+    document.getElementById('repDateFrom').value = dateStr(from);
+    document.getElementById('repDateTo').value = dateStr(now);
+  }
+
+  async function loadReports() {
+    const from = document.getElementById('repDateFrom').value;
+    const to = document.getElementById('repDateTo').value;
+    if (!from || !to) { alert('Выберите период'); return; }
+    const params = 'dateFrom=' + from + '&dateTo=' + to;
+
+    const revEl = document.getElementById('revenueCardContent');
+    const pnlEl = document.getElementById('pnlCardContent');
+    revEl.textContent = 'Загрузка...';
+    pnlEl.textContent = 'Загрузка...';
+
+    try {
+      const res = await AUTH.fetch('/api/finance/reports/revenue?' + params);
+      if (res.ok) {
+        const data = await res.json();
+        const r = data.report || {};
+        revEl.innerHTML = `
+          <div style="margin-bottom:8px;"><span style="color:var(--color-grey-5);font-size:12px;">Выручка</span><div style="font-size:24px;font-weight:700;">${formatMoney(r.total_revenue)}</div></div>
+          <div style="margin-bottom:8px;"><span style="color:var(--color-grey-5);font-size:12px;">Заказов</span><div style="font-size:20px;font-weight:700;">${r.order_count || 0}</div></div>
+          <div><span style="color:var(--color-grey-5);font-size:12px;">Средний чек</span><div style="font-size:20px;font-weight:700;">${formatMoney(r.avg_check)}</div></div>`;
+      } else {
+        revEl.textContent = 'Нет данных';
+      }
+    } catch (e) { revEl.textContent = 'Ошибка: ' + e.message; }
+
+    try {
+      const res2 = await AUTH.fetch('/api/finance/reports/pnl?' + params);
+      if (res2.ok) {
+        const data2 = await res2.json();
+        const p = data2.report || {};
+        const profit = Number(p.profit) || 0;
+        const cls = profit >= 0 ? 'profit-positive' : 'profit-negative';
+        pnlEl.innerHTML = `
+          <div style="margin-bottom:8px;"><span style="color:var(--color-grey-5);font-size:12px;">Выручка</span><div style="font-size:18px;font-weight:700;">${formatMoney(p.revenue)}</div></div>
+          <div style="margin-bottom:8px;"><span style="color:var(--color-grey-5);font-size:12px;">Расходы</span><div style="font-size:18px;font-weight:700;">${formatMoney(p.expenses)}</div></div>
+          <div><span style="color:var(--color-grey-5);font-size:12px;">Прибыль</span><div class="${cls}" style="font-size:22px;">${formatMoney(profit)}</div></div>`;
+      } else {
+        pnlEl.textContent = 'Нет данных';
+      }
+    } catch (e) { pnlEl.textContent = 'Ошибка: ' + e.message; }
+  }
+
+  async function exportData(type) {
+    const from = document.getElementById('repDateFrom').value;
+    const to = document.getElementById('repDateTo').value;
+    if (!from || !to) { alert('Выберите период для экспорта'); return; }
+    const url = '/api/finance/exports/' + type + '?dateFrom=' + from + '&dateTo=' + to;
+    try {
+      const res = await AUTH.fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = type + '_' + from + '_' + to + '.xml';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert('Ошибка экспорта: ' + e.message);
+    }
+  }
+
+  async function loadExportHistory() {
+    const section = document.getElementById('exportHistorySection');
+    const body = document.getElementById('exportHistoryBody');
+    section.style.display = '';
+    body.innerHTML = 'Загрузка...';
+    try {
+      const res = await AUTH.fetch('/api/finance/exports/history');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const exports = data.exports || [];
+      if (!exports.length) { body.innerHTML = '<p style="color:var(--color-grey-5);font-size:14px;">История пуста</p>'; return; }
+      body.innerHTML = exports.map(ex => `
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--color-grey-3);font-size:13px;">
+          <span>${ex.type || ex.export_type || '—'}</span>
+          <span style="color:var(--color-grey-5);">${formatDate(ex.created_at)}</span>
+        </div>`).join('');
+    } catch (e) {
+      body.innerHTML = '<p style="color:var(--color-danger);font-size:14px;">Ошибка: ' + e.message + '</p>';
+    }
+  }
+
+  // ════════════════════════════════════
+  // TAB 4: РАСХОДЫ
+  // ════════════════════════════════════
+  async function loadExpenses() {
+    const tbody = document.getElementById('expensesBody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+    try {
+      const res = await AUTH.fetch('/api/finance/expenses');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const expenses = data.expenses || [];
+      if (!expenses.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--color-grey-5);">Нет данных</td></tr>';
+        return;
+      }
+      tbody.innerHTML = expenses.map(ex => `<tr>
+        <td>${ex.category_name || ex.categoryId || '—'}</td>
+        <td>${formatMoney(ex.amount)}</td>
+        <td>${ex.description || '—'}</td>
+        <td>${formatDate(ex.expense_date || ex.expenseDate || ex.created_at)}</td>
+      </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--color-danger);">Ошибка: ${e.message}</td></tr>`;
+    }
+  }
+
+  async function loadExpenseCategories() {
+    try {
+      const res = await AUTH.fetch('/api/finance/expense-categories');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const cats = data.categories || [];
+      const sel = document.getElementById('expCategory');
+      sel.innerHTML = cats.length
+        ? '<option value="">Выберите категорию</option>' + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+        : '<option value="">Категории не найдены</option>';
+    } catch (e) {
+      document.getElementById('expCategory').innerHTML = '<option value="">Ошибка загрузки</option>';
+    }
+  }
+
+  async function addExpense(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('expAlert');
+    alertEl.style.display = 'none';
+    const body = {
+      categoryId: document.getElementById('expCategory').value,
+      amount: parseFloat(document.getElementById('expAmount').value),
+      description: document.getElementById('expDescription').value,
+      expenseDate: document.getElementById('expDate').value
+    };
+    try {
+      const res = await AUTH.fetch('/api/finance/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'HTTP ' + res.status);
+      }
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'Расход добавлен';
+      alertEl.style.display = '';
+      document.getElementById('expenseForm').reset();
+      await loadExpenses();
+    } catch (e) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Ошибка: ' + e.message;
+      alertEl.style.display = '';
+    }
+  }
+
+  // ── Init date for expense form ──
+  document.getElementById('expDate').value = dateStr(new Date());
+
+  // ── Initialize ──
+  loadRegisters();
+</script>
+</body>
+</html>
