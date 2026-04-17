@@ -1320,241 +1320,54 @@ AUTH.requireAuth();
         <div id="roles" class="tab-content">
             <div class="card">
                 <div class="card-header">
-                    <h2>👥 Управление ролями и доступом</h2>
-                    <p style="margin: 8px 0 0 0; font-size: 14px; color: #6c757d;">Настройте права доступа для разных ролей пользователей</p>
+                    <h2>Управление ролями и доступом</h2>
                 </div>
                 <div class="card-body">
-                    <form id="rolesForm">
-                        <!-- Role Selection -->
-                        <div class="form-group">
-                            <label>Выберите роль для настройки</label>
-                            <select class="form-control" id="roleSelector" onchange="loadRolePermissions()">
-                                <option value="admin">Администратор</option>
-                                <option value="manager" selected>Менеджер</option>
-                                <option value="operator">Оператор</option>
-                                <option value="chef">Повар</option>
-                                <option value="waiter">Официант</option>
-                            </select>
+                    <div style="padding: 24px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 24px;">
+                        <strong>Права доступа управляются на бэкенде</strong><br>
+                        <p style="margin: 8px 0 0 0; color: #555; font-size: 14px; line-height: 1.6;">
+                            Роли и разрешения пользователей хранятся в базе данных и проверяются сервером при каждом запросе.
+                            Изменение прав здесь не имело бы эффекта — настоящий доступ определяется полем <code>role</code> в таблице <code>enterprise_users</code>.
+                        </p>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;">
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">👑</div>
+                            <strong>admin / owner</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">Полный доступ ко всем функциям без ограничений</p>
                         </div>
-
-                        <div style="margin: 20px 0; padding: 16px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #1976d2;">
-                            <strong>ℹ️ Текущая роль:</strong> <span id="currentRoleName">Менеджер</span><br>
-                            <small id="currentRoleDescription">Управление заказами, персоналом и отчётами</small>
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">🏢</div>
+                            <strong>manager</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">Заказы, персонал, меню, отчёты. Нет: удаления пользователей</p>
                         </div>
-
-                        <!-- Permissions Grid -->
-                        <div class="section-title">Доступные функции</div>
-                        <div class="features-grid">
-                            <!-- Orders -->
-                            <div class="feature-card">
-                                <div class="feature-icon">📦</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Заказы</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-orders" data-permission="orders">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Просмотр и управление заказами</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-orders-edit" data-permission="orders-edit" style="margin: 0;">
-                                            <span>Редактирование</span>
-                                        </label>
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-orders-delete" data-permission="orders-delete" style="margin: 0;">
-                                            <span>Удаление</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Tables -->
-                            <div class="feature-card">
-                                <div class="feature-icon">🍽️</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Столы</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-tables" data-permission="tables">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Управление столами и бронированием</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-tables-edit" data-permission="tables-edit" style="margin: 0;">
-                                            <span>Редактирование</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- KDS -->
-                            <div class="feature-card">
-                                <div class="feature-icon">👨‍🍳</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>KDS - Кухня</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-kds" data-permission="kds">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Экран кухни для поваров</p>
-                                </div>
-                            </div>
-
-                            <!-- Menu -->
-                            <div class="feature-card">
-                                <div class="feature-icon">🍕</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Меню</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-menu" data-permission="menu">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Управление меню и блюдами</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-menu-edit" data-permission="menu-edit" style="margin: 0;">
-                                            <span>Редактирование</span>
-                                        </label>
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-menu-prices" data-permission="menu-prices" style="margin: 0;">
-                                            <span>Изменение цен</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Inventory -->
-                            <div class="feature-card">
-                                <div class="feature-icon">📦</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Склад</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-inventory" data-permission="inventory">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Управление складом и остатками</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-inventory-edit" data-permission="inventory-edit" style="margin: 0;">
-                                            <span>Редактирование</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Staff -->
-                            <div class="feature-card">
-                                <div class="feature-icon">👥</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Персонал</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-staff" data-permission="staff">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Управление сотрудниками</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-staff-edit" data-permission="staff-edit" style="margin: 0;">
-                                            <span>Редактирование</span>
-                                        </label>
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-staff-salary" data-permission="staff-salary" style="margin: 0;">
-                                            <span>Зарплаты</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Loyalty -->
-                            <div class="feature-card">
-                                <div class="feature-icon">🎁</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Программа лояльности</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-loyalty" data-permission="loyalty">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Бонусы и скидки</p>
-                                </div>
-                            </div>
-
-                            <!-- Analytics -->
-                            <div class="feature-card">
-                                <div class="feature-icon">📊</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Аналитика</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-analytics" data-permission="analytics">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Отчёты и статистика</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-analytics-export" data-permission="analytics-export" style="margin: 0;">
-                                            <span>Экспорт данных</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Telephony -->
-                            <div class="feature-card">
-                                <div class="feature-icon">📞</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Телефония</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-telephony" data-permission="telephony">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Звонки и мониторинг</p>
-                                </div>
-                            </div>
-
-                            <!-- Settings -->
-                            <div class="feature-card">
-                                <div class="feature-icon">⚙️</div>
-                                <div class="feature-content">
-                                    <div class="feature-header">
-                                        <h3>Настройки</h3>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="role-settings" data-permission="settings">
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p class="feature-description">Доступ к системным настройкам</p>
-                                    <div style="margin-top: 8px;">
-                                        <label style="font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                                            <input type="checkbox" id="role-settings-advanced" data-permission="settings-advanced" style="margin: 0;">
-                                            <span>Расширенные настройки</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">🖥️</div>
+                            <strong>operator</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">Заказы, столы, касса, склад. Нет: HR, финансовые отчёты</p>
                         </div>
-
-                        <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e1e8ed;">
-                            <button type="submit" class="btn btn-primary">💾 Сохранить права доступа</button>
-                            <button type="button" class="btn btn-secondary" onclick="resetRolePermissions()">↺ Сбросить по умолчанию</button>
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">👨‍🍳</div>
+                            <strong>chef</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">KDS, просмотр меню и остатков. Только кухонные операции</p>
                         </div>
-                    </form>
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">🍽️</div>
+                            <strong>waiter</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">Заказы, столы, KDS. Нет: управленческих функций</p>
+                        </div>
+                        <div style="padding: 20px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e1e8ed;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">👤</div>
+                            <strong>employee / viewer</strong>
+                            <p style="font-size: 13px; color: #666; margin: 6px 0 0 0;">Только отметки прихода/ухода или просмотр дашборда</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 24px; padding: 16px; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #43a047;">
+                        Назначить или изменить роль пользователя можно в разделе
+                        <a href="enterprises.html" style="color: #1b5e20; font-weight: 600;">Предприятия → Пользователи</a>.
+                    </div>
                 </div>
             </div>
         </div>
@@ -2085,176 +1898,8 @@ AUTH.requireAuth();
             return defaults[featureName] !== false;
         }
 
-        // Role-based access control
-        const rolePermissions = {
-            admin: {
-                name: 'Администратор',
-                description: 'Полный доступ ко всем функциям системы',
-                permissions: {
-                    orders: true, 'orders-edit': true, 'orders-delete': true,
-                    tables: true, 'tables-edit': true,
-                    kds: true,
-                    menu: true, 'menu-edit': true, 'menu-prices': true,
-                    inventory: true, 'inventory-edit': true,
-                    staff: true, 'staff-edit': true, 'staff-salary': true,
-                    loyalty: true,
-                    analytics: true, 'analytics-export': true,
-                    telephony: true,
-                    settings: true, 'settings-advanced': true
-                }
-            },
-            manager: {
-                name: 'Менеджер',
-                description: 'Управление заказами, персоналом и отчётами',
-                permissions: {
-                    orders: true, 'orders-edit': true, 'orders-delete': true,
-                    tables: true, 'tables-edit': true,
-                    kds: false,
-                    menu: true, 'menu-edit': true, 'menu-prices': false,
-                    inventory: true, 'inventory-edit': false,
-                    staff: true, 'staff-edit': true, 'staff-salary': false,
-                    loyalty: true,
-                    analytics: true, 'analytics-export': true,
-                    telephony: true,
-                    settings: false, 'settings-advanced': false
-                }
-            },
-            operator: {
-                name: 'Оператор',
-                description: 'Приём заказов и управление столами',
-                permissions: {
-                    orders: true, 'orders-edit': true, 'orders-delete': false,
-                    tables: true, 'tables-edit': true,
-                    kds: false,
-                    menu: true, 'menu-edit': false, 'menu-prices': false,
-                    inventory: false, 'inventory-edit': false,
-                    staff: false, 'staff-edit': false, 'staff-salary': false,
-                    loyalty: true,
-                    analytics: false, 'analytics-export': false,
-                    telephony: true,
-                    settings: false, 'settings-advanced': false
-                }
-            },
-            chef: {
-                name: 'Повар',
-                description: 'Работа с экраном кухни и остатками',
-                permissions: {
-                    orders: true, 'orders-edit': false, 'orders-delete': false,
-                    tables: false, 'tables-edit': false,
-                    kds: true,
-                    menu: true, 'menu-edit': false, 'menu-prices': false,
-                    inventory: true, 'inventory-edit': false,
-                    staff: false, 'staff-edit': false, 'staff-salary': false,
-                    loyalty: false,
-                    analytics: false, 'analytics-export': false,
-                    telephony: false,
-                    settings: false, 'settings-advanced': false
-                }
-            },
-            waiter: {
-                name: 'Официант',
-                description: 'Управление столами и заказами',
-                permissions: {
-                    orders: true, 'orders-edit': true, 'orders-delete': false,
-                    tables: true, 'tables-edit': false,
-                    kds: false,
-                    menu: true, 'menu-edit': false, 'menu-prices': false,
-                    inventory: false, 'inventory-edit': false,
-                    staff: false, 'staff-edit': false, 'staff-salary': false,
-                    loyalty: true,
-                    analytics: false, 'analytics-export': false,
-                    telephony: false,
-                    settings: false, 'settings-advanced': false
-                }
-            }
-        };
-
-        // Load role permissions
-        function loadRolePermissions() {
-            const roleSelector = document.getElementById('roleSelector');
-            const selectedRole = roleSelector.value;
-
-            // Update role info
-            document.getElementById('currentRoleName').textContent = rolePermissions[selectedRole].name;
-            document.getElementById('currentRoleDescription').textContent = rolePermissions[selectedRole].description;
-
-            // Load saved permissions or defaults
-            const savedPermissions = JSON.parse(localStorage.getItem('rolePermissions') || '{}');
-            const permissions = savedPermissions[selectedRole] || rolePermissions[selectedRole].permissions;
-
-            // Update checkboxes
-            document.querySelectorAll('[data-permission]').forEach(checkbox => {
-                const permission = checkbox.dataset.permission;
-                checkbox.checked = permissions[permission] || false;
-            });
-        }
-
-        // Save role permissions
-        document.getElementById('rolesForm')?.addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            const roleSelector = document.getElementById('roleSelector');
-            const selectedRole = roleSelector.value;
-
-            const permissions = {};
-            document.querySelectorAll('[data-permission]').forEach(checkbox => {
-                permissions[checkbox.dataset.permission] = checkbox.checked;
-            });
-
-            // Save to localStorage
-            const allPermissions = JSON.parse(localStorage.getItem('rolePermissions') || '{}');
-            allPermissions[selectedRole] = permissions;
-            localStorage.setItem('rolePermissions', JSON.stringify(allPermissions));
-
-            alert(`✅ Права доступа для роли "${rolePermissions[selectedRole].name}" сохранены!`);
-        });
-
-        // Reset role permissions
-        function resetRolePermissions() {
-            const roleSelector = document.getElementById('roleSelector');
-            const selectedRole = roleSelector.value;
-
-            if (!confirm(`Сбросить права доступа для роли "${rolePermissions[selectedRole].name}" к значениям по умолчанию?`)) {
-                return;
-            }
-
-            // Load default permissions
-            const permissions = rolePermissions[selectedRole].permissions;
-
-            document.querySelectorAll('[data-permission]').forEach(checkbox => {
-                const permission = checkbox.dataset.permission;
-                checkbox.checked = permissions[permission] || false;
-            });
-
-            // Remove from localStorage
-            const allPermissions = JSON.parse(localStorage.getItem('rolePermissions') || '{}');
-            delete allPermissions[selectedRole];
-            localStorage.setItem('rolePermissions', JSON.stringify(allPermissions));
-
-            alert('✅ Права доступа сброшены к значениям по умолчанию');
-        }
-
-        // Check if user has permission
-        function hasPermission(userRole, permission) {
-            const savedPermissions = JSON.parse(localStorage.getItem('rolePermissions') || '{}');
-            const rolePerms = savedPermissions[userRole] || rolePermissions[userRole]?.permissions || {};
-            return rolePerms[permission] === true;
-        }
-
         // Expose globally for navigation
         window.isFeatureEnabled = isFeatureEnabled;
-        window.hasPermission = hasPermission;
-
-        // Initialize role permissions on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            // Load role permissions when roles tab is active
-            const rolesTab = document.querySelector('[data-tab="roles"]');
-            if (rolesTab) {
-                rolesTab.addEventListener('click', function() {
-                    setTimeout(loadRolePermissions, 100);
-                });
-            }
-        });
     </script>
 </div><!-- /main-wrapper -->
 

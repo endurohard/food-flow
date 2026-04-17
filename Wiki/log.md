@@ -395,3 +395,10 @@ STAFF         = admin | owner | manager | operator | chef | waiter | employee
   - При онлайн: `POST /api/orders` → `POST /api/finance/online-payment` → редирект на `confirmationUrl` ЮKassa с параметром `return_url` на payment-callback.html.
   - Кнопка submit блокируется на время запроса, меняет текст.
 - **`customer-app/payment-callback.html`** (новый): страница возврата после ЮKassa. Читает `orderId` из URL-параметра → polling `GET /api/finance/payments?orderId=X` с retry. Отображает статус: Оплачено / В обработке (retry каждые 5с) / Отклонено / Уточняется. Кнопка «Вернуться в меню».
+
+## [2026-04-17] cleanup | Phase 5+3 — Orphan pages redirect + settings role editor removed
+Устранены последние misleading/дублирующие элементы UI.
+
+- **`frontend/order-management/index.html`**: заменён на 10-строчный redirect (meta refresh + JS) → `../admin-panel/orders.html`. Страница была 708-строчным mock-канбаном с LocalStorage; функциональный аналог — `orders.html` на реальном API.
+- **`frontend/kds/index.html`**: заменён на redirect → `../admin-panel/kds.html`. Была standalone KDS с Socket.IO hardcoded на `localhost:3009`; актуальная версия — `kds.html` с polling через реальный API.
+- **`admin-panel/settings.html`** таб «Роли и доступ»: убрана вся форма с чекбоксами прав (250+ строк HTML + ~160 строк JS). `rolePermissions`, `loadRolePermissions`, `saveRolePermissions`, `resetRolePermissions`, `hasPermission`, DOMContentLoaded-инициализация — все удалены. `window.hasPermission` больше не экспортируется. Вместо формы — информационная панель с описанием каждой роли (admin/owner, manager, operator, chef, waiter, employee/viewer) и ссылка на `enterprises.html` для реального управления ролями.

@@ -20,7 +20,7 @@
 - [x] `restaurant-service` routes — requireRole на menu CRUD (POST/PUT/DELETE items/categories/modifiers) → MGMT; reservations → POS; stop-list → MGMT+operator; stop-list GET → +chef
 - [x] `order-service` routes — discount CRUD → MGMT; tables GET/PUT → POS; tables POST/DELETE → MGMT
 - [x] Написать `Wiki/log.md` entry для Phase E
-- [ ] Commit Phase 1
+- [x] Commit Phase 1
 
 **Маппинг ролей (финальный)**:
 ```
@@ -53,7 +53,7 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 - [x] `admin-panel/login.html` — подключён к `POST /api/auth/login`, сохраняет JWT в `ff_token/ff_user`
 - [x] Sidebar во всех 14 protected страницах — role-based hiding + logout кнопка
 - [x] `AUTH.requireAuth()` на всех 14 страницах — редирект на login при отсутствии токена
-- [ ] Убрать `settings.html` role editor (localStorage permissions) — он misleading, реальные права на бекенде
+- [x] Убрать `settings.html` role editor (localStorage permissions) — он misleading, реальные права на бекенде
 - [x] Wiki log entry + commit
 
 ---
@@ -79,7 +79,7 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 - [x] Создана `admin-panel/finance.html` — кассы (открыть/закрыть/операции), платежи, отчёты P&L + revenue, расходы, экспорт в 1С
 - [x] Создана `admin-panel/enterprises.html` — список сети, пользователи enterprise (роли, invite, deactivate), benchmarks
 - [x] Ссылки на finance.html и enterprises.html добавлены во все 16 страниц сайдбара
-- [ ] Убрать/merge orphan `order-management/` → уже есть `orders.html`; убрать orphan `kds/` → уже есть `kds.html` с polling
+- [x] Убрать/merge orphan `order-management/` → уже есть `orders.html`; убрать orphan `kds/` → уже есть `kds.html` с polling
 - [ ] Wiki log entry + commit
 
 ---
