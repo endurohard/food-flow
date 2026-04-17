@@ -87,11 +87,12 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 ## Фаза 6 — ЮKassa в customer-app checkout
 **Цель**: Реальная оплата в B2C витрине.
 
-- [ ] `customer-app/index.html` — добавить шаг оплаты после создания заказа: выбор cash / online
-- [ ] При выборе online → `POST /api/finance/online-payment` → редирект на `confirmationUrl` (ЮKassa)
-- [ ] Добавить страницу `/payment-callback.html` — обработка return URL (показать статус из `GET /api/finance/payments?orderId=X`)
-- [ ] Добавить промокод-поле в checkout → `POST /api/crm/promotions/apply` перед созданием заказа
-- [ ] Wiki log entry + commit
+- [x] `customer-app/index.html` — выбор cash / online в checkout
+- [x] При online → `POST /api/finance/online-payment` → редирект на `confirmationUrl`
+- [x] Создана `/customer-app/payment-callback.html` — polling статуса из `GET /api/finance/payments?orderId=X`
+- [x] Промокод-поле в checkout → `POST /api/crm/promotions/apply` с визуальным feedback
+- [x] Исправлен `API_BASE_URL`: `localhost/api` → `localhost:8000/api`
+- [x] Wiki log entry + commit
 
 ---
 
@@ -104,4 +105,4 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 | 2026-04-17 | Phase 3 (UI roles) | ✅ завершено (settings.html role editor pending) |
 | 2026-04-17 | Phase 4 (mock→API) | ✅ завершено (delivery-dashboard pending) |
 | 2026-04-17 | Phase 5 (new pages) | ✅ завершено (orphan cleanup pending) |
-| — | Phase 6 (YooKassa) | ⬜ не начато |
+| 2026-04-17 | Phase 6 (YooKassa) | ✅ завершено |

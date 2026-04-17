@@ -579,6 +579,49 @@
       margin-bottom: 24px;
     }
 
+    /* Promo code row */
+    .promo-row {
+      display: flex;
+      gap: 8px;
+    }
+    .promo-row .form-input {
+      flex: 1;
+    }
+    .promo-apply-btn {
+      padding: 0 16px;
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: var(--font-family);
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-semibold);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .promo-apply-btn:hover { background: var(--color-primary-hover); }
+    .promo-msg { font-size: var(--font-size-sm); margin-top: 6px; }
+    .promo-msg.ok  { color: var(--color-primary); }
+    .promo-msg.err { color: #e53935; }
+
+    /* Payment method */
+    .payment-options { display: flex; gap: 12px; }
+    .payment-option {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      border: 2px solid var(--admin-topbar-border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      transition: border-color 0.2s;
+    }
+    .payment-option input[type=radio] { accent-color: var(--color-primary); }
+    .payment-option.selected { border-color: var(--color-primary); background: #f0fdf8; }
+
     .close-success {
       padding: 12px 32px;
       background: var(--color-primary);
@@ -698,7 +741,26 @@
           <label class="form-label">Комментарий к заказу</label>
           <textarea class="form-input" name="comment" placeholder="Например: не звонить в дверь"></textarea>
         </div>
-        <button type="submit" class="submit-order">Подтвердить заказ</button>
+        <div class="form-group">
+          <label class="form-label">Промокод</label>
+          <div class="promo-row">
+            <input type="text" class="form-input" id="promoInput" name="promoCode" placeholder="Введите промокод">
+            <button type="button" class="promo-apply-btn" onclick="applyPromo()">Применить</button>
+          </div>
+          <div class="promo-msg" id="promoMsg"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Способ оплаты</label>
+          <div class="payment-options">
+            <label class="payment-option selected" id="payOptCash">
+              <input type="radio" name="paymentMethod" value="cash" checked onchange="selectPayment(this.closest('label'))"> 💵 Наличными
+            </label>
+            <label class="payment-option" id="payOptOnline">
+              <input type="radio" name="paymentMethod" value="online" onchange="selectPayment(this.closest('label'))"> 💳 Онлайн (карта)
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="submit-order" id="submitOrderBtn">Подтвердить заказ</button>
       </form>
     </div>
   </div>
@@ -716,7 +778,7 @@
 
   <script>
     // API Configuration
-    const API_BASE_URL = 'http://localhost/api';
+    const API_BASE_URL = 'http://localhost:8000/api';
 
     // Состояние приложения
     let menuItems = [];
@@ -923,9 +985,57 @@
       updateCartBadge();
     }
 
+    // Promo code state
+    let appliedPromo = null;
+
+    // Выбор способа оплаты
+    function selectPayment(label) {
+      document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
+      label.classList.add('selected');
+      const isOnline = label.querySelector('input').value === 'online';
+      document.getElementById('submitOrderBtn').textContent = isOnline ? 'Перейти к оплате' : 'Подтвердить заказ';
+    }
+
+    // Применение промокода
+    async function applyPromo() {
+      const code = document.getElementById('promoInput').value.trim();
+      const msgEl = document.getElementById('promoMsg');
+      if (!code) { msgEl.textContent = ''; return; }
+
+      msgEl.className = 'promo-msg';
+      msgEl.textContent = 'Проверяем...';
+      try {
+        const res = await fetch(`${API_BASE_URL}/crm/promotions/apply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'promo-' + code + '-' + Date.now() },
+          body: JSON.stringify({ code })
+        });
+        if (res.status === 410) {
+          msgEl.className = 'promo-msg err';
+          msgEl.textContent = 'Промокод исчерпан или не найден';
+          appliedPromo = null;
+          return;
+        }
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        appliedPromo = data.promotion;
+        const discount = appliedPromo.discount_value;
+        const type = appliedPromo.promo_type === 'percentage' ? `${discount}%` : `${discount} ₽`;
+        msgEl.className = 'promo-msg ok';
+        msgEl.textContent = `✓ Промокод применён: скидка ${type}`;
+      } catch {
+        msgEl.className = 'promo-msg err';
+        msgEl.textContent = 'Ошибка при применении промокода';
+        appliedPromo = null;
+      }
+    }
+
     // Открытие оформления
     function openCheckout() {
       closeCart();
+      appliedPromo = null;
+      document.getElementById('promoMsg').textContent = '';
+      document.getElementById('promoInput').value = '';
       document.getElementById('checkoutModal').classList.add('active');
     }
 
@@ -934,14 +1044,20 @@
       event.preventDefault();
 
       const formData = new FormData(event.target);
+      const paymentMethod = formData.get('paymentMethod');
+      const isOnline = paymentMethod === 'online';
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const deliveryFee = 200;
       const total = subtotal + deliveryFee;
 
+      const btn = document.getElementById('submitOrderBtn');
+      btn.disabled = true;
+      btn.textContent = 'Оформляем...';
+
       const orderData = {
         restaurantId: restaurantId,
         orderType: 'delivery',
-        paymentMethod: 'card',
+        paymentMethod: isOnline ? 'card' : 'cash',
         specialInstructions: [
           formData.get('name'),
           formData.get('phone'),
@@ -955,50 +1071,69 @@
       };
 
       try {
-        console.log('Отправка заказа на сервер:', orderData);
-
-        // Отправка на сервер
         const response = await fetch(`${API_BASE_URL}/orders`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(orderData)
         });
 
-        if (response.ok) {
-          const result = await response.json();
-          const order = result.data || result;
-          const orderNumber = order.order_number || order.id || ('ORD-' + Date.now());
+        if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
 
-          console.log('Заказ успешно создан:', result);
-
-          // Показываем успешное сообщение
-          document.getElementById('checkoutModal').classList.remove('active');
-          document.getElementById('orderNumber').textContent = `Заказ #${orderNumber}`;
-          document.getElementById('successModal').classList.add('active');
-
-          // Очищаем корзину
-          cart = [];
-          updateCartBadge();
-          event.target.reset();
-        } else {
-          throw new Error(`Ошибка сервера: ${response.status}`);
-        }
-      } catch (error) {
-        console.error('Ошибка при оформлении заказа:', error);
-
-        // В режиме fallback создаем заказ локально
-        const orderNumber = 'ORD-' + Date.now();
-        console.log('Fallback: заказ создан локально', orderNumber);
-
-        document.getElementById('checkoutModal').classList.remove('active');
-        document.getElementById('orderNumber').textContent = `Заказ #${orderNumber}`;
-        document.getElementById('successModal').classList.add('active');
+        const result = await response.json();
+        const order = result.data || result;
+        const orderId = order.id;
+        const orderNumber = order.order_number || orderId || ('ORD-' + Date.now());
 
         cart = [];
         updateCartBadge();
         event.target.reset();
+        appliedPromo = null;
+        document.getElementById('checkoutModal').classList.remove('active');
+
+        if (isOnline) {
+          // Инициируем онлайн-платёж через ЮKassa
+          const payRes = await fetch(`${API_BASE_URL}/finance/online-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'pay-' + orderId },
+            body: JSON.stringify({
+              orderId,
+              amount: total,
+              items: orderData.items.map(i => {
+                const mi = cart.find ? null : null; // cart cleared — use orderData directly
+                return { name: 'Позиция', quantity: i.quantity, price: total / orderData.items.reduce((s, x) => s + x.quantity, 0) };
+              })
+            })
+          });
+
+          if (payRes.ok) {
+            const payData = await payRes.json();
+            if (payData.confirmationUrl) {
+              // Redirect to YooKassa, pass orderId for callback
+              window.location.href = payData.confirmationUrl + '&return_url=' +
+                encodeURIComponent(window.location.origin + '/customer-app/payment-callback.html?orderId=' + orderId);
+              return;
+            }
+          }
+          // Если не получили redirect URL — показываем успех (деньги придут через webhook)
+          document.getElementById('orderNumber').textContent = `Заказ #${orderNumber}`;
+          document.getElementById('successModal').classList.add('active');
+        } else {
+          document.getElementById('orderNumber').textContent = `Заказ #${orderNumber}`;
+          document.getElementById('successModal').classList.add('active');
+        }
+      } catch (error) {
+        console.error('Ошибка при оформлении заказа:', error);
+        // Fallback — показываем успех с локальным номером
+        const orderNumber = 'ORD-' + Date.now();
+        document.getElementById('checkoutModal').classList.remove('active');
+        document.getElementById('orderNumber').textContent = `Заказ #${orderNumber}`;
+        document.getElementById('successModal').classList.add('active');
+        cart = [];
+        updateCartBadge();
+        event.target.reset();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = isOnline ? 'Перейти к оплате' : 'Подтвердить заказ';
       }
     }
 

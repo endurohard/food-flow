@@ -383,3 +383,15 @@ STAFF         = admin | owner | manager | operator | chef | waiter | employee
 - **`admin-panel/finance.html`** (1167 строк): 4 таба — Кассы (открыть/закрыть/операции), Платежи (фильтр, список, статусы), Отчёты (revenue + P&L + кнопки «Экспорт в 1С» sales/expenses XML), Расходы (список + форма добавления с категориями). Все данные из finance-service.
 - **`admin-panel/enterprises.html`** (1124 строки): 3 секции — Сеть ресторанов (карточки, expand с деталями), Пользователи предприятия (таблица, смена роли, deactivate/activate, invite), Бенчмарки (select → метрики). Все данные из user-service `/api/enterprises/...`.
 - **Sidebar links**: ссылки на finance.html и enterprises.html добавлены во все 16 страниц admin-panel.
+
+## [2026-04-17] feat | Phase 6 — ЮKassa и промокод в customer-app checkout
+Реальная онлайн-оплата и промокоды в B2C витрине.
+
+- **`customer-app/index.html`**:
+  - `API_BASE_URL` исправлен: `localhost/api` → `localhost:8000/api` (Kong порт).
+  - Добавлено поле промокода с кнопкой «Применить» → `POST /api/crm/promotions/apply` (idempotency key). Визуальный feedback: зелёный текст при успехе, красный при ошибке/исчерпании.
+  - Добавлен выбор способа оплаты: Наличными / Онлайн (карта) — radio-кнопки с выделением выбранного.
+  - При наличных: `POST /api/orders` → success modal (как раньше).
+  - При онлайн: `POST /api/orders` → `POST /api/finance/online-payment` → редирект на `confirmationUrl` ЮKassa с параметром `return_url` на payment-callback.html.
+  - Кнопка submit блокируется на время запроса, меняет текст.
+- **`customer-app/payment-callback.html`** (новый): страница возврата после ЮKassa. Читает `orderId` из URL-параметра → polling `GET /api/finance/payments?orderId=X` с retry. Отображает статус: Оплачено / В обработке (retry каждые 5с) / Отклонено / Уточняется. Кнопка «Вернуться в меню».

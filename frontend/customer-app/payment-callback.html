@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Food Flow — Статус оплаты</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍕</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .icon { font-size: 64px; margin-bottom: 24px; }
+    .title { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+    .message { font-size: 16px; color: #666; margin-bottom: 8px; line-height: 1.5; }
+    .order-id { font-size: 14px; color: #999; margin-bottom: 32px; }
+    .status-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 32px;
+    }
+    .status-badge.checking  { background: #fff3cd; color: #856404; }
+    .status-badge.succeeded { background: #d4edda; color: #155724; }
+    .status-badge.pending   { background: #cce5ff; color: #004085; }
+    .status-badge.canceled  { background: #f8d7da; color: #721c24; }
+    .btn {
+      display: inline-block;
+      padding: 14px 32px;
+      background: #00B074;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #009962; }
+    .btn-secondary {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 10px 24px;
+      background: transparent;
+      color: #00B074;
+      border: 2px solid #00B074;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-secondary:hover { background: #f0fdf8; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid #e0e0e0;
+      border-top-color: #00B074;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="spinner" id="spinner"></div>
+    <div class="title" id="title">Проверяем оплату...</div>
+    <div class="message" id="message">Пожалуйста, подождите</div>
+    <div class="order-id" id="orderId"></div>
+    <div class="status-badge checking" id="statusBadge">Проверка</div>
+    <br>
+    <a href="index.html" class="btn" id="backBtn" style="display:none">Вернуться в меню</a>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:8000/api';
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('orderId');
+    const paymentId = params.get('paymentId'); // YooKassa may pass this
+
+    if (orderId) {
+      document.getElementById('orderId').textContent = `Заказ: ${orderId}`;
+    }
+
+    async function checkPaymentStatus() {
+      if (!orderId) {
+        showResult('unknown');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/finance/payments?orderId=${orderId}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const payments = data.payments || [];
+        const payment = payments.find(p => p.payment_gateway === 'yookassa') || payments[0];
+
+        if (!payment) {
+          // No payment record yet — might still be processing
+          setTimeout(checkPaymentStatus, 3000);
+          return;
+        }
+        showResult(payment.status);
+      } catch {
+        showResult('unknown');
+      }
+    }
+
+    function showResult(status) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('backBtn').style.display = 'inline-block';
+      const badge = document.getElementById('statusBadge');
+
+      if (status === 'completed') {
+        document.getElementById('title').textContent = 'Оплата прошла!';
+        document.getElementById('message').textContent = 'Ваш заказ принят и передан на кухню. Ожидайте доставку.';
+        badge.className = 'status-badge succeeded';
+        badge.textContent = 'Оплачено';
+      } else if (status === 'pending') {
+        document.getElementById('title').textContent = 'Оплата обрабатывается';
+        document.getElementById('message').textContent = 'Платёж находится в обработке. Мы уведомим вас о результате.';
+        badge.className = 'status-badge pending';
+        badge.textContent = 'В обработке';
+        // Retry after 5s
+        setTimeout(checkPaymentStatus, 5000);
+        return;
+      } else if (status === 'failed' || status === 'refunded') {
+        document.getElementById('title').textContent = 'Оплата не прошла';
+        document.getElementById('message').textContent = 'К сожалению, платёж был отклонён. Попробуйте ещё раз или выберите другой способ оплаты.';
+        badge.className = 'status-badge canceled';
+        badge.textContent = 'Отклонено';
+      } else {
+        document.getElementById('title').textContent = 'Заказ оформлен';
+        document.getElementById('message').textContent = 'Статус оплаты уточняется. Мы свяжемся с вами при необходимости.';
+        badge.className = 'status-badge checking';
+        badge.textContent = 'Уточняется';
+      }
+    }
+
+    checkPaymentStatus();
+  </script>
+</body>
+</html>
