@@ -1,7 +1,7 @@
 ---
 type: service
 status: stable
-last_verified: 2026-04-11
+last_verified: 2026-04-16
 sources:
   - services/restaurant-service/
   - database/migrations/005_add_pbx_settings.sql
@@ -30,7 +30,8 @@ sources:
 ## Routes
 - `restaurant.routes.ts` — рестораны
 - `menu.routes.ts` — меню, категории, позиции, модификаторы
-- `pbx.routes.ts` — PBX-настройки ресторана
+- `pbx.routes.ts` — PBX-настройки ресторана (auth: `authenticateUser` на `GET/PUT /settings`, post-fix audit `129f88d` — ранее PBX credentials отдавались без auth)
+- `reservations.routes.ts` — бронирования столов (Phase C)
 
 ## Связи
 - [[services/order-service]] — читает меню для корзины и заказов

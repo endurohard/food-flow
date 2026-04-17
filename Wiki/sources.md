@@ -1,7 +1,7 @@
 ---
 type: meta
 status: stable
-last_verified: 2026-04-11
+last_verified: 2026-04-16
 ---
 
 # Sources Map
@@ -52,9 +52,15 @@ last_verified: 2026-04-11
 | `013_crm_loyalty.sql` | [[services/crm-service]] |
 | `014_financials.sql` | [[services/finance-service]] |
 | `015_chain_management.sql` | [[concepts/multi-tenancy]] |
+| `016_pii_audit_log.sql` | [[services/user-service]] (Phase B) |
+| `017_split_bill_discounts_stoplist_reservations.sql` | [[services/order-service]], [[services/restaurant-service]] (Phase C) |
+| `018_kitchen_stations_fifo_1c.sql` | [[services/kitchen-service]], [[services/inventory-service]], [[services/finance-service]] (Phase D) |
 
 ## Конфигурация
 
-- `docker-compose.yml` — источник истины по портам и зависимостям сервисов → [[index]]
+- `docker-compose.yml` — источник истины по портам и зависимостям сервисов → [[index]]. С 2026-04-16 Kong порт 8000 экспонирован наружу для фронта.
 - `kong/kong.yml` — маршруты API Gateway → нужен ingest в отдельную страницу `concepts/api-gateway`
 - `services/*/package.json` — описания и зависимости
+- `frontend/css/tokens.css` — design system токены (с 2026-04-16) → [[services/frontend-service]]
+- `frontend/customer-app/` — B2C витрина → [[services/frontend-service]]
+- `database/init/03-run-migrations.sh` — auto-миграции на первом запуске контейнера (Phase A.1). Для миграций после старта — ручной `psql` или rebuild.

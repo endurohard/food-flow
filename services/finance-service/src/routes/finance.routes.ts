@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { FinanceService } from '../services/finance.service';
 import { ExportService } from '../services/export.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
 import { config } from '../config';
 
@@ -12,7 +12,7 @@ const exportService = new ExportService(config.database.url);
 
 // ========== КАССЫ ==========
 
-router.get('/registers', authenticateUser, async (req: Request, res: Response) => {
+router.get('/registers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const registers = await financeService.listRegisters({
       enterpriseId: req.enterpriseId,
@@ -23,7 +23,7 @@ router.get('/registers', authenticateUser, async (req: Request, res: Response) =
   } catch (error) { console.error('List registers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/registers/:id/open', authenticateUser, async (req: Request, res: Response) => {
+router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       restaurantId: Joi.string().uuid().required(),
@@ -41,7 +41,7 @@ router.post('/registers/:id/open', authenticateUser, async (req: Request, res: R
   }
 });
 
-router.post('/registers/:id/close', authenticateUser, async (req: Request, res: Response) => {
+router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const register = await financeService.closeRegister(req.params.id, req.userId!);
     return res.json({ register });
@@ -51,14 +51,14 @@ router.post('/registers/:id/close', authenticateUser, async (req: Request, res: 
   }
 });
 
-router.get('/registers/:id/operations', authenticateUser, async (req: Request, res: Response) => {
+router.get('/registers/:id/operations', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const operations = await financeService.getCashOperations(req.params.id);
     return res.json({ operations });
   } catch (error) { console.error('Get operations error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/registers/:id/operations', authenticateUser, async (req: Request, res: Response) => {
+router.post('/registers/:id/operations', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       operationType: Joi.string().valid('sale', 'refund', 'cash_in', 'cash_out', 'encashment').required(),
@@ -86,7 +86,7 @@ router.post('/registers/:id/operations', authenticateUser, async (req: Request, 
 
 // ========== ПЛАТЕЖИ ==========
 
-router.get('/payments', authenticateUser, async (req: Request, res: Response) => {
+router.get('/payments', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const payments = await financeService.getPayments({
       enterpriseId: req.enterpriseId,
@@ -100,7 +100,7 @@ router.get('/payments', authenticateUser, async (req: Request, res: Response) =>
   } catch (error) { console.error('Get payments error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/payments', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/payments', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       orderId: Joi.string().uuid().required(),
@@ -118,7 +118,7 @@ router.post('/payments', authenticateUser, idempotencyCheck, async (req: Request
   } catch (error) { console.error('Create payment error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/payments/:id/status', authenticateUser, async (req: Request, res: Response) => {
+router.put('/payments/:id/status', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       status: Joi.string().valid('pending', 'completed', 'failed', 'refunded').required(),
@@ -135,7 +135,7 @@ router.put('/payments/:id/status', authenticateUser, async (req: Request, res: R
 
 // ========== КАТЕГОРИИ РАСХОДОВ ==========
 
-router.get('/expense-categories', authenticateUser, async (req: Request, res: Response) => {
+router.get('/expense-categories', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.status(400).json({ error: 'enterpriseId is required' });
     const categories = await financeService.listExpenseCategories(req.enterpriseId);
@@ -143,7 +143,7 @@ router.get('/expense-categories', authenticateUser, async (req: Request, res: Re
   } catch (error) { console.error('List expense categories error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/expense-categories', authenticateUser, async (req: Request, res: Response) => {
+router.post('/expense-categories', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       name: Joi.string().max(255).required(),
@@ -160,7 +160,7 @@ router.post('/expense-categories', authenticateUser, async (req: Request, res: R
 
 // ========== РАСХОДЫ ==========
 
-router.get('/expenses', authenticateUser, async (req: Request, res: Response) => {
+router.get('/expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const expenses = await financeService.listExpenses({
       enterpriseId: req.enterpriseId,
@@ -173,7 +173,7 @@ router.get('/expenses', authenticateUser, async (req: Request, res: Response) =>
   } catch (error) { console.error('List expenses error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/expenses', authenticateUser, async (req: Request, res: Response) => {
+router.post('/expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       restaurantId: Joi.string().uuid().optional(),
@@ -196,7 +196,7 @@ router.post('/expenses', authenticateUser, async (req: Request, res: Response) =
 
 // ========== ОТЧЁТЫ ==========
 
-router.get('/reports/revenue', authenticateUser, async (req: Request, res: Response) => {
+router.get('/reports/revenue', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, restaurantId } = req.query;
     if (!dateFrom || !dateTo) return res.status(400).json({ error: 'dateFrom and dateTo are required' });
@@ -211,7 +211,7 @@ router.get('/reports/revenue', authenticateUser, async (req: Request, res: Respo
   } catch (error) { console.error('Revenue report error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.get('/reports/pnl', authenticateUser, async (req: Request, res: Response) => {
+router.get('/reports/pnl', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { dateFrom, dateTo, restaurantId } = req.query;
     if (!dateFrom || !dateTo) return res.status(400).json({ error: 'dateFrom and dateTo are required' });
@@ -228,7 +228,7 @@ router.get('/reports/pnl', authenticateUser, async (req: Request, res: Response)
 
 // ========== ОНЛАЙН-ОПЛАТА (YooKassa) ==========
 
-router.post('/online-payment', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/online-payment', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       orderId: Joi.string().uuid().required(),
@@ -290,7 +290,7 @@ router.post('/webhooks/yookassa', async (req: Request, res: Response) => {
 });
 
 // Получение фискальных чеков по заказу
-router.get('/fiscal-receipts/:orderId', authenticateUser, async (req: Request, res: Response) => {
+router.get('/fiscal-receipts/:orderId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const receipts = await financeService.getFiscalReceipts(req.params.orderId);
     return res.json({ receipts });
@@ -302,7 +302,7 @@ router.get('/fiscal-receipts/:orderId', authenticateUser, async (req: Request, r
 
 // ========== ЭКСПОРТ 1С ==========
 
-router.get('/exports/sales', authenticateUser, async (req: Request, res: Response) => {
+router.get('/exports/sales', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.status(400).json({ error: 'enterpriseId is required' });
     const { dateFrom, dateTo } = req.query;
@@ -325,7 +325,7 @@ router.get('/exports/sales', authenticateUser, async (req: Request, res: Respons
   }
 });
 
-router.get('/exports/expenses', authenticateUser, async (req: Request, res: Response) => {
+router.get('/exports/expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.status(400).json({ error: 'enterpriseId is required' });
     const { dateFrom, dateTo } = req.query;
@@ -348,7 +348,7 @@ router.get('/exports/expenses', authenticateUser, async (req: Request, res: Resp
   }
 });
 
-router.get('/exports/history', authenticateUser, async (req: Request, res: Response) => {
+router.get('/exports/history', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.status(400).json({ error: 'enterpriseId is required' });
 

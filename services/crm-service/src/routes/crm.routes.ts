@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { CRMService } from '../services/crm.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
 import { config } from '../config';
 
@@ -10,7 +10,7 @@ const crmService = new CRMService(config.database.url);
 
 // ========== CUSTOMERS ==========
 
-router.get('/customers', authenticateUser, async (req: Request, res: Response) => {
+router.get('/customers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const customers = await crmService.listCustomers({
       enterpriseId: req.enterpriseId,
@@ -21,7 +21,7 @@ router.get('/customers', authenticateUser, async (req: Request, res: Response) =
   } catch (error) { console.error('List customers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.get('/customers/:userId', authenticateUser, async (req: Request, res: Response) => {
+router.get('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const profile = await crmService.getCustomerProfile(req.params.userId);
     if (!profile) return res.status(404).json({ error: 'Customer profile not found' });
@@ -29,7 +29,7 @@ router.get('/customers/:userId', authenticateUser, async (req: Request, res: Res
   } catch (error) { console.error('Get customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/customers', authenticateUser, async (req: Request, res: Response) => {
+router.post('/customers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       userId: Joi.string().uuid().required(),
@@ -49,7 +49,7 @@ router.post('/customers', authenticateUser, async (req: Request, res: Response) 
   } catch (error) { console.error('Create customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/customers/:userId', authenticateUser, async (req: Request, res: Response) => {
+router.put('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const profile = await crmService.updateProfile(req.params.userId, req.body, req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Customer profile not found' });
@@ -59,7 +59,7 @@ router.put('/customers/:userId', authenticateUser, async (req: Request, res: Res
 
 // ========== LOYALTY PROGRAMS ==========
 
-router.get('/loyalty-programs', authenticateUser, async (req: Request, res: Response) => {
+router.get('/loyalty-programs', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.status(400).json({ error: 'enterpriseId is required' });
     const programs = await crmService.listLoyaltyPrograms(req.enterpriseId);
@@ -67,7 +67,7 @@ router.get('/loyalty-programs', authenticateUser, async (req: Request, res: Resp
   } catch (error) { console.error('List loyalty programs error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/loyalty-programs', authenticateUser, async (req: Request, res: Response) => {
+router.post('/loyalty-programs', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       name: Joi.string().max(200).required(),
@@ -86,7 +86,7 @@ router.post('/loyalty-programs', authenticateUser, async (req: Request, res: Res
   } catch (error) { console.error('Create loyalty program error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/loyalty-programs/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/loyalty-programs/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const program = await crmService.updateLoyaltyProgram(req.params.id, req.body, req.enterpriseId);
     if (!program) return res.status(404).json({ error: 'Loyalty program not found' });
@@ -97,7 +97,7 @@ router.put('/loyalty-programs/:id', authenticateUser, async (req: Request, res: 
 // ========== PROMOTIONS ==========
 
 // ВАЖНО: маршрут validate-code должен быть ДО маршрута /:id, иначе Express поглотит его как id
-router.get('/promotions/validate-code', authenticateUser, async (req: Request, res: Response) => {
+router.get('/promotions/validate-code', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const code = req.query.code as string;
     if (!code) return res.status(400).json({ error: 'code query parameter is required' });
@@ -109,7 +109,7 @@ router.get('/promotions/validate-code', authenticateUser, async (req: Request, r
 
 // Атомарное применение промокода: инкрементирует used_count только если лимит не исчерпан.
 // Должен вызываться при реальном применении промо к заказу, а не для preview (для preview — validate-code).
-router.post('/promotions/apply', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/promotions/apply', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       code: Joi.string().max(50).required()
@@ -130,7 +130,7 @@ router.post('/promotions/apply', authenticateUser, idempotencyCheck, async (req:
   }
 });
 
-router.get('/promotions', authenticateUser, async (req: Request, res: Response) => {
+router.get('/promotions', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const promotions = await crmService.listPromotions({
       enterpriseId: req.enterpriseId,
@@ -141,7 +141,7 @@ router.get('/promotions', authenticateUser, async (req: Request, res: Response) 
   } catch (error) { console.error('List promotions error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/promotions', authenticateUser, async (req: Request, res: Response) => {
+router.post('/promotions', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       name: Joi.string().max(200).required(),
@@ -162,7 +162,7 @@ router.post('/promotions', authenticateUser, async (req: Request, res: Response)
   } catch (error) { console.error('Create promotion error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/promotions/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/promotions/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const promotion = await crmService.updatePromotion(req.params.id, req.body, req.enterpriseId);
     if (!promotion) return res.status(404).json({ error: 'Promotion not found' });
@@ -172,7 +172,7 @@ router.put('/promotions/:id', authenticateUser, async (req: Request, res: Respon
 
 // ========== POINTS ==========
 
-router.post('/points/earn', authenticateUser, async (req: Request, res: Response) => {
+router.post('/points/earn', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       customerId: Joi.string().uuid().required(),
@@ -189,7 +189,7 @@ router.post('/points/earn', authenticateUser, async (req: Request, res: Response
   }
 });
 
-router.post('/points/redeem', authenticateUser, idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/points/redeem', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       customerId: Joi.string().uuid().required(),
@@ -208,7 +208,7 @@ router.post('/points/redeem', authenticateUser, idempotencyCheck, async (req: Re
 
 // ========== TRANSACTIONS ==========
 
-router.get('/transactions', authenticateUser, async (req: Request, res: Response) => {
+router.get('/transactions', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const customerId = req.query.customerId as string;
     if (!customerId) return res.status(400).json({ error: 'customerId query parameter is required' });

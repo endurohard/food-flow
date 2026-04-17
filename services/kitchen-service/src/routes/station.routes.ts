@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { config } from '../config';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { StationService } from '../services/station.service';
 import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticateUser);
+router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
 
 const stationService = new StationService(config.database.url);
 

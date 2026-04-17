@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { TableService } from '../services/table.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -21,7 +21,7 @@ const createTableSchema = Joi.object({
 /**
  * GET /api/tables?restaurantId=
  */
-router.get('/', authenticateUser, async (req: Request, res: Response) => {
+router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {
@@ -39,7 +39,7 @@ router.get('/', authenticateUser, async (req: Request, res: Response) => {
 /**
  * POST /api/tables
  */
-router.post('/', authenticateUser, async (req: Request, res: Response) => {
+router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.body.restaurantId;
     if (!restaurantId) {
@@ -62,7 +62,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
 /**
  * PUT /api/tables/:id
  */
-router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const table = await tableService.update(req.params.id, req.body);
     if (!table) {
@@ -78,7 +78,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
 /**
  * DELETE /api/tables/:id
  */
-router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await tableService.delete(req.params.id);
     if (!deleted) {

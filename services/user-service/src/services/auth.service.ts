@@ -30,6 +30,7 @@ export interface JwtPayload {
   email: string;
   role: string;
   enterpriseId?: string;
+  enterpriseRole?: string;
 }
 
 export class AuthService {
@@ -75,22 +76,31 @@ export class AuthService {
 
       const user = result.rows[0];
 
-      // Get enterprise_id if user belongs to one
+      // Get enterprise_id and enterprise role if user belongs to one
       const enterpriseResult = await client.query(
-        `SELECT enterprise_id FROM enterprise_users WHERE user_id = $1 AND is_active = true LIMIT 1`,
+        `SELECT enterprise_id, role AS enterprise_role
+         FROM enterprise_users
+         WHERE user_id = $1 AND is_active = true
+         LIMIT 1`,
         [user.id]
       );
       const enterpriseId = enterpriseResult.rows[0]?.enterprise_id;
+      const enterpriseRole = enterpriseResult.rows[0]?.enterprise_role;
 
       // Generate tokens
       const tokens = await this.generateTokens(client, {
         userId: user.id,
         email: user.email,
         role: user.role,
-        enterpriseId
+        enterpriseId,
+        enterpriseRole
       });
 
       await client.query('COMMIT');
+
+      if (enterpriseRole) {
+        user.enterprise_role = enterpriseRole;
+      }
 
       return { user, tokens };
     } catch (error) {
@@ -125,14 +135,21 @@ export class AuthService {
       throw new AuthError('Invalid email or password', 401);
     }
 
-    // Get enterprise_id from enterprise_users if not on user directly
+    // Get enterprise_id and enterpriseRole from enterprise_users
     let enterpriseId = user.enterprise_id;
-    if (!enterpriseId) {
-      const euResult = await this.pool.query(
-        `SELECT enterprise_id FROM enterprise_users WHERE user_id = $1 AND is_active = true LIMIT 1`,
-        [user.id]
-      );
-      enterpriseId = euResult.rows[0]?.enterprise_id;
+    let enterpriseRole: string | undefined;
+    const euResult = await this.pool.query(
+      `SELECT enterprise_id, role AS enterprise_role
+       FROM enterprise_users
+       WHERE user_id = $1 AND is_active = true
+       LIMIT 1`,
+      [user.id]
+    );
+    if (euResult.rows[0]) {
+      if (!enterpriseId) {
+        enterpriseId = euResult.rows[0].enterprise_id;
+      }
+      enterpriseRole = euResult.rows[0].enterprise_role;
     }
 
     // Generate tokens
@@ -143,12 +160,16 @@ export class AuthService {
         userId: user.id,
         email: user.email,
         role: user.role,
-        enterpriseId
+        enterpriseId,
+        enterpriseRole
       });
       await client.query('COMMIT');
 
       // Remove sensitive fields
       const { password_hash, ...safeUser } = user;
+      if (enterpriseRole) {
+        (safeUser as any).enterprise_role = enterpriseRole;
+      }
 
       return { user: safeUser, tokens };
     } catch (error) {
@@ -191,14 +212,21 @@ export class AuthService {
         [row.id]
       );
 
-      // Get enterprise_id
+      // Get enterprise_id and enterpriseRole
       let enterpriseId = row.enterprise_id;
-      if (!enterpriseId) {
-        const euResult = await client.query(
-          `SELECT enterprise_id FROM enterprise_users WHERE user_id = $1 AND is_active = true LIMIT 1`,
-          [row.user_id]
-        );
-        enterpriseId = euResult.rows[0]?.enterprise_id;
+      let enterpriseRole: string | undefined;
+      const euResult = await client.query(
+        `SELECT enterprise_id, role AS enterprise_role
+         FROM enterprise_users
+         WHERE user_id = $1 AND is_active = true
+         LIMIT 1`,
+        [row.user_id]
+      );
+      if (euResult.rows[0]) {
+        if (!enterpriseId) {
+          enterpriseId = euResult.rows[0].enterprise_id;
+        }
+        enterpriseRole = euResult.rows[0].enterprise_role;
       }
 
       // Generate new token pair
@@ -206,7 +234,8 @@ export class AuthService {
         userId: row.user_id,
         email: row.email,
         role: row.role,
-        enterpriseId
+        enterpriseId,
+        enterpriseRole
       });
 
       await client.query('COMMIT');

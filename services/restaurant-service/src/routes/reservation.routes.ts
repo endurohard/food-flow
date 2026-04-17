@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { ReservationService, OverlapError, ValidationError } from '../services/reservation.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -28,7 +28,7 @@ const updateStatusSchema = Joi.object({
 });
 
 // List reservations
-router.get('/', authenticateUser, async (req: Request, res: Response) => {
+router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {
@@ -49,7 +49,7 @@ router.get('/', authenticateUser, async (req: Request, res: Response) => {
 });
 
 // Get reservation by ID
-router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.get('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const reservation = await reservationService.getById(req.params.id, req.enterpriseId);
     if (!reservation) {
@@ -63,7 +63,7 @@ router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
 });
 
 // Create reservation
-router.post('/', authenticateUser, async (req: Request, res: Response) => {
+router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const { error, value } = createReservationSchema.validate(req.body);
     if (error) {
@@ -86,7 +86,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
 });
 
 // Update reservation status
-router.put('/:id/status', authenticateUser, async (req: Request, res: Response) => {
+router.put('/:id/status', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const { error, value } = updateStatusSchema.validate(req.body);
     if (error) {
@@ -108,7 +108,7 @@ router.put('/:id/status', authenticateUser, async (req: Request, res: Response) 
 });
 
 // Cancel reservation (soft delete)
-router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
     const reservation = await reservationService.cancel(req.params.id, req.enterpriseId);
     if (!reservation) {

@@ -1,7 +1,7 @@
 ---
 type: service
 status: stable
-last_verified: 2026-04-11
+last_verified: 2026-04-16
 sources:
   - services/inventory-service/
   - database/migrations/010_inventory_warehouse.sql
@@ -21,8 +21,9 @@ sources:
 
 ## Routes
 - `inventory.routes.ts` — остатки, операции склада
-- `supplier.routes.ts` — поставщики
+- `supplier.routes.ts` — поставщики (tenant guard на `update/delete` через `enterpriseId`, post-fix audit `129f88d`)
 - `techcard.routes.ts` — техкарты/рецептуры
+- `batches.routes.ts` — FIFO партии (Phase D)
 
 ## Ingress склада (два канала)
 1. **Админ-панель**: `frontend/admin-panel/inventory.html` — ручной ввод приходов, заказы поставщикам. ⚠️ По состоянию на `IMPLEMENTED_FEATURES.md` (2025-01-07) фронт работал через LocalStorage — нужно проверить, подключен ли к реальному API.

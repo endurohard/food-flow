@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { RestaurantService } from '../services/restaurant.service';
-import { authenticateUser, optionalAuth } from '../middleware/auth.middleware';
+import { authenticateUser, optionalAuth, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -109,7 +109,7 @@ router.get('/:id', optionalAuth, async (req: Request, res: Response) => {
  *       201:
  *         description: Restaurant created
  */
-router.post('/', authenticateUser, async (req: Request, res: Response) => {
+router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = createSchema.validate(req.body);
     if (error) {
@@ -136,7 +136,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
  *       200:
  *         description: Restaurant updated
  */
-router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const restaurant = await restaurantService.update(req.params.id, req.body, req.enterpriseId);
     if (!restaurant) {
@@ -161,7 +161,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
  *       200:
  *         description: Restaurant deactivated
  */
-router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await restaurantService.delete(req.params.id, req.enterpriseId);
     if (!deleted) {

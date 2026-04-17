@@ -255,3 +255,95 @@ YOOKASSA_WEBHOOK_SECRET=<optional>
 - **Sentry** — решили пока не добавлять, т.к. нет paid tier и нет деплоя на внешний сервер.
 - **Dead-letter queues** — нужно переписать RabbitMQ setup в kitchen/delivery consumers. Follow-up.
 - **Circuit breakers / retry** — нет межсервисных HTTP-вызовов в production flow (всё через RabbitMQ). Актуально когда появятся sync calls. Follow-up.
+
+## [2026-04-12] fix | Post-fix audit — remaining security & quality gaps (`129f88d`)
+Дочинен хвост после Phase 0–D: auth-покрытие для ранее пропущенных endpoint'ов, tenant guards на supplier/CRM tier recalc, strict TS в kitchen-service.
+
+- **Auth на 11 printer endpoints**: `kitchen-service/src/routes/printer.routes.ts` — `router.use(authenticateUser)` на весь модуль (было без auth). В Phase 0 закрывались только kitchen.routes.ts, printer.routes.ts был упущен.
+- **Auth на PBX settings**: `restaurant-service/src/routes/pbx.routes.ts` — на `GET/PUT /settings` добавлен `authenticateUser`. (Phase 0 закрывал только `user-service /:userId/pbx-settings`, но в restaurant-service был параллельный endpoint с PBX credentials.)
+- **Auth на GET /api/tables**: `order-service/src/routes/tables.ts` — добавлен `authenticateUser`.
+- **Tenant guard на `_recalculateTier`**: `crm-service/src/services/crm.service.ts` — внутренний метод tier-пересчёта теперь учитывает `enterprise_id` в WHERE, иначе бонусы одного tenant'а могли повышать tier клиента другого.
+- **Tenant guard на supplier update/delete**: `inventory-service/src/services/supplier.service.ts` — `update/delete` принимают `enterpriseId?` и фильтруют в WHERE (были пропущены в Phase 1 second pass).
+- **TypeScript strict:true в kitchen-service**: `services/kitchen-service/tsconfig.json` — `strict` был `false` на фоне остальных сервисов. Переключено на `true`. Побочный фикс: `printer.service.ts` переписан с getter-паттерном для null-safe доступа к принтер-инстансу.
+- **rabbitmq.service.ts**: правки в kitchen-service RabbitMQ publisher (8 строк — скорее cleanup под strict).
+
+**Как искать регрессии**: ранее аналогичные «пропущенные» endpoint'ы нашлись только через повторный аудит. Добавить в follow-up список: grep по всем `src/routes/*.ts` на отсутствие `authenticateUser`/`optionalAuth`.
+
+## [2026-04-16] refactor | UI redesign — Sedap design system (`840546d`)
+Полная визуальная переработка фронта (16 страниц admin-panel + customer-app). Дизайн-токены, новая главная, моб. адаптивность.
+
+- **Design system**: новый `frontend/css/tokens.css` (100 строк) — цветовая схема с зелёным акцентом `#00B074` на белом, Barlow шрифт. Тёмная тема отменена.
+- **Новый `dashboard.html`** (1382 строк, ранее 85): KPI cards + placeholder'ы под графики + recent orders table. В этом коммите UI статический; подключение к API — в `17a7b92`.
+- **Brand**: `frontend/assets/logo.png` применён во всех 16 страницах.
+- **Адаптивность**: sidebar collapse для моб. на всех страницах.
+- **Infra**: `docker-compose.yml` — Kong порт 8000 экспонирован наружу (раньше был только внутренний) для фронта.
+
+Изменено по одному .html файлу на каждую страницу: analytics, calls, hall-designer, index, inventory, kds, login, loyalty, menu, orders, settings, staff, tables, user-profile + dashboard (новый) + customer-app/index.html.
+
+**Что это НЕ меняет**: backend endpoints и контракты — фронт всё ещё смотрит туда же (или в LocalStorage, см. следующий ingest). Только визуал.
+
+## [2026-04-16] fix | Customer-app → real API + guest orders (`a53f75c`)
+Первый реальный прокол LocalStorage-архитектуры на customer-app: меню теперь тянется из `restaurant-service`, заказы создаются в `order-service` без обязательного JWT.
+
+- **`POST /api/orders` — `authenticateUser` → `optionalAuth`** (`services/order-service/src/routes/orders.ts:81`). Гостевой checkout теперь возможен: если JWT есть — заказ привязывается к `req.userId`, если нет — гостевой заказ без userId. Tenant изоляция при этом не нарушается (enterpriseId передаётся отдельно).
+- **`customer-app/index.html`**: меню через `GET /api/restaurants/:id/menu-items` (раньше был hardcoded mock). Используется реальный restaurant UUID вместо integer ID. Fix menu item ID handling для UUID в корзине/order flow.
+
+**Trade-off**: `optionalAuth` на создании заказа — осознанный выбор для B2C guest checkout. Злоупотребление ограничено rate limit'ами Kong (spam заказов с гостевого IP) + idempotency keys из Phase A.6.
+
+**Следствие для [[services/frontend-service]]**: LocalStorage-first пометка «всё в браузере» для customer-app больше не актуальна — меню и создание заказа идут через API. Админ-панель пока не трогали (`tables.html`, `hall-designer.html`, `inventory.html` — по-прежнему LocalStorage на чтение).
+
+## [2026-04-16] fix | Dashboard → real API + Chart.js (`17a7b92`)
+Второй прокол LocalStorage: новый `dashboard.html` из UI-редизайна теперь на реальных данных. Применены миграции 017/018 вручную.
+
+- **`admin-panel/dashboard.html`**: KPI cards считают `GET /api/orders` (total/pending/completed/revenue), recent orders table отрисовывается из того же endpoint'а. Chart.js: doughnut (распределение order types) + line (7-дневный trend). Graceful fallback на пустые/mock данные если API недоступен.
+- **Order payload fix** в `customer-app/index.html`: payload приведён к Joi-схеме order-service — отправляем только `menuItemId + quantity`, цены бэкенд считает сам (раньше фронт прокидывал price/total → отсеивалось валидацией).
+- **Миграции 017/018**: применены вручную (из `Phase C` и `Phase D` DDL). До этого discount_rules, stations, FIFO batches тянули на API без таблиц.
+
+**Что это меняет для [[services/frontend-service]]**: LocalStorage-first пометка «дашборд показывает mock» устарела. Dashboard → real API. Но admin-panel pages из списка `tables.html`, `hall-designer.html`, `inventory.html` всё ещё не мигрированы.
+
+**Миграции через ручной `psql`** — напоминание: auto-migrations script из Phase A.1 (`database/init/03-run-migrations.sh`) работает только на **первом запуске** контейнера. Для «добавили миграции 017/018 после поднятого постгреса» нужно либо rebuild с clean volume, либо прогонять вручную. Follow-up: startup-based миграции, а не init-based.
+
+## [2026-04-17] analysis | Frontend ↔ Backend gap analysis
+Deep audit фронта и бекенда. Итог в [[decisions/2026-04-17-frontend-backend-sync-roadmap]].
+
+**Главные находки**:
+- 3 несвязанных набора ролей: JWT global (customer/restaurant_owner/admin), enterprise_users (owner/admin/manager/employee/viewer), localStorage frontend (admin/manager/operator/chef/waiter). `hasPermission()` возвращает undefined для JWT role: "restaurant_owner" при любом frontend-чеке.
+- ~60% admin-страниц работают на mock/localStorage: loyalty, staff, user-profile, menu, tables, hall-designer.
+- Orphan-страницы не в сайдбаре: delivery-dashboard (mock), order-management (mock дубль), kds/ (standalone с Socket.IO).
+- Finance и Enterprises — 0 страниц при 42 backend endpoint'ах.
+- Permission-чеки только в браузере (localStorage.rolePermissions) — не enforce на бекенде.
+
+**Решение**: 6 фаз, приоритет A→F. Детали в [[decisions/2026-04-17-frontend-backend-sync-roadmap]].
+
+## [2026-04-17] fix | Phase E — Unified RBAC across all services
+Синхронизированы роли, `requireRole` применён на всех route-файлах. Migration 019 — расширен CHECK constraint.
+
+**Бекенд-изменения**:
+- `user-service/src/services/auth.service.ts` — `enterpriseRole` включён в JWT payload (register/login/refresh). Теперь клиент получает enterprise role в токене и не делает дополнительных запросов.
+- `user-service/src/middleware/enterprise.middleware.ts` — добавлены `ROLES`, `requireEnterpriseRole`, `requirePermission`, `setRLSContext`.
+- Все 9 `auth.middleware.ts` — `ROLES` enum + `requireRole(...)` + `req.enterpriseRole` из JWT decoded.
+- `database/migrations/019_extend_enterprise_roles.sql` — идемпотентно расширяет CHECK constraint: добавлены `operator | chef | waiter`. Легаси-значения нормализуются к `employee`.
+
+**Применение `requireRole` на routes (суммарно ~90 endpoint'ов)**:
+- `kitchen-service` (kitchen, station, printer): router-level `requireRole(KITCHEN)` — admin/owner/manager/operator/chef
+- `hr-service`: MGMT (admin/owner/manager) на staff/schedules/payroll/time-entries; STAFF (+ operator/chef/waiter/employee) на clock-in/out
+- `finance-service`: MGMT на registers/reports/exports/payments-read; POS (+ operator/waiter) на POST payments/operations/online-payment
+- `crm-service`: MGMT на customers/loyalty-programs/promotions/transactions; POS на apply/points/redeem/validate-code
+- `inventory-service`: INVENTORY_OPS (admin/owner/manager/operator) на все маршруты
+- `restaurant-service` (restaurant, menu, reservation): MGMT на create/update/delete restaurant и menu CRUD; stop-list/unstop — MGMT+operator; stop-list GET — + chef; reservations — POS
+- `order-service` (discounts, tables): MGMT на discount CRUD; tables — POS на read/update, MGMT на create/delete
+
+**Маппинг ролей (финальный)**:
+```
+MGMT          = admin | owner | manager
+POS           = admin | owner | manager | operator | waiter
+KITCHEN       = admin | owner | manager | operator | chef
+INVENTORY_OPS = admin | owner | manager | operator
+STAFF         = admin | owner | manager | operator | chef | waiter | employee
+```
+
+**Что НЕ изменилось намеренно**:
+- `POST /api/orders` остаётся `optionalAuth` (B2C guest checkout).
+- `GET /api/restaurants`, `GET /api/restaurants/:id`, `GET /:restaurantId/menu*` — публичные (customer-app и витрина).
+- `POST /webhooks/yookassa` — без auth (внешний callback ЮKassa).
+- Глобальные роли `admin` и `restaurant_owner` в JWT автоматически bypass `requireRole` без enterprise membership.

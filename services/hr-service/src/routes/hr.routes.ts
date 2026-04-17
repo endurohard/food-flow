@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { HRService } from '../services/hr.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
 const hrService = new HRService(config.database.url);
 
 // ========== STAFF ==========
-router.get('/staff', authenticateUser, async (req: Request, res: Response) => {
+router.get('/staff', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const staff = await hrService.listStaff({
       enterpriseId: req.enterpriseId, position: req.query.position as string,
@@ -18,7 +18,7 @@ router.get('/staff', authenticateUser, async (req: Request, res: Response) => {
   } catch (error) { console.error('List staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.get('/staff/:userId', authenticateUser, async (req: Request, res: Response) => {
+router.get('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const profile = await hrService.getStaffProfile(req.params.userId);
     if (!profile) return res.status(404).json({ error: 'Staff profile not found' });
@@ -26,7 +26,7 @@ router.get('/staff/:userId', authenticateUser, async (req: Request, res: Respons
   } catch (error) { console.error('Get staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/staff', authenticateUser, async (req: Request, res: Response) => {
+router.post('/staff', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       userId: Joi.string().uuid().required(),
@@ -41,7 +41,7 @@ router.post('/staff', authenticateUser, async (req: Request, res: Response) => {
   } catch (error) { console.error('Create staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/staff/:userId', authenticateUser, async (req: Request, res: Response) => {
+router.put('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const profile = await hrService.updateStaffProfile(req.params.userId, req.body, req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -50,7 +50,7 @@ router.put('/staff/:userId', authenticateUser, async (req: Request, res: Respons
 });
 
 // ========== SCHEDULES ==========
-router.get('/schedules', authenticateUser, async (req: Request, res: Response) => {
+router.get('/schedules', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schedules = await hrService.getSchedules({
       userId: req.query.userId as string, restaurantId: req.query.restaurantId as string,
@@ -60,7 +60,7 @@ router.get('/schedules', authenticateUser, async (req: Request, res: Response) =
   } catch (error) { console.error('Get schedules error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/schedules', authenticateUser, async (req: Request, res: Response) => {
+router.post('/schedules', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       userId: Joi.string().uuid().required(), restaurantId: Joi.string().uuid().optional(),
@@ -75,7 +75,7 @@ router.post('/schedules', authenticateUser, async (req: Request, res: Response) 
   } catch (error) { console.error('Create schedule error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/schedules/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schedule = await hrService.updateSchedule(req.params.id, req.body, req.enterpriseId);
     if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
@@ -83,7 +83,7 @@ router.put('/schedules/:id', authenticateUser, async (req: Request, res: Respons
   } catch (error) { console.error('Update schedule error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.delete('/schedules/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await hrService.deleteSchedule(req.params.id, req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Schedule not found' });
@@ -92,7 +92,7 @@ router.delete('/schedules/:id', authenticateUser, async (req: Request, res: Resp
 });
 
 // ========== TIME CLOCK ==========
-router.post('/clock-in', authenticateUser, async (req: Request, res: Response) => {
+router.post('/clock-in', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'chef', 'waiter', 'employee'), async (req: Request, res: Response) => {
   try {
     const entry = await hrService.clockIn(req.userId!, req.body.restaurantId, req.enterpriseId);
     return res.status(201).json({ entry });
@@ -102,7 +102,7 @@ router.post('/clock-in', authenticateUser, async (req: Request, res: Response) =
   }
 });
 
-router.post('/clock-out', authenticateUser, async (req: Request, res: Response) => {
+router.post('/clock-out', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'chef', 'waiter', 'employee'), async (req: Request, res: Response) => {
   try {
     const entry = await hrService.clockOut(req.userId!);
     if (!entry) return res.status(400).json({ error: 'No active clock-in found' });
@@ -110,7 +110,7 @@ router.post('/clock-out', authenticateUser, async (req: Request, res: Response) 
   } catch (error) { console.error('Clock out error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.get('/time-entries', authenticateUser, async (req: Request, res: Response) => {
+router.get('/time-entries', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const entries = await hrService.getTimeEntries({
       userId: req.query.userId as string || req.userId,
@@ -121,7 +121,7 @@ router.get('/time-entries', authenticateUser, async (req: Request, res: Response
 });
 
 // ========== PAYROLL ==========
-router.post('/payroll/calculate', authenticateUser, async (req: Request, res: Response) => {
+router.post('/payroll/calculate', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { userId, periodStart, periodEnd } = req.body;
     if (!userId || !periodStart || !periodEnd) return res.status(400).json({ error: 'userId, periodStart, periodEnd are required' });
@@ -133,7 +133,7 @@ router.post('/payroll/calculate', authenticateUser, async (req: Request, res: Re
   }
 });
 
-router.get('/payroll', authenticateUser, async (req: Request, res: Response) => {
+router.get('/payroll', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const payroll = await hrService.getPayroll({
       userId: req.query.userId as string, enterpriseId: req.enterpriseId,
@@ -143,7 +143,7 @@ router.get('/payroll', authenticateUser, async (req: Request, res: Response) => 
   } catch (error) { console.error('Get payroll error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/payroll/:id/approve', authenticateUser, async (req: Request, res: Response) => {
+router.put('/payroll/:id/approve', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const payroll = await hrService.approvePayroll(req.params.id, req.enterpriseId);
     if (!payroll) return res.status(404).json({ error: 'Payroll not found' });
@@ -151,7 +151,7 @@ router.put('/payroll/:id/approve', authenticateUser, async (req: Request, res: R
   } catch (error) { console.error('Approve payroll error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.put('/payroll/:id/pay', authenticateUser, async (req: Request, res: Response) => {
+router.put('/payroll/:id/pay', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const payroll = await hrService.markPayrollPaid(req.params.id, req.enterpriseId);
     if (!payroll) return res.status(404).json({ error: 'Payroll not found' });

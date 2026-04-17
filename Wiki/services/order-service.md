@@ -1,7 +1,7 @@
 ---
 type: service
 status: stable
-last_verified: 2026-04-11
+last_verified: 2026-04-16
 sources:
   - services/order-service/
   - database/migrations/009_extend_orders_for_pos.sql
@@ -32,6 +32,12 @@ sources:
 - [[services/restaurant-service]] — меню читается при создании заказа
 - [[services/finance-service]] — платежи по заказам
 - [[concepts/events]] — topology событий
+
+## Auth-политика на endpoint'ах (2026-04-16)
+- `POST /api/orders` — `optionalAuth` (гостевой checkout, коммит `a53f75c`). Если JWT есть — заказ привязывается к userId, иначе гостевой. Злоупотребление ограничено rate limit'ами Kong + idempotency keys из Phase A.
+- `GET /api/orders` — `optionalAuth` (фильтрация по enterprise если JWT есть).
+- `GET /api/orders/:id`, `PUT/DELETE` — `authenticateUser` (Phase 0).
+- `GET /api/tables` — `authenticateUser` (post-fix audit `129f88d`, раньше было открыто).
 
 ## Открытые вопросы
 - Уточнить точную схему полей из migration 009 при следующем ingest-е.

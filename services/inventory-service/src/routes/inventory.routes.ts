@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { InventoryService } from '../services/inventory.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -9,7 +9,7 @@ const inventoryService = new InventoryService(config.database.url);
 
 // ========== INVENTORY ITEMS ==========
 
-router.get('/items', authenticateUser, async (req: Request, res: Response) => {
+router.get('/items', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const items = await inventoryService.listItems({
       enterpriseId: req.enterpriseId,
@@ -24,7 +24,7 @@ router.get('/items', authenticateUser, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/items', authenticateUser, async (req: Request, res: Response) => {
+router.post('/items', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       name: Joi.string().min(1).max(255).required(),
@@ -46,7 +46,7 @@ router.post('/items', authenticateUser, async (req: Request, res: Response) => {
   }
 });
 
-router.put('/items/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/items/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const item = await inventoryService.updateItem(req.params.id, req.body, req.enterpriseId);
     if (!item) return res.status(404).json({ error: 'Item not found' });
@@ -57,7 +57,7 @@ router.put('/items/:id', authenticateUser, async (req: Request, res: Response) =
   }
 });
 
-router.delete('/items/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/items/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const deleted = await inventoryService.deleteItem(req.params.id, req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Item not found' });
@@ -70,7 +70,7 @@ router.delete('/items/:id', authenticateUser, async (req: Request, res: Response
 
 // ========== WAREHOUSES ==========
 
-router.get('/warehouses', authenticateUser, async (req: Request, res: Response) => {
+router.get('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
@@ -82,7 +82,7 @@ router.get('/warehouses', authenticateUser, async (req: Request, res: Response) 
   }
 });
 
-router.post('/warehouses', authenticateUser, async (req: Request, res: Response) => {
+router.post('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const { restaurantId, name, warehouseType } = req.body;
     if (!restaurantId || !name) return res.status(400).json({ error: 'restaurantId and name are required' });
@@ -94,7 +94,7 @@ router.post('/warehouses', authenticateUser, async (req: Request, res: Response)
   }
 });
 
-router.put('/warehouses/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/warehouses/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const warehouse = await inventoryService.updateWarehouse(req.params.id, req.body, req.enterpriseId);
     if (!warehouse) return res.status(404).json({ error: 'Warehouse not found' });
@@ -107,7 +107,7 @@ router.put('/warehouses/:id', authenticateUser, async (req: Request, res: Respon
 
 // ========== STOCK ==========
 
-router.get('/stock/:warehouseId', authenticateUser, async (req: Request, res: Response) => {
+router.get('/stock/:warehouseId', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const stock = await inventoryService.getStock(req.params.warehouseId);
     return res.json({ stock });
@@ -119,7 +119,7 @@ router.get('/stock/:warehouseId', authenticateUser, async (req: Request, res: Re
 
 // ========== STOCK MOVEMENTS ==========
 
-router.post('/movements', authenticateUser, async (req: Request, res: Response) => {
+router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       warehouseId: Joi.string().uuid().required(),
@@ -150,7 +150,7 @@ router.post('/movements', authenticateUser, async (req: Request, res: Response) 
   }
 });
 
-router.get('/movements', authenticateUser, async (req: Request, res: Response) => {
+router.get('/movements', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const movements = await inventoryService.getMovements({
       warehouseId: req.query.warehouseId as string,
@@ -168,7 +168,7 @@ router.get('/movements', authenticateUser, async (req: Request, res: Response) =
 
 // ========== BATCH TRACKING (FIFO) ==========
 
-router.get('/batches', authenticateUser, async (req: Request, res: Response) => {
+router.get('/batches', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const batches = await inventoryService.listBatches({
       inventoryItemId: req.query.inventoryItemId as string,
@@ -183,7 +183,7 @@ router.get('/batches', authenticateUser, async (req: Request, res: Response) => 
   }
 });
 
-router.get('/expiring', authenticateUser, async (req: Request, res: Response) => {
+router.get('/expiring', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const warehouseId = req.query.warehouseId as string;
     if (!warehouseId) return res.status(400).json({ error: 'warehouseId is required' });

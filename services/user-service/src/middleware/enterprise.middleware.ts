@@ -8,12 +8,29 @@ declare global {
   namespace Express {
     interface Request {
       enterpriseId?: string;
+      enterpriseRole?: string;
       userId?: string;
       userRole?: string;
       userPermissions?: any;
     }
   }
 }
+
+/**
+ * Canonical role names used across the platform.
+ * Enterprise roles stored in enterprise_users.role:
+ *   owner | admin | manager | operator | chef | waiter | employee | viewer
+ */
+export const ROLES = {
+  ADMIN: 'admin',
+  OWNER: 'owner',
+  MANAGER: 'manager',
+  OPERATOR: 'operator',
+  CHEF: 'chef',
+  WAITER: 'waiter',
+  EMPLOYEE: 'employee',
+  VIEWER: 'viewer'
+} as const;
 
 /**
  * Middleware to validate and inject enterprise context into request

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { MenuService } from '../services/menu.service';
-import { authenticateUser, optionalAuth } from '../middleware/auth.middleware';
+import { authenticateUser, optionalAuth, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -79,7 +79,7 @@ router.get('/:restaurantId/menu-categories', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/menu-categories', authenticateUser, async (req: Request, res: Response) => {
+router.post('/:restaurantId/menu-categories', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = categorySchema.validate(req.body);
     if (error) {
@@ -93,7 +93,7 @@ router.post('/:restaurantId/menu-categories', authenticateUser, async (req: Requ
   }
 });
 
-router.put('/menu-categories/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/menu-categories/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const category = await menuService.updateCategory(req.params.id, req.body);
     if (!category) {
@@ -106,7 +106,7 @@ router.put('/menu-categories/:id', authenticateUser, async (req: Request, res: R
   }
 });
 
-router.delete('/menu-categories/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/menu-categories/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await menuService.deleteCategory(req.params.id);
     if (!deleted) {
@@ -147,7 +147,7 @@ router.get('/menu-items/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:restaurantId/menu-items', authenticateUser, async (req: Request, res: Response) => {
+router.post('/:restaurantId/menu-items', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = menuItemSchema.validate(req.body);
     if (error) {
@@ -161,7 +161,7 @@ router.post('/:restaurantId/menu-items', authenticateUser, async (req: Request, 
   }
 });
 
-router.put('/menu-items/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const item = await menuService.updateItem(req.params.id, req.body);
     if (!item) {
@@ -174,7 +174,7 @@ router.put('/menu-items/:id', authenticateUser, async (req: Request, res: Respon
   }
 });
 
-router.delete('/menu-items/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await menuService.deleteItem(req.params.id);
     if (!deleted) {
@@ -194,7 +194,7 @@ const stopItemSchema = Joi.object({
   stopUntil: Joi.string().isoDate().optional()
 });
 
-router.post('/menu-items/:id/stop', authenticateUser, async (req: Request, res: Response) => {
+router.post('/menu-items/:id/stop', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const { error, value } = stopItemSchema.validate(req.body);
     if (error) {
@@ -217,7 +217,7 @@ router.post('/menu-items/:id/stop', authenticateUser, async (req: Request, res: 
   }
 });
 
-router.post('/menu-items/:id/unstop', authenticateUser, async (req: Request, res: Response) => {
+router.post('/menu-items/:id/unstop', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const item = await menuService.unstopMenuItem(req.params.id, req.enterpriseId);
     if (!item) {
@@ -230,7 +230,7 @@ router.post('/menu-items/:id/unstop', authenticateUser, async (req: Request, res
   }
 });
 
-router.get('/stop-list', authenticateUser, async (req: Request, res: Response) => {
+router.get('/stop-list', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'chef'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {
@@ -256,7 +256,7 @@ router.get('/menu-items/:itemId/modifiers', async (req: Request, res: Response) 
   }
 });
 
-router.post('/menu-items/:itemId/modifiers', authenticateUser, async (req: Request, res: Response) => {
+router.post('/menu-items/:itemId/modifiers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = modifierSchema.validate(req.body);
     if (error) {
@@ -270,7 +270,7 @@ router.post('/menu-items/:itemId/modifiers', authenticateUser, async (req: Reque
   }
 });
 
-router.put('/modifiers/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const modifier = await menuService.updateModifier(req.params.id, req.body);
     if (!modifier) {
@@ -283,7 +283,7 @@ router.put('/modifiers/:id', authenticateUser, async (req: Request, res: Respons
   }
 });
 
-router.delete('/modifiers/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deleted = await menuService.deleteModifier(req.params.id);
     if (!deleted) {

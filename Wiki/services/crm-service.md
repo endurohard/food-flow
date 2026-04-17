@@ -1,7 +1,7 @@
 ---
 type: service
 status: stable
-last_verified: 2026-04-11
+last_verified: 2026-04-16
 sources:
   - services/crm-service/
   - database/migrations/013_crm_loyalty.sql
@@ -21,6 +21,9 @@ CRM, программы лояльности, промо-акции.
 
 ## Routes
 - `crm.routes.ts`
+
+## Tenant isolation
+`_recalculateTier` внутренний метод с post-fix audit `129f88d` учитывает `enterprise_id` в WHERE — раньше бонусы одного tenant'а могли двигать tier клиента другого tenant'а (edge case при дубликате customer email между enterprise).
 
 ## Связи
 - [[services/order-service]] — применение промокодов/списание бонусов при создании заказа

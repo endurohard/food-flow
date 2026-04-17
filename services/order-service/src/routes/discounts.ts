@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { DiscountService } from '../services/discount.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -37,7 +37,7 @@ const updateDiscountSchema = Joi.object({
  * GET /api/discounts?restaurantId=X
  * List active discounts for a restaurant.
  */
-router.get('/', authenticateUser, async (req: Request, res: Response) => {
+router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {
@@ -56,7 +56,7 @@ router.get('/', authenticateUser, async (req: Request, res: Response) => {
  * POST /api/discounts
  * Create a new discount rule.
  */
-router.post('/', authenticateUser, async (req: Request, res: Response) => {
+router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = createDiscountSchema.validate(req.body);
     if (error) {
@@ -77,7 +77,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
  * PUT /api/discounts/:id
  * Update an existing discount.
  */
-router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const { error, value } = updateDiscountSchema.validate(req.body);
     if (error) {
@@ -100,7 +100,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
  * DELETE /api/discounts/:id
  * Soft-delete (deactivate) a discount.
  */
-router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const deactivated = await discountService.deactivateDiscount(req.params.id, req.enterpriseId);
     if (!deactivated) {

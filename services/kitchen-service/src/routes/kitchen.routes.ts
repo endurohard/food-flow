@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import { config } from '../config';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(authenticateUser);
+router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
 const db = new Pool({ connectionString: config.database.url });
 
 /**

@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { PrinterService } from '../services/printer.service';
 import { PrinterStation, PrinterSettings } from '../models/printer-station.model';
-import { authenticateUser } from '../middleware/auth.middleware';
+import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticateUser);
+router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
 const printerService = new PrinterService();
 
 // In-memory storage (in production, use PostgreSQL)
