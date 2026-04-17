@@ -40,7 +40,7 @@ STAFF (clock)  = admin | owner | manager | operator | chef | waiter | employee
 - [x] `hr-service`: `getStaffProfile(userId, enterpriseId?)` — tenant guard
 - [x] `crm-service`: `getCustomerProfile(userId, enterpriseId?)` — tenant guard
 - [x] `inventory.deductByTechCards` — warehouse ownership check перед deduction
-- [ ] Consumer-side валидация `enterpriseId` в RabbitMQ kitchen/delivery consumers
+- [x] Consumer-side валидация `enterpriseId` в RabbitMQ kitchen/delivery consumers
 - [x] `GET /api/orders` — `optionalAuth` → `authenticateUser` (orphan orders закрыты)
 - [x] Wiki log entry + commit
 

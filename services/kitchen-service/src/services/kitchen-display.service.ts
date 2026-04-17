@@ -7,6 +7,7 @@ export interface KitchenOrder {
   id: string;
   orderNumber: string;
   restaurantId: string;
+  enterpriseId?: string;
   status: string;
   items: Array<{
     name: string;
@@ -32,13 +33,21 @@ export class KitchenDisplayService {
   /**
    * Send active orders to a newly connected kitchen display
    */
-  async sendActiveOrders(restaurantId: string, socket: Socket): Promise<void> {
+  async sendActiveOrders(restaurantId: string, socket: Socket, enterpriseId?: string): Promise<void> {
     try {
+      const whereClauses = [`o.restaurant_id = $1`, `o.status IN ('confirmed', 'preparing', 'ready')`];
+      const params: (string)[] = [restaurantId];
+      if (enterpriseId) {
+        whereClauses.push(`o.enterprise_id = $2`);
+        params.push(enterpriseId);
+      }
+
       const result = await this.db.query(
         `SELECT
           o.id,
           o.order_number as "orderNumber",
           o.restaurant_id as "restaurantId",
+          o.enterprise_id as "enterpriseId",
           o.status,
           o.created_at as "createdAt",
           o.special_instructions as "specialInstructions",
@@ -59,13 +68,12 @@ export class KitchenDisplayService {
         JOIN users u ON o.customer_id = u.id
         JOIN order_items oi ON o.id = oi.order_id
         JOIN menu_items mi ON oi.menu_item_id = mi.id
-        WHERE o.restaurant_id = $1
-          AND o.status IN ('confirmed', 'preparing', 'ready')
-        GROUP BY o.id, o.order_number, o.restaurant_id, o.status,
+        WHERE ${whereClauses.join(' AND ')}
+        GROUP BY o.id, o.order_number, o.restaurant_id, o.enterprise_id, o.status,
                  o.created_at, o.special_instructions, o.estimated_delivery_time,
                  u.first_name, u.last_name, o.delivery_address_id
         ORDER BY o.created_at ASC`,
-        [restaurantId]
+        params
       );
 
       socket.emit('activeOrders', result.rows);
@@ -77,34 +85,38 @@ export class KitchenDisplayService {
   }
 
   /**
-   * Broadcast new order to all kitchen displays of a restaurant
+   * Broadcast new order to all kitchen displays of a restaurant.
+   * Scoped to enterprise room when enterpriseId is present.
    */
   async broadcastNewOrder(order: KitchenOrder): Promise<void> {
     try {
-      this.io
-        .to(`restaurant:${order.restaurantId}`)
-        .emit('newOrder', order);
+      const room = order.enterpriseId
+        ? `enterprise:${order.enterpriseId}:restaurant:${order.restaurantId}`
+        : `restaurant:${order.restaurantId}`;
 
-      logger.info(`Broadcasted new order ${order.orderNumber} to kitchen displays`);
+      this.io.to(room).emit('newOrder', order);
+      logger.info(`Broadcasted new order ${order.orderNumber} to room ${room}`);
     } catch (error) {
       logger.error('Failed to broadcast new order:', error);
     }
   }
 
   /**
-   * Broadcast order status update
+   * Broadcast order status update, scoped to enterprise room when available.
    */
   async broadcastOrderUpdate(
     restaurantId: string,
     orderId: string,
-    status: string
+    status: string,
+    enterpriseId?: string
   ): Promise<void> {
     try {
-      this.io
-        .to(`restaurant:${restaurantId}`)
-        .emit('orderUpdated', { orderId, status, timestamp: new Date() });
+      const room = enterpriseId
+        ? `enterprise:${enterpriseId}:restaurant:${restaurantId}`
+        : `restaurant:${restaurantId}`;
 
-      logger.info(`Broadcasted order ${orderId} status update: ${status}`);
+      this.io.to(room).emit('orderUpdated', { orderId, status, timestamp: new Date() });
+      logger.info(`Broadcasted order ${orderId} status update: ${status} to room ${room}`);
     } catch (error) {
       logger.error('Failed to broadcast order update:', error);
     }
@@ -119,15 +131,14 @@ export class KitchenDisplayService {
         `UPDATE orders
          SET status = $1, updated_at = NOW()
          WHERE id = $2
-         RETURNING restaurant_id as "restaurantId", order_number as "orderNumber"`,
+         RETURNING restaurant_id as "restaurantId", enterprise_id as "enterpriseId", order_number as "orderNumber"`,
         [status, orderId]
       );
 
       if (result.rows.length > 0) {
-        const { restaurantId, orderNumber } = result.rows[0];
+        const { restaurantId, enterpriseId, orderNumber } = result.rows[0];
 
-        // Broadcast update to all displays
-        await this.broadcastOrderUpdate(restaurantId, orderId, status);
+        await this.broadcastOrderUpdate(restaurantId, orderId, status, enterpriseId);
 
         logger.info(`Order ${orderNumber} status updated to ${status}`);
 
@@ -186,13 +197,13 @@ export class KitchenDisplayService {
         `UPDATE orders
          SET status = 'picked_up', updated_at = NOW()
          WHERE id = $1
-         RETURNING restaurant_id as "restaurantId"`,
+         RETURNING restaurant_id as "restaurantId", enterprise_id as "enterpriseId"`,
         [orderId]
       );
 
       if (result.rows.length > 0) {
-        const { restaurantId } = result.rows[0];
-        await this.broadcastOrderUpdate(restaurantId, orderId, 'picked_up');
+        const { restaurantId, enterpriseId } = result.rows[0];
+        await this.broadcastOrderUpdate(restaurantId, orderId, 'picked_up', enterpriseId);
       }
     } catch (error) {
       logger.error('Failed to complete order:', error);

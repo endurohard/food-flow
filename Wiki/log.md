@@ -402,3 +402,21 @@ STAFF         = admin | owner | manager | operator | chef | waiter | employee
 - **`frontend/order-management/index.html`**: заменён на 10-строчный redirect (meta refresh + JS) → `../admin-panel/orders.html`. Страница была 708-строчным mock-канбаном с LocalStorage; функциональный аналог — `orders.html` на реальном API.
 - **`frontend/kds/index.html`**: заменён на redirect → `../admin-panel/kds.html`. Была standalone KDS с Socket.IO hardcoded на `localhost:3009`; актуальная версия — `kds.html` с polling через реальный API.
 - **`admin-panel/settings.html`** таб «Роли и доступ»: убрана вся форма с чекбоксами прав (250+ строк HTML + ~160 строк JS). `rolePermissions`, `loadRolePermissions`, `saveRolePermissions`, `resetRolePermissions`, `hasPermission`, DOMContentLoaded-инициализация — все удалены. `window.hasPermission` больше не экспортируется. Вместо формы — информационная панель с описанием каждой роли (admin/owner, manager, operator, chef, waiter, employee/viewer) и ссылка на `enterprises.html` для реального управления ролями.
+
+## [2026-04-17] fix | Phase 2 follow-up — Consumer-side enterpriseId validation in kitchen-service RabbitMQ
+Закрыт последний pending пункт Phase 2: KDS-consumer теперь scope'ит события и Socket.IO rooms по enterpriseId.
+
+**Проблема**: `kitchen-service` RabbitMQ consumer принимал все `order.confirmed` события из общей очереди и бродкастил через Socket.IO в room `restaurant:${restaurantId}`. KDS-дисплеи разных enterprise теоретически могли видеть чужие заказы если restaurantId совпадал (маловероятно с UUID, но архитектурно неверно).
+
+**Изменения в `services/kitchen-service/`**:
+
+- **`KitchenOrder` interface** — добавлено поле `enterpriseId?: string`.
+- **`rabbitmq.service.ts` `consumeOrders()`** — валидация: `logger.warn` если `enterpriseId` отсутствует в payload (graceful degradation — заказ всё равно обрабатывается). `enterpriseId` передаётся дальше в `kitchenOrder`.
+- **`kitchen-display.service.ts` `broadcastNewOrder()`** — room теперь `enterprise:${enterpriseId}:restaurant:${restaurantId}` при наличии enterpriseId, иначе fallback на `restaurant:${restaurantId}`.
+- **`kitchen-display.service.ts` `broadcastOrderUpdate()`** — добавлен опциональный параметр `enterpriseId`, аналогичная логика room.
+- **`kitchen-display.service.ts` `updateOrderStatus()`** — SQL RETURNING расширен: добавлен `enterprise_id`, передаётся в `broadcastOrderUpdate`.
+- **`kitchen-display.service.ts` `completeOrder()`** — аналогично.
+- **`kitchen-display.service.ts` `sendActiveOrders(restaurantId, socket, enterpriseId?)`** — добавлен параметр `enterpriseId`; если указан, добавляется `AND o.enterprise_id = $2` в WHERE (tenant guard на чтение).
+- **`index.ts` Socket.IO `authenticate` handler** — `data` расширен: `{ restaurantId, token, enterpriseId? }`. Socket присоединяется к enterprise-scoped room. `sendActiveOrders` получает `enterpriseId`.
+
+**Delivery-service**: RabbitMQ consumer отсутствует (delivery работает через Socket.IO напрямую) — нечего фиксить.

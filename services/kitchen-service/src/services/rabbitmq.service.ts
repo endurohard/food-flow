@@ -63,16 +63,17 @@ export class RabbitMQService {
           if (msg) {
             try {
               const orderData = JSON.parse(msg.content.toString());
-              logger.info(`Received order: ${orderData.orderNumber}`);
 
-              // Process the order
+              if (!orderData.enterpriseId) {
+                logger.warn(`Order ${orderData.orderNumber ?? orderData.id} missing enterpriseId — processing without tenant scope`);
+              }
+
+              logger.info(`Received order: ${orderData.orderNumber}`, { enterpriseId: orderData.enterpriseId });
+
               await this.processOrder(orderData);
-
-              // Acknowledge the message
               this.channel!.ack(msg);
             } catch (error) {
               logger.error('Failed to process order message:', error);
-              // Reject and requeue the message
               this.channel!.nack(msg, false, true);
             }
           }
@@ -130,6 +131,7 @@ export class RabbitMQService {
         id: orderData.id,
         orderNumber: orderData.orderNumber,
         restaurantId: orderData.restaurantId,
+        enterpriseId: orderData.enterpriseId ?? undefined,
         status: orderData.status,
         items: orderData.items.map((item: any) => ({
           name: item.name,

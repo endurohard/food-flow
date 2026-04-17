@@ -104,14 +104,17 @@ const rabbitmqService = new RabbitMQService(printerService, kitchenDisplayServic
 io.on('connection', (socket) => {
   logger.info(`Kitchen display connected: ${socket.id}`);
 
-  socket.on('authenticate', async (data: { restaurantId: string; token: string }) => {
+  socket.on('authenticate', async (data: { restaurantId: string; token: string; enterpriseId?: string }) => {
     try {
       // TODO: Validate token and restaurant access
-      socket.join(`restaurant:${data.restaurantId}`);
-      logger.info(`Display authenticated for restaurant: ${data.restaurantId}`);
+      const room = data.enterpriseId
+        ? `enterprise:${data.enterpriseId}:restaurant:${data.restaurantId}`
+        : `restaurant:${data.restaurantId}`;
 
-      // Send current orders to the newly connected display
-      await kitchenDisplayService.sendActiveOrders(data.restaurantId, socket);
+      socket.join(room);
+      logger.info(`Display authenticated for room: ${room}`);
+
+      await kitchenDisplayService.sendActiveOrders(data.restaurantId, socket, data.enterpriseId);
     } catch (error) {
       logger.error('Authentication error:', error);
       socket.emit('error', { message: 'Authentication failed' });
