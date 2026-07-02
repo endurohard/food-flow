@@ -1128,6 +1128,19 @@ AUTH.requireAuth();
 
         <!-- Features Toggle Tab -->
         <div id="features" class="tab-content">
+            <div class="card" style="margin-bottom:24px;">
+                <div class="card-header">
+                    <h2>🏪 Тип заведения</h2>
+                    <p style="margin: 8px 0 0 0; font-size: 14px; color: var(--color-text-secondary);">Выбор определяет набор разделов в меню. Сохраняется на предприятии.</p>
+                </div>
+                <div class="card-body">
+                    <div id="businessTypeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;">
+                        <!-- карточки типов рендерятся из JS -->
+                    </div>
+                    <div id="businessTypeHint" style="margin-top:14px;font-size:13px;color:var(--color-text-secondary);"></div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <h2>🎛️ Управление функционалом</h2>
@@ -1910,6 +1923,45 @@ AUTH.requireAuth();
 
         // Expose globally for navigation
         window.isFeatureEnabled = isFeatureEnabled;
+
+        // ── Тип заведения ──
+        const BT_DESCRIPTIONS = {
+            restaurant:  'Полный набор: столы, зал, KDS, заказы, доставка, опт',
+            cafe:        'Столы и KDS без дизайнера зала',
+            coffee_shop: 'Заказы у стойки: без столов, зала и KDS',
+            production:  'Склад, производство, опт и логистика — без зала и заказов'
+        };
+
+        function renderBusinessTypes() {
+            const grid = document.getElementById('businessTypeGrid');
+            if (!grid) return;
+            const current = AUTH.getBusinessType();
+            grid.innerHTML = Object.entries(BUSINESS_TYPES).map(([key, bt]) => {
+                const active = current === key;
+                return `<div onclick="selectBusinessType('${key}')" style="cursor:pointer;border:2px solid ${active ? 'var(--color-primary)' : 'var(--admin-border)'};background:${active ? 'var(--color-primary-light)' : 'var(--admin-card-bg)'};border-radius:14px;padding:18px;text-align:center;transition:all .15s;">
+                    <div style="font-size:34px;margin-bottom:8px;">${bt.emoji}</div>
+                    <div style="font-weight:700;">${bt.label}</div>
+                    <div style="font-size:12px;color:var(--color-text-secondary);margin-top:6px;min-height:32px;">${BT_DESCRIPTIONS[key]}</div>
+                    ${active ? '<div style="margin-top:8px;color:var(--color-primary);font-weight:700;">✓ Выбрано</div>' : ''}
+                </div>`;
+            }).join('');
+            const hint = document.getElementById('businessTypeHint');
+            if (hint) hint.textContent = current
+                ? 'Разделы меню отфильтрованы под «' + BUSINESS_TYPES[current].label + '». Изменения видны сразу на всех страницах.'
+                : 'Тип не выбран — показываются все разделы.';
+        }
+
+        async function selectBusinessType(type) {
+            try {
+                await AUTH.setBusinessType(type);
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
+                return;
+            }
+            renderBusinessTypes();
+        }
+        window.selectBusinessType = selectBusinessType;
+        renderBusinessTypes();
     </script>
 </div><!-- /main-wrapper -->
 

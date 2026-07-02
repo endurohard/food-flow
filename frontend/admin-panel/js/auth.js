@@ -79,6 +79,10 @@ const AUTH = {
     localStorage.removeItem('ff_token');
     localStorage.removeItem('ff_refresh_token');
     localStorage.removeItem('ff_user');
+    // Чистим тип заведения — иначе следующий вход на этом браузере
+    // унаследует фильтрацию разделов от предыдущего предприятия
+    localStorage.removeItem('ff_business_type');
+    localStorage.removeItem('ff_enterprise');
     window.location.href = '/admin-panel/login.html';
   },
 
@@ -155,3 +159,96 @@ const AUTH = {
     return accessToken;
   }
 };
+
+// ── Тип заведения: какие разделы доступны ────────────────────────────────
+// ресторан / кафе / кофейня / производство. Разделы, не указанные в карте,
+// доступны всем типам.
+const BUSINESS_TYPES = {
+  restaurant:  { label: 'Ресторан',     emoji: '🍽' },
+  cafe:        { label: 'Кафе',         emoji: '🥐' },
+  coffee_shop: { label: 'Кофейня',      emoji: '☕' },
+  production:  { label: 'Производство', emoji: '🏭' }
+};
+
+const MODULE_ACCESS = {
+  'orders.html':        ['restaurant', 'cafe', 'coffee_shop'],
+  'tables.html':        ['restaurant', 'cafe'],
+  'hall-designer.html': ['restaurant'],
+  'kds.html':           ['restaurant', 'cafe'],
+  'loyalty.html':       ['restaurant', 'cafe', 'coffee_shop'],
+  'wholesale.html':     ['production', 'restaurant']
+};
+
+AUTH.getBusinessType = function () {
+  // Локальный выбор (демо/оверрайд) приоритетнее данных предприятия
+  const local = localStorage.getItem('ff_business_type');
+  if (local && BUSINESS_TYPES[local]) return local;
+  try {
+    const ent = JSON.parse(localStorage.getItem('ff_enterprise') || 'null');
+    if (ent && BUSINESS_TYPES[ent.business_type]) return ent.business_type;
+  } catch (e) { /* ignore */ }
+  return null; // тип не выбран — показываем всё
+};
+
+AUTH.setBusinessType = async function (type) {
+  if (!BUSINESS_TYPES[type]) throw new Error('Unknown business type: ' + type);
+  localStorage.setItem('ff_business_type', type);
+  const user = this.getUser();
+  if (user && user.enterpriseId) {
+    try {
+      const res = await this.fetch('/api/enterprises/' + user.enterpriseId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ business_type: type })
+      });
+      const data = await res.json();
+      if (data && data.enterprise) {
+        localStorage.setItem('ff_enterprise', JSON.stringify(data.enterprise));
+      }
+    } catch (e) { console.warn('Failed to persist business type on enterprise', e); }
+  }
+  this.applyBusinessType();
+};
+
+// Best-effort: подтягивает предприятие в ff_enterprise, если его ещё нет.
+// Нужен, чтобы свежий вход на другом устройстве подхватил серверный тип
+// без локального ff_business_type. Тихо игнорирует ошибки сети/прав.
+AUTH.hydrateEnterprise = async function () {
+  if (localStorage.getItem('ff_enterprise')) return;
+  const user = this.getUser();
+  if (!user || !user.enterpriseId) return;
+  try {
+    const res = await this.fetch('/api/enterprises/' + user.enterpriseId);
+    const data = await res.json();
+    if (data && data.enterprise) {
+      localStorage.setItem('ff_enterprise', JSON.stringify(data.enterprise));
+      this.applyBusinessType();
+    }
+  } catch (e) { /* ignore — фильтрация всё равно работает по ff_business_type */ }
+};
+
+AUTH.applyBusinessType = function () {
+  const type = this.getBusinessType();
+  document.querySelectorAll('a.nav-item[href]').forEach((a) => {
+    const page = (a.getAttribute('href') || '').split('/').pop();
+    const allowed = MODULE_ACCESS[page];
+    // Скрываем с !important — страничные стили задают display на .nav-item с !important
+    if (!allowed || !type || allowed.includes(type)) {
+      a.style.removeProperty('display');
+    } else {
+      a.style.setProperty('display', 'none', 'important');
+    }
+  });
+};
+
+// Прячем недоступные разделы сразу после отрисовки сайдбара,
+// затем в фоне подтягиваем тип с сервера (для входа без локального override)
+function initBusinessType() {
+  AUTH.applyBusinessType();
+  AUTH.hydrateEnterprise();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initBusinessType);
+} else {
+  initBusinessType();
+}

@@ -15,6 +15,7 @@ export interface Enterprise {
   currency: string;
   timezone: string;
   language: string;
+  business_type: string;
   features: any;
   is_active: boolean;
   is_demo: boolean;
@@ -44,6 +45,7 @@ export interface CreateEnterpriseInput {
   currency?: string;
   timezone?: string;
   language?: string;
+  business_type?: string;
 }
 
 export interface UpdateEnterpriseInput {
@@ -58,6 +60,7 @@ export interface UpdateEnterpriseInput {
   currency?: string;
   timezone?: string;
   language?: string;
+  business_type?: string;
   features?: any;
   metadata?: any;
 }
@@ -85,8 +88,8 @@ export class EnterpriseService {
       const enterpriseResult = await client.query(
         `INSERT INTO enterprises (
           name, legal_name, tax_id, phone, email, website,
-          subscription_plan, currency, timezone, language
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          subscription_plan, currency, timezone, language, business_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *`,
         [
           data.name,
@@ -98,7 +101,8 @@ export class EnterpriseService {
           data.subscription_plan || 'basic',
           data.currency || 'RUB',
           data.timezone || 'Europe/Moscow',
-          data.language || 'ru'
+          data.language || 'ru',
+          data.business_type || 'restaurant'
         ]
       );
 
@@ -173,12 +177,20 @@ export class EnterpriseService {
     enterpriseId: string,
     data: UpdateEnterpriseInput
   ): Promise<Enterprise> {
+    // Whitelist updatable columns — keys go straight into SQL, so never
+    // interpolate arbitrary request-body keys (SQL injection).
+    const ALLOWED_COLUMNS = [
+      'name', 'legal_name', 'tax_id', 'phone', 'email', 'website', 'logo_url',
+      'subscription_plan', 'currency', 'timezone', 'language', 'business_type',
+      'features', 'metadata'
+    ];
+
     const fields: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
 
     Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined) {
+      if (value !== undefined && ALLOWED_COLUMNS.includes(key)) {
         fields.push(`${key} = $${paramCount}`);
         values.push(value);
         paramCount++;
