@@ -2,12 +2,14 @@ import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { ProductionService } from '../services/production.service';
 import { InventoryService } from '../services/inventory.service';
+import { SupplierService } from '../services/supplier.service';
 import { authenticateUser, requireRole, ROLES } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
 const inventoryService = new InventoryService(config.database.url);
 const productionService = new ProductionService(config.database.url, inventoryService);
+const supplierService = new SupplierService(config.database.url);
 
 const MANAGE_ROLES = [ROLES.OWNER, ROLES.ADMIN, ROLES.MANAGER, ROLES.CHEF];
 
@@ -97,6 +99,48 @@ router.get('/reports/margins', authenticateUser, async (req: Request, res: Respo
     return res.json({ margins: rows });
   } catch (error) {
     console.error('Margin report error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// История закупочных цен позиции по поставкам (себестоимость от каждой поставки)
+router.get('/items/:id/cost-history', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const history = await supplierService.getItemCostHistory(req.params.id, req.enterpriseId);
+    if (!history) return res.status(404).json({ error: 'Inventory item not found' });
+    return res.json(history);
+  } catch (error) {
+    console.error('Cost history error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Анализ позиций: топ списаний и аутсайдеры спроса
+router.get('/reports/item-analysis', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const items = await supplierService.getItemAnalysis({
+      enterpriseId: req.enterpriseId,
+      from: req.query.from as string | undefined,
+      to: req.query.to as string | undefined
+    });
+    return res.json({ items });
+  } catch (error) {
+    console.error('Item analysis error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Анализ блюд меню: спрос по заказам, наименее популярные
+router.get('/reports/dish-analysis', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const dishes = await supplierService.getDishAnalysis({
+      enterpriseId: req.enterpriseId,
+      from: req.query.from as string | undefined,
+      to: req.query.to as string | undefined
+    });
+    return res.json({ dishes });
+  } catch (error) {
+    console.error('Dish analysis error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

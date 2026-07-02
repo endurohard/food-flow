@@ -9,6 +9,23 @@ const router = Router();
 const supplierService = new SupplierService(config.database.url);
 const inventoryService = new InventoryService(config.database.url);
 
+// ========== ОТЧЁТЫ (до параметрических маршрутов) ==========
+
+// Взаиморасчёты со всеми поставщиками
+router.get('/reports/settlements', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const settlements = await supplierService.getSettlementsReport({
+      enterpriseId: req.enterpriseId,
+      from: req.query.from as string | undefined,
+      to: req.query.to as string | undefined
+    });
+    return res.json({ settlements });
+  } catch (error) {
+    console.error('Settlements report error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ========== SUPPLIERS ==========
 
 router.get('/', authenticateUser, async (req: Request, res: Response) => {
@@ -115,8 +132,67 @@ router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res:
   try {
     const invoice = await supplierService.confirmInvoice(req.params.id, req.userId!, inventoryService);
     return res.json({ invoice });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === 'Invoice already confirmed' || error.message === 'Invoice not found') {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Confirm invoice error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ========== ВЗАИМОРАСЧЁТЫ ==========
+
+// Баланс и история оплат поставщика
+router.get('/:id/balance', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const balance = await supplierService.getSupplierBalance(req.params.id, req.enterpriseId);
+    if (!balance) return res.status(404).json({ error: 'Supplier not found' });
+    return res.json(balance);
+  } catch (error) {
+    console.error('Supplier balance error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Оплата поставщику (по накладной или погашение долга)
+router.post('/:id/payments', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const schema = Joi.object({
+      amount: Joi.number().positive().required(),
+      method: Joi.string().valid('cash', 'transfer', 'card', 'offset').default('transfer'),
+      invoiceId: Joi.string().uuid().optional(),
+      registerId: Joi.string().uuid().optional(),
+      notes: Joi.string().allow('', null)
+    });
+    const { error, value } = schema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    const result = await supplierService.paySupplier(req.params.id, value, req.userId, req.enterpriseId);
+
+    // Наличная оплата из кассы — проводим изъятие в finance-service (не фатально при сбое)
+    if (value.method === 'cash' && value.registerId) {
+      try {
+        const resp = await fetch(`${config.financeServiceUrl}/api/finance/registers/${value.registerId}/operations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.authorization || '' },
+          body: JSON.stringify({
+            operationType: 'cash_out',
+            amount: value.amount,
+            paymentMethod: 'cash',
+            description: `Оплата поставщику${result.invoice ? ' по накладной ' + (result.invoice.invoice_number || '') : ''}`
+          })
+        });
+        if (!resp.ok) console.warn('finance cash_out failed:', resp.status);
+      } catch (e) {
+        console.warn('finance cash_out unreachable', e);
+      }
+    }
+
+    return res.status(201).json(result);
+  } catch (error: any) {
+    if (error.message && /not found/i.test(error.message)) return res.status(400).json({ error: error.message });
+    console.error('Pay supplier error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

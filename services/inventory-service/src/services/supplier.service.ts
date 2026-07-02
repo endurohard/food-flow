@@ -127,8 +127,9 @@ export class SupplierService {
       await client.query('BEGIN');
 
       // Get invoice and items
-      const invoice = await client.query('SELECT * FROM supply_invoices WHERE id = $1', [invoiceId]);
+      const invoice = await client.query('SELECT * FROM supply_invoices WHERE id = $1 FOR UPDATE', [invoiceId]);
       if (!invoice.rows[0]) throw new Error('Invoice not found');
+      if (invoice.rows[0].status === 'received') throw new Error('Invoice already confirmed');
 
       const items = await client.query('SELECT * FROM supply_invoice_items WHERE invoice_id = $1', [invoiceId]);
 
@@ -154,6 +155,14 @@ export class SupplierService {
         `UPDATE supply_invoices SET status = 'received', received_by = $1, received_at = NOW() WHERE id = $2`,
         [receivedBy, invoiceId]
       );
+
+      // Долг поставщику растёт на сумму принятой накладной
+      if (invoice.rows[0].supplier_id && invoice.rows[0].total_amount) {
+        await client.query(
+          'UPDATE suppliers SET balance = balance + $1 WHERE id = $2',
+          [invoice.rows[0].total_amount, invoice.rows[0].supplier_id]
+        );
+      }
 
       await client.query('COMMIT');
 
@@ -215,6 +224,265 @@ export class SupplierService {
         invoiceId: invoice.id, error: (error as Error).message
       });
     }
+  }
+
+  // ========== ВЗАИМОРАСЧЁТЫ С ПОСТАВЩИКАМИ ==========
+
+  /**
+   * Оплата поставщику: по конкретной накладной или просто погашение долга.
+   * Гасит долг поставщика; при оплате накладной обновляет её статус оплаты.
+   */
+  async paySupplier(supplierId: string, data: {
+    amount: number; method?: string; invoiceId?: string; registerId?: string; notes?: string;
+  }, paidBy?: string, enterpriseId?: string): Promise<any> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const supConds = ['id = $1'];
+      const supVals: any[] = [supplierId];
+      if (enterpriseId) { supConds.push('enterprise_id = $2'); supVals.push(enterpriseId); }
+      const sup = await client.query(`SELECT * FROM suppliers WHERE ${supConds.join(' AND ')} FOR UPDATE`, supVals);
+      if (!sup.rows[0]) throw new Error('Supplier not found');
+
+      let invoice: any = null;
+      if (data.invoiceId) {
+        const inv = await client.query(
+          'SELECT * FROM supply_invoices WHERE id = $1 AND supplier_id = $2 FOR UPDATE',
+          [data.invoiceId, supplierId]
+        );
+        invoice = inv.rows[0];
+        if (!invoice) throw new Error('Invoice not found for this supplier');
+        const newPaid = (parseFloat(invoice.paid_amount) || 0) + data.amount;
+        const total = parseFloat(invoice.total_amount) || 0;
+        const paymentStatus = newPaid >= total - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
+        await client.query(
+          'UPDATE supply_invoices SET paid_amount = $1, payment_status = $2 WHERE id = $3',
+          [newPaid, paymentStatus, data.invoiceId]
+        );
+      }
+
+      const payment = await client.query(
+        `INSERT INTO supplier_payments (enterprise_id, supplier_id, invoice_id, amount, method, register_id, paid_by, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [sup.rows[0].enterprise_id, supplierId, data.invoiceId || null, data.amount,
+         data.method || 'transfer', data.registerId || null, paidBy || null, data.notes || null]
+      );
+
+      await client.query('UPDATE suppliers SET balance = balance - $1 WHERE id = $2', [data.amount, supplierId]);
+
+      await client.query('COMMIT');
+      return { payment: payment.rows[0], invoice };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Баланс и взаиморасчёты по поставщику */
+  async getSupplierBalance(supplierId: string, enterpriseId?: string): Promise<any | null> {
+    const conds = ['id = $1'];
+    const vals: any[] = [supplierId];
+    if (enterpriseId) { conds.push('enterprise_id = $2'); vals.push(enterpriseId); }
+    const sup = await this.pool.query(`SELECT * FROM suppliers WHERE ${conds.join(' AND ')}`, vals);
+    if (!sup.rows[0]) return null;
+
+    const invoices = await this.pool.query(
+      `SELECT COUNT(*) AS invoices_count,
+              COALESCE(SUM(total_amount), 0) AS total_invoiced,
+              COALESCE(SUM(paid_amount), 0) AS total_paid
+       FROM supply_invoices WHERE supplier_id = $1 AND status = 'received'`,
+      [supplierId]
+    );
+    const payments = await this.pool.query(
+      `SELECT sp.*, si.invoice_number, u.first_name, u.last_name
+       FROM supplier_payments sp
+       LEFT JOIN supply_invoices si ON sp.invoice_id = si.id
+       LEFT JOIN users u ON sp.paid_by = u.id
+       WHERE sp.supplier_id = $1 ORDER BY sp.created_at DESC LIMIT 50`,
+      [supplierId]
+    );
+    return {
+      supplierId,
+      name: sup.rows[0].name,
+      balance: parseFloat(sup.rows[0].balance),
+      invoicesCount: parseInt(invoices.rows[0].invoices_count, 10),
+      totalInvoiced: parseFloat(invoices.rows[0].total_invoiced),
+      totalPaid: parseFloat(invoices.rows[0].total_paid),
+      payments: payments.rows
+    };
+  }
+
+  /** Отчёт по взаиморасчётам со всеми поставщиками за период */
+  async getSettlementsReport(filters: { enterpriseId?: string; from?: string; to?: string }): Promise<any[]> {
+    const values: any[] = [];
+    let p = 1;
+    const invConds = [`si.status = 'received'`];
+    const payConds: string[] = ['1=1'];
+    const supConds = ['s.is_active = true'];
+    if (filters.enterpriseId) {
+      values.push(filters.enterpriseId);
+      supConds.push(`s.enterprise_id = $${p}`);
+      p++;
+    }
+    if (filters.from) { values.push(filters.from); invConds.push(`si.received_at >= $${p}`); payConds.push(`sp.created_at >= $${p}`); p++; }
+    if (filters.to) { values.push(filters.to); invConds.push(`si.received_at <= $${p}`); payConds.push(`sp.created_at <= $${p}`); p++; }
+
+    const result = await this.pool.query(
+      `SELECT s.id, s.name, s.balance,
+              COALESCE(inv.invoices_count, 0) AS invoices_count,
+              COALESCE(inv.invoiced, 0) AS invoiced,
+              COALESCE(pay.paid, 0) AS paid
+       FROM suppliers s
+       LEFT JOIN (
+         SELECT si.supplier_id, COUNT(*) AS invoices_count, SUM(si.total_amount) AS invoiced
+         FROM supply_invoices si WHERE ${invConds.join(' AND ')} GROUP BY si.supplier_id
+       ) inv ON inv.supplier_id = s.id
+       LEFT JOIN (
+         SELECT sp.supplier_id, SUM(sp.amount) AS paid
+         FROM supplier_payments sp WHERE ${payConds.join(' AND ')} GROUP BY sp.supplier_id
+       ) pay ON pay.supplier_id = s.id
+       WHERE ${supConds.join(' AND ')}
+       ORDER BY s.balance DESC, s.name`,
+      values
+    );
+    return result.rows;
+  }
+
+  // ========== АНАЛИТИКА ==========
+
+  /**
+   * История закупочных цен позиции по поставкам:
+   * каждая партия — дата, поставщик, накладная, цена, остаток партии.
+   */
+  async getItemCostHistory(itemId: string, enterpriseId?: string): Promise<any | null> {
+    const conds = ['id = $1'];
+    const vals: any[] = [itemId];
+    if (enterpriseId) { conds.push('enterprise_id = $2'); vals.push(enterpriseId); }
+    const item = await this.pool.query(`SELECT * FROM inventory_items WHERE ${conds.join(' AND ')}`, vals);
+    if (!item.rows[0]) return null;
+
+    const batches = await this.pool.query(
+      `SELECT b.received_at, b.cost_price, b.quantity AS remaining, b.is_depleted, b.batch_number,
+              s.name AS supplier_name, si.invoice_number,
+              m.quantity AS received_quantity
+       FROM inventory_batches b
+       LEFT JOIN suppliers s ON b.supplier_id = s.id
+       LEFT JOIN supply_invoices si ON b.invoice_id = si.id
+       LEFT JOIN LATERAL (
+         SELECT sm.quantity FROM stock_movements sm
+         WHERE sm.inventory_item_id = b.inventory_item_id AND sm.movement_type = 'receipt'
+           AND sm.created_at BETWEEN b.received_at - interval '5 seconds' AND b.received_at + interval '5 seconds'
+         LIMIT 1
+       ) m ON true
+       WHERE b.inventory_item_id = $1
+       ORDER BY b.received_at DESC
+       LIMIT 100`,
+      [itemId]
+    );
+
+    const rows = batches.rows;
+    const active = rows.filter((b: any) => !b.is_depleted && parseFloat(b.remaining) > 0);
+    const weighted = active.reduce((s: number, b: any) => s + parseFloat(b.remaining) * (parseFloat(b.cost_price) || 0), 0);
+    const totalQty = active.reduce((s: number, b: any) => s + parseFloat(b.remaining), 0);
+
+    return {
+      itemId,
+      name: item.rows[0].name,
+      unit: item.rows[0].unit,
+      currentCostPrice: parseFloat(item.rows[0].cost_price) || 0,          // последняя закупка/выпуск
+      weightedAvgCost: totalQty > 0 ? Math.round(weighted / totalQty * 100) / 100 : null, // средневзвешенная по остаткам
+      batches: rows
+    };
+  }
+
+  /**
+   * Анализ позиций за период: продажи (спрос), списания, приходы.
+   * Возвращает данные для топа списаний и аутсайдеров спроса.
+   */
+  async getItemAnalysis(filters: { enterpriseId?: string; from?: string; to?: string }): Promise<any[]> {
+    const values: any[] = [];
+    let p = 1;
+    const mConds: string[] = ['1=1'];
+    const rConds = [`r.status = 'confirmed'`, `ri.disposition = 'write_off'`];
+    const iConds = ['i.is_active = true'];
+    if (filters.enterpriseId) { values.push(filters.enterpriseId); iConds.push(`i.enterprise_id = $${p}`); p++; }
+    if (filters.from) { values.push(filters.from); mConds.push(`m.created_at >= $${p}`); rConds.push(`r.confirmed_at >= $${p}`); p++; }
+    if (filters.to) { values.push(filters.to); mConds.push(`m.created_at <= $${p}`); rConds.push(`r.confirmed_at <= $${p}`); p++; }
+
+    const result = await this.pool.query(
+      `SELECT i.id, i.name, i.unit, i.is_produced, i.cost_price,
+              COALESCE(SUM(s.quantity), 0) AS stock,
+              COALESCE(mv.sold, 0) AS sold_qty,
+              COALESCE(mv.written_off, 0) + COALESCE(ret.returned_write_off, 0) AS written_off_qty,
+              COALESCE(mv.received, 0) AS received_qty,
+              COALESCE(mv.write_off_cost, 0) + COALESCE(ret.returned_write_off_cost, 0) AS write_off_cost
+       FROM inventory_items i
+       LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id
+       LEFT JOIN (
+         SELECT m.inventory_item_id,
+                SUM(m.quantity) FILTER (WHERE m.movement_type = 'sale') AS sold,
+                SUM(m.quantity) FILTER (WHERE m.movement_type = 'write_off' AND COALESCE(m.reference_type, '') NOT IN ('production', 'production_cancel')) AS written_off,
+                SUM(m.quantity) FILTER (WHERE m.movement_type = 'receipt') AS received,
+                SUM(m.quantity * COALESCE(m.cost_price, 0)) FILTER (WHERE m.movement_type = 'write_off' AND COALESCE(m.reference_type, '') NOT IN ('production', 'production_cancel')) AS write_off_cost
+         FROM stock_movements m
+         WHERE ${mConds.join(' AND ')}
+         GROUP BY m.inventory_item_id
+       ) mv ON mv.inventory_item_id = i.id
+       LEFT JOIN (
+         -- Списания при возвратах от контрагентов (просрочка/порча)
+         SELECT ri.inventory_item_id,
+                SUM(ri.quantity) AS returned_write_off,
+                SUM(ri.quantity * ri.price) AS returned_write_off_cost
+         FROM wholesale_return_items ri
+         INNER JOIN wholesale_returns r ON ri.return_id = r.id
+         WHERE ${rConds.join(' AND ')}
+         GROUP BY ri.inventory_item_id
+       ) ret ON ret.inventory_item_id = i.id
+       WHERE ${iConds.join(' AND ')}
+       GROUP BY i.id, mv.sold, mv.written_off, mv.received, mv.write_off_cost, ret.returned_write_off, ret.returned_write_off_cost
+       ORDER BY (COALESCE(mv.written_off, 0) + COALESCE(ret.returned_write_off, 0)) DESC, COALESCE(mv.sold, 0) ASC`,
+      values
+    );
+    return result.rows;
+  }
+
+  /**
+   * Анализ блюд меню за период: сколько заказывали (спрос),
+   * наименее популярные — в конце по sold_qty.
+   */
+  async getDishAnalysis(filters: { enterpriseId?: string; from?: string; to?: string }): Promise<any[]> {
+    const values: any[] = [];
+    let p = 1;
+    const oConds = [`o.status NOT IN ('cancelled')`];
+    const miConds: string[] = ['mi.is_available IS NOT false'];
+    if (filters.enterpriseId) { values.push(filters.enterpriseId); miConds.push(`mi.enterprise_id = $${p}`); p++; }
+    if (filters.from) { values.push(filters.from); oConds.push(`o.created_at >= $${p}`); p++; }
+    if (filters.to) { values.push(filters.to); oConds.push(`o.created_at <= $${p}`); p++; }
+
+    const result = await this.pool.query(
+      `SELECT mi.id, mi.name, mi.price, mi.cost_price,
+              COALESCE(sales.orders_count, 0) AS orders_count,
+              COALESCE(sales.sold_qty, 0) AS sold_qty,
+              COALESCE(sales.revenue, 0) AS revenue
+       FROM menu_items mi
+       LEFT JOIN (
+         SELECT oi.menu_item_id,
+                COUNT(DISTINCT oi.order_id) AS orders_count,
+                SUM(oi.quantity) AS sold_qty,
+                SUM(oi.subtotal) AS revenue
+         FROM order_items oi
+         INNER JOIN orders o ON oi.order_id = o.id
+         WHERE ${oConds.join(' AND ')}
+         GROUP BY oi.menu_item_id
+       ) sales ON sales.menu_item_id = mi.id
+       WHERE ${miConds.join(' AND ')}
+       ORDER BY COALESCE(sales.sold_qty, 0) DESC`,
+      values
+    );
+    return result.rows;
   }
 
   async close(): Promise<void> {
