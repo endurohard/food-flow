@@ -212,14 +212,14 @@
 
     /* ── Sedap card style override ── */
     .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
-      background: #fff !important;
+      background: var(--admin-card-bg) !important;
       border-radius: 14px !important;
       box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
       border: none !important;
     }
 
     /* ── Button primary ── */
-    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
     button[style*="background: #667"], button[style*="background: linear"] {
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
@@ -252,20 +252,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
     /* Navbar */
     .navbar {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -281,7 +281,7 @@
     .menu-toggle {
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 24px;
       cursor: pointer;
       padding: 8px;
@@ -293,13 +293,13 @@
     }
 
     .menu-toggle:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .nav-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -313,8 +313,8 @@
       top: 0;
       width: 280px;
       height: 100vh;
-      background: #ffffff;
-      border-right: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       transition: left 0.3s ease;
       z-index: 200;
       overflow-y: auto;
@@ -344,13 +344,13 @@
 
     .sidebar-header {
       padding: 20px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .sidebar-title {
       font-size: 14px;
       font-weight: 600;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -364,7 +364,7 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       text-decoration: none;
       transition: all 0.3s;
       cursor: pointer;
@@ -372,14 +372,14 @@
     }
 
     .sidebar-item:hover {
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
     }
 
     .sidebar-item.active {
-      background: #f0f7ff;
-      color: #1e88e5;
-      border-left-color: #1e88e5;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
     }
 
     .sidebar-icon {
@@ -404,7 +404,7 @@
     .page-title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 8px;
     }
 
@@ -416,7 +416,7 @@
 
     .page-subtitle {
       font-size: 14px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       margin-bottom: 24px;
     }
 
@@ -427,12 +427,12 @@
     }
 
     .date-filter {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       border-radius: 12px;
       margin-bottom: 24px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-      border: 1px solid #e1e8ed;
+      border: 1px solid var(--admin-border);
       display: flex;
       gap: 8px;
       align-items: center;
@@ -440,7 +440,7 @@
     }
 
     .filter-label {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       margin-right: 8px;
       font-size: 14px;
@@ -448,10 +448,10 @@
 
     .filter-btn {
       padding: 8px 16px;
-      border: 1px solid #e1e8ed;
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      background: #ffffff;
-      color: #5a6c7d;
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
       cursor: pointer;
       font-size: 14px;
       font-weight: 600;
@@ -459,14 +459,14 @@
     }
 
     .filter-btn:hover {
-      border-color: #1e88e5;
-      background: #f0f7ff;
-      color: #1e88e5;
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+      color: var(--color-primary);
     }
 
     .filter-btn.active {
-      background: #1e88e5;
-      border-color: #1e88e5;
+      background: var(--color-primary);
+      border-color: var(--color-primary);
       color: white;
     }
 
@@ -476,7 +476,7 @@
       align-items: center;
       gap: 8px;
       padding-left: 12px;
-      border-left: 1px solid #e1e8ed;
+      border-left: 1px solid var(--admin-border);
       flex-wrap: wrap;
     }
 
@@ -487,7 +487,7 @@
         border-left: none;
         width: 100%;
         padding-top: 12px;
-        border-top: 1px solid #e1e8ed;
+        border-top: 1px solid var(--admin-border);
       }
     }
 
@@ -505,18 +505,18 @@
     }
 
     .stat-card {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       border-radius: 12px;
       padding: 20px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-      border: 1px solid #e1e8ed;
+      border: 1px solid var(--admin-border);
       transition: all 0.3s;
     }
 
     .stat-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.15);
-      border-color: #1e88e5;
+      box-shadow: 0 4px 12px var(--color-primary-light);
+      border-color: var(--color-primary);
     }
 
     .stat-icon {
@@ -532,7 +532,7 @@
 
     .stat-label {
       font-size: 12px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 8px;
@@ -542,7 +542,7 @@
     .stat-value {
       font-size: 28px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 8px;
     }
 
@@ -561,16 +561,16 @@
     }
 
     .stat-change.positive {
-      color: #43a047;
+      color: var(--color-success);
     }
 
     .stat-change.negative {
-      color: #e53935;
+      color: var(--color-danger);
     }
 
     .metric-small {
       font-size: 12px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
     }
 
     .charts-grid {
@@ -587,11 +587,11 @@
     }
 
     .chart-card {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       border-radius: 12px;
       padding: 24px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-      border: 1px solid #e1e8ed;
+      border: 1px solid var(--admin-border);
     }
 
     .chart-card.full-width {
@@ -601,7 +601,7 @@
     .chart-title {
       font-size: 16px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 20px;
       display: flex;
       align-items: center;
@@ -628,17 +628,17 @@
     }
 
     .table-card {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       border-radius: 12px;
       padding: 24px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-      border: 1px solid #e1e8ed;
+      border: 1px solid var(--admin-border);
     }
 
     .table-title {
       font-size: 16px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 20px;
       display: flex;
       align-items: center;
@@ -659,19 +659,19 @@
     .data-table th {
       text-align: left;
       padding: 12px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
       font-weight: 600;
     }
 
     .data-table td {
       padding: 16px 12px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .data-table tr:last-child td {
@@ -679,7 +679,7 @@
     }
 
     .data-table tr:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .rank-badge {
@@ -694,7 +694,7 @@
     }
 
     .rank-1 {
-      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      background: linear-gradient(135deg, #fbbf24, var(--color-warning));
       color: white;
     }
 
@@ -709,14 +709,14 @@
     }
 
     .rank-other {
-      background: #f5f7fa;
-      color: #5a6c7d;
+      background: var(--admin-content-bg);
+      color: var(--color-text-secondary);
     }
 
     .progress-bar {
       width: 100%;
       height: 6px;
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
       border-radius: 3px;
       overflow: hidden;
       margin-top: 6px;
@@ -724,7 +724,7 @@
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #1e88e5, #1976d2);
+      background: var(--color-primary);
       border-radius: 3px;
       transition: width 1s ease-out;
     }
@@ -732,14 +732,14 @@
     .loading {
       text-align: center;
       padding: 60px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
     }
 
     .spinner {
       width: 48px;
       height: 48px;
-      border: 4px solid #e1e8ed;
-      border-top-color: #1e88e5;
+      border: 4px solid var(--admin-border);
+      border-top-color: var(--color-primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
       margin: 0 auto 20px;
@@ -920,7 +920,7 @@ AUTH.requireAuth();
     logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
     logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
       '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
-      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
       ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
       ' onmouseout="this.style.background=\'transparent\'">' +
       'Выйти из системы</button>';
@@ -1020,7 +1020,7 @@ AUTH.requireAuth();
         <div class="stat-change positive" id="revenueChange">
           <span>▲</span>
           <span>0%</span>
-          <span style="color: #8b95a5; margin-left: 4px;">vs прошлый период</span>
+          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
         </div>
       </div>
 
@@ -1031,7 +1031,7 @@ AUTH.requireAuth();
         <div class="stat-change positive" id="ordersChange">
           <span>▲</span>
           <span>0%</span>
-          <span style="color: #8b95a5; margin-left: 4px;">vs прошлый период</span>
+          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
         </div>
       </div>
 
@@ -1042,7 +1042,7 @@ AUTH.requireAuth();
         <div class="stat-change positive" id="avgCheckChange">
           <span>▲</span>
           <span>0%</span>
-          <span style="color: #8b95a5; margin-left: 4px;">vs прошлый период</span>
+          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
         </div>
       </div>
 
@@ -1133,7 +1133,7 @@ AUTH.requireAuth();
           </thead>
           <tbody id="topDishesTable">
             <tr>
-              <td colspan="4" style="text-align: center; color: #8b95a5;">
+              <td colspan="4" style="text-align: center; color: var(--color-grey-5);">
                 Загрузка данных...
               </td>
             </tr>
@@ -1154,7 +1154,7 @@ AUTH.requireAuth();
           </thead>
           <tbody id="topCouriersTable">
             <tr>
-              <td colspan="4" style="text-align: center; color: #8b95a5;">
+              <td colspan="4" style="text-align: center; color: var(--color-grey-5);">
                 Загрузка данных...
               </td>
             </tr>
@@ -1265,7 +1265,7 @@ AUTH.requireAuth();
           const el = document.getElementById('finProfit');
           const card = document.getElementById('pnlCard');
           el.textContent = profit.toLocaleString('ru-RU') + ' ₽';
-          el.style.color = profit >= 0 ? '#22c55e' : '#ef4444';
+          el.style.color = profit >= 0 ? 'var(--color-success)' : '#ef4444';
         }
       } catch (e) { console.error('Finance P&L error:', e); }
     }
@@ -1306,8 +1306,8 @@ AUTH.requireAuth();
         });
 
         // Highlight date inputs
-        document.getElementById('dateFrom').style.borderColor = '#1e88e5';
-        document.getElementById('dateTo').style.borderColor = '#1e88e5';
+        document.getElementById('dateFrom').style.borderColor = 'var(--color-primary)';
+        document.getElementById('dateTo').style.borderColor = 'var(--color-primary)';
 
         currentFilter = 'custom';
         await loadData();
@@ -1383,7 +1383,7 @@ AUTH.requireAuth();
       element.innerHTML = `
         <span>${isPositive ? '▲' : '▼'}</span>
         <span>${Math.abs(change).toFixed(1)}%</span>
-        <span style="color: #8b95a5; margin-left: 4px;">vs прошлый период</span>
+        <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
       `;
     }
 
@@ -1399,8 +1399,8 @@ AUTH.requireAuth();
             {
               label: 'Выручка (₽)',
               data: [],
-              borderColor: '#1e88e5',
-              backgroundColor: 'rgba(30, 136, 229, 0.1)',
+              borderColor: 'var(--color-primary)',
+              backgroundColor: 'var(--color-primary-light)',
               tension: 0.4,
               fill: true,
               yAxisID: 'y'
@@ -1408,7 +1408,7 @@ AUTH.requireAuth();
             {
               label: 'Заказы',
               data: [],
-              borderColor: '#43a047',
+              borderColor: 'var(--color-success)',
               backgroundColor: 'rgba(67, 160, 71, 0.1)',
               tension: 0.4,
               fill: true,
@@ -1428,24 +1428,24 @@ AUTH.requireAuth();
               type: 'linear',
               display: true,
               position: 'left',
-              grid: { color: '#e1e8ed' },
-              ticks: { color: '#5a6c7d' }
+              grid: { color: 'var(--admin-border)' },
+              ticks: { color: 'var(--color-text-secondary)' }
             },
             y1: {
               type: 'linear',
               display: true,
               position: 'right',
               grid: { drawOnChartArea: false },
-              ticks: { color: '#5a6c7d' }
+              ticks: { color: 'var(--color-text-secondary)' }
             },
             x: {
-              grid: { color: '#e1e8ed' },
-              ticks: { color: '#5a6c7d' }
+              grid: { color: 'var(--admin-border)' },
+              ticks: { color: 'var(--color-text-secondary)' }
             }
           },
           plugins: {
             legend: {
-              labels: { color: '#2c3e50' }
+              labels: { color: 'var(--color-text-primary)' }
             }
           }
         }
@@ -1460,8 +1460,8 @@ AUTH.requireAuth();
           datasets: [{
             label: 'Заказов',
             data: [],
-            backgroundColor: 'rgba(30, 136, 229, 0.8)',
-            borderColor: '#1e88e5',
+            backgroundColor: 'rgba(0, 176, 116, 0.8)',
+            borderColor: 'var(--color-primary)',
             borderWidth: 1
           }]
         },
@@ -1471,17 +1471,17 @@ AUTH.requireAuth();
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: '#e1e8ed' },
-              ticks: { color: '#5a6c7d' }
+              grid: { color: 'var(--admin-border)' },
+              ticks: { color: 'var(--color-text-secondary)' }
             },
             x: {
-              grid: { color: '#e1e8ed' },
-              ticks: { color: '#5a6c7d' }
+              grid: { color: 'var(--admin-border)' },
+              ticks: { color: 'var(--color-text-secondary)' }
             }
           },
           plugins: {
             legend: {
-              labels: { color: '#2c3e50' }
+              labels: { color: 'var(--color-text-primary)' }
             }
           }
         }
@@ -1496,13 +1496,13 @@ AUTH.requireAuth();
           datasets: [{
             data: [],
             backgroundColor: [
-              '#fb8c00',
-              '#1e88e5',
+              'var(--color-warning)',
+              'var(--color-primary)',
               '#8b5cf6',
-              '#43a047',
+              'var(--color-success)',
               '#06b6d4',
-              '#43a047',
-              '#e53935'
+              'var(--color-success)',
+              'var(--color-danger)'
             ],
             borderWidth: 2,
             borderColor: '#ffffff'
@@ -1514,7 +1514,7 @@ AUTH.requireAuth();
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: '#2c3e50', padding: 15 }
+              labels: { color: 'var(--color-text-primary)', padding: 15 }
             }
           }
         }
@@ -1604,7 +1604,7 @@ AUTH.requireAuth();
       const tbody = document.getElementById('topDishesTable');
 
       if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #8b95a5;">Нет данных</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-grey-5);">Нет данных</td></tr>';
         return;
       }
 
@@ -1625,7 +1625,7 @@ AUTH.requireAuth();
               </div>
             </td>
             <td>${stats.count}</td>
-            <td style="font-weight: 600; color: #43a047;">${stats.revenue.toLocaleString()} ₽</td>
+            <td style="font-weight: 600; color: var(--color-success);">${stats.revenue.toLocaleString()} ₽</td>
           </tr>
         `;
       }).join('');
@@ -1651,7 +1651,7 @@ AUTH.requireAuth();
       const tbody = document.getElementById('topCouriersTable');
 
       if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #8b95a5;">Нет данных</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-grey-5);">Нет данных</td></tr>';
         return;
       }
 
@@ -1673,7 +1673,7 @@ AUTH.requireAuth();
             </td>
             <td>${stats.count}</td>
             <td>
-              <span style="color: #f59e0b;">★</span>
+              <span style="color: var(--color-warning);">★</span>
               <span style="font-weight: 600;">${stats.rating.toFixed(1)}</span>
             </td>
           </tr>

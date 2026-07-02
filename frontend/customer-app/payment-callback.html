@@ -93,7 +93,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://localhost:8000/api';
+    const API_BASE = window.location.origin + '/api';
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get('orderId');
     const paymentId = params.get('paymentId'); // YooKassa may pass this

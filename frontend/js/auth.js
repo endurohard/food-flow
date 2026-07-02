@@ -15,7 +15,8 @@
  */
 
 const AUTH = {
-  API_BASE: 'http://localhost:8000',
+  // Базовый URL берём из адресной строки — работает и с localhost, и с телефона по IP
+  API_BASE: window.location.origin,
 
   // ── Token & user accessors ────────────────────────────────────────────────
 

@@ -16,7 +16,9 @@
  */
 
 const AUTH = {
-  API_BASE: 'http://localhost:8000',
+  // Фронт и API отдаются одним Kong — базовый URL берём из адресной строки,
+  // чтобы работало и с localhost, и с телефона по IP в локальной сети
+  API_BASE: window.location.origin,
 
   // ── Token & user accessors ────────────────────────────────────────────────
 

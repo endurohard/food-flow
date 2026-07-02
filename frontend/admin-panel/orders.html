@@ -212,14 +212,14 @@
 
     /* ── Sedap card style override ── */
     .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
-      background: #fff !important;
+      background: var(--admin-card-bg) !important;
       border-radius: 14px !important;
       box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
       border: none !important;
     }
 
     /* ── Button primary ── */
-    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
     button[style*="background: #667"], button[style*="background: linear"] {
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
@@ -251,20 +251,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
     /* Navbar */
     .navbar {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -280,7 +280,7 @@
     .menu-toggle {
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 24px;
       cursor: pointer;
       padding: 8px;
@@ -292,13 +292,13 @@
     }
 
     .menu-toggle:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .nav-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -318,8 +318,8 @@
       top: 0;
       width: 280px;
       height: 100vh;
-      background: #ffffff;
-      border-right: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       transition: left 0.3s ease;
       z-index: 200;
       overflow-y: auto;
@@ -349,13 +349,13 @@
 
     .sidebar-header {
       padding: 20px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .sidebar-title {
       font-size: 14px;
       font-weight: 600;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -369,7 +369,7 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       text-decoration: none;
       transition: all 0.3s;
       cursor: pointer;
@@ -377,14 +377,14 @@
     }
 
     .sidebar-item:hover {
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
     }
 
     .sidebar-item.active {
-      background: #f0f7ff;
-      color: #1e88e5;
-      border-left-color: #1e88e5;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
     }
 
     .sidebar-icon {
@@ -424,7 +424,7 @@
     .title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -448,8 +448,8 @@
     }
 
     .stat-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       display: flex;
@@ -483,7 +483,7 @@
     }
 
     .stat-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 12px;
       margin-bottom: 4px;
     }
@@ -491,7 +491,7 @@
     .stat-value {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -502,8 +502,8 @@
 
     /* Controls */
     .controls {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       margin-bottom: 24px;
@@ -529,17 +529,17 @@
     .search-input {
       width: 100%;
       padding: 12px 16px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .search-input:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .control-buttons {
@@ -563,33 +563,33 @@
     }
 
     .btn-primary {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-primary:hover {
-      background: #1976d2;
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+      background: var(--color-primary-hover);
+      box-shadow: 0 4px 12px rgba(0, 176, 116, 0.25);
     }
 
     .btn-success {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .btn-success:hover {
-      background: #388e3c;
+      background: var(--color-success);
       box-shadow: 0 4px 12px rgba(67, 160, 71, 0.25);
     }
 
     .btn-secondary {
-      background: #ffffff;
-      color: #5a6c7d;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--admin-border);
     }
 
     .btn-secondary:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .btn-small {
@@ -611,8 +611,8 @@
     }
 
     .kanban-column {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       min-height: 600px;
@@ -625,7 +625,7 @@
       align-items: center;
       margin-bottom: 20px;
       padding-bottom: 16px;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
     }
 
     .column-title {
@@ -639,8 +639,8 @@
     }
 
     .column-count {
-      background: #f5f7fa;
-      color: #5a6c7d;
+      background: var(--admin-content-bg);
+      color: var(--color-text-secondary);
       padding: 4px 12px;
       border-radius: 12px;
       font-size: 14px;
@@ -655,19 +655,19 @@
     }
 
     .order-card {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
       border-radius: 12px;
       padding: 16px;
-      border: 2px solid #e1e8ed;
+      border: 2px solid var(--admin-border);
       cursor: grab;
       transition: all 0.2s;
       position: relative;
     }
 
     .order-card:hover {
-      border-color: #1e88e5;
+      border-color: var(--color-primary);
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(30, 136, 229, 0.15);
+      box-shadow: 0 8px 24px var(--color-primary-light);
     }
 
     .order-card.dragging {
@@ -685,46 +685,46 @@
     .order-number {
       font-size: 20px;
       font-weight: 700;
-      color: #1e88e5;
+      color: var(--color-primary);
     }
 
     .order-time {
       font-size: 11px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-align: right;
     }
 
     .time-value {
       display: block;
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-top: 2px;
     }
 
     .customer-info {
       margin-bottom: 12px;
       padding: 12px;
-      background: #ffffff;
+      background: var(--admin-card-bg);
       border-radius: 8px;
-      border-left: 3px solid #1e88e5;
+      border-left: 3px solid var(--color-primary);
     }
 
     .customer-name {
       font-size: 15px;
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 4px;
     }
 
     .customer-phone {
       font-size: 12px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-family: monospace;
     }
 
     .customer-address {
       font-size: 12px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       margin-top: 4px;
       display: flex;
       align-items: start;
@@ -739,7 +739,7 @@
       display: flex;
       justify-content: space-between;
       padding: 8px 0;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       font-size: 13px;
     }
 
@@ -749,18 +749,18 @@
 
     .item-name {
       font-weight: 500;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .item-qty {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       margin-left: 6px;
       font-size: 12px;
     }
 
     .item-price {
       font-weight: 600;
-      color: #43a047;
+      color: var(--color-success);
     }
 
     .card-footer {
@@ -769,13 +769,13 @@
       align-items: center;
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #e1e8ed;
+      border-top: 1px solid var(--admin-border);
     }
 
     .order-total {
       font-size: 18px;
       font-weight: 700;
-      color: #43a047;
+      color: var(--color-success);
     }
 
     .card-actions {
@@ -807,32 +807,32 @@
     }
 
     .btn-print {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-print:hover {
-      background: #1976d2;
+      background: var(--color-primary-hover);
       transform: scale(1.1);
     }
 
     .btn-cancel {
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
     }
 
     .btn-cancel:hover {
-      background: #d32f2f;
+      background: var(--color-danger);
       transform: scale(1.1);
     }
 
     .btn-ready {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .btn-ready:hover {
-      background: #388e3c;
+      background: var(--color-success);
       transform: scale(1.1);
     }
 
@@ -847,7 +847,7 @@
     }
 
     .btn-delivered {
-      background: #22c55e;
+      background: var(--color-success);
       color: white;
     }
 
@@ -860,7 +860,7 @@
       position: absolute;
       top: -8px;
       right: -8px;
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
       padding: 4px 8px;
       border-radius: 12px;
@@ -884,7 +884,7 @@
     .empty-column {
       text-align: center;
       padding: 60px 20px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 14px;
     }
 
@@ -895,7 +895,7 @@
     }
 
     .comment-badge {
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
       padding: 4px 8px;
       border-radius: 6px;
@@ -909,8 +909,8 @@
       position: fixed;
       top: 80px;
       right: 20px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 12px 20px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -918,7 +918,7 @@
       display: none;
       animation: slideIn 0.3s ease-out;
       max-width: calc(100% - 40px);
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .notification.show {
@@ -927,8 +927,8 @@
 
     .notification.error {
       background: #ffebee;
-      border-color: #e53935;
-      color: #e53935;
+      border-color: var(--color-danger);
+      color: var(--color-danger);
     }
 
     @keyframes slideIn {
@@ -963,8 +963,8 @@
     }
 
     .modal-content {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 30px;
       max-width: 500px;
@@ -979,7 +979,7 @@
     .modal-title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .form-group {
@@ -989,7 +989,7 @@
     .form-label {
       display: block;
       margin-bottom: 8px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 14px;
       font-weight: 600;
     }
@@ -997,17 +997,17 @@
     .form-select {
       width: 100%;
       padding: 12px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .form-select:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .warning-box {
@@ -1015,9 +1015,9 @@
       margin-top: 12px;
       padding: 12px;
       background: rgba(229, 57, 53, 0.1);
-      border: 1px solid #e53935;
+      border: 1px solid var(--color-danger);
       border-radius: 8px;
-      color: #e53935;
+      color: var(--color-danger);
       font-size: 14px;
     }
 
@@ -1033,8 +1033,8 @@
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      background: #f5f7fa;
-      border: 2px solid #e1e8ed;
+      background: var(--admin-content-bg);
+      border: 2px solid var(--admin-border);
       border-radius: 12px;
       transition: all 0.2s;
       margin-bottom: 12px;
@@ -1042,7 +1042,7 @@
 
     .courier-item.active {
       background: rgba(67, 160, 71, 0.1);
-      border-color: #43a047;
+      border-color: var(--color-success);
     }
 
     .courier-info {
@@ -1052,13 +1052,13 @@
     .courier-name {
       font-size: 16px;
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 4px;
     }
 
     .courier-phone {
       font-size: 12px;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-family: monospace;
     }
 
@@ -1253,7 +1253,7 @@ AUTH.requireAuth();
     logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
     logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
       '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
-      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
       ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
       ' onmouseout="this.style.background=\'transparent\'">' +
       'Выйти из системы</button>';
@@ -1335,14 +1335,14 @@ AUTH.requireAuth();
         <div class="stat-icon" style="background: rgba(251, 140, 0, 0.1);">🔔</div>
         <div class="stat-info">
           <div class="stat-label">Новые</div>
-          <div class="stat-value" id="headerPending" style="color: #fb8c00;">0</div>
+          <div class="stat-value" id="headerPending" style="color: var(--color-warning);">0</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">✓</div>
+        <div class="stat-icon" style="background: var(--color-primary-light);">✓</div>
         <div class="stat-info">
           <div class="stat-label">Подтв.</div>
-          <div class="stat-value" id="headerConfirmed" style="color: #1e88e5;">0</div>
+          <div class="stat-value" id="headerConfirmed" style="color: var(--color-primary);">0</div>
         </div>
       </div>
       <div class="stat-card">
@@ -1356,7 +1356,7 @@ AUTH.requireAuth();
         <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);">✅</div>
         <div class="stat-info">
           <div class="stat-label">Готовы</div>
-          <div class="stat-value" id="headerReady" style="color: #43a047;">0</div>
+          <div class="stat-value" id="headerReady" style="color: var(--color-success);">0</div>
         </div>
       </div>
       <div class="stat-card">
@@ -1370,17 +1370,17 @@ AUTH.requireAuth();
         <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">✔️</div>
         <div class="stat-info">
           <div class="stat-label">Доставл.</div>
-          <div class="stat-value" id="headerDelivered" style="color: #22c55e;">0</div>
+          <div class="stat-value" id="headerDelivered" style="color: var(--color-success);">0</div>
         </div>
       </div>
     </div>
 
     <!-- Filters -->
-    <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+    <div style="background: var(--admin-card-bg); border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
       <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
         <!-- Date Filter -->
         <div style="flex: 1; min-width: 200px;">
-          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
             📅 Дата
           </label>
           <input type="date" id="filterDate" class="search-input" style="width: 100%;">
@@ -1388,7 +1388,7 @@ AUTH.requireAuth();
 
         <!-- Shift Filter -->
         <div style="flex: 1; min-width: 200px;">
-          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
             🕐 Смена
           </label>
           <select id="filterShift" class="search-input" style="width: 100%; cursor: pointer;">
@@ -1404,13 +1404,13 @@ AUTH.requireAuth();
         <div id="customShiftTimes" style="display: none; flex: 2; min-width: 300px; gap: 12px;">
           <div style="display: flex; gap: 12px; align-items: flex-end;">
             <div style="flex: 1;">
-              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
                 От
               </label>
               <input type="time" id="customShiftStart" class="search-input" value="08:00" style="width: 100%;">
             </div>
             <div style="flex: 1;">
-              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #2c3e50;">
+              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
                 До
               </label>
               <input type="time" id="customShiftEnd" class="search-input" value="23:59" style="width: 100%;">
@@ -1431,23 +1431,23 @@ AUTH.requireAuth();
 
       <!-- Active Filters Display -->
       <div id="activeFilters" style="margin-top: 16px; display: none;">
-        <div style="font-size: 13px; color: #6c757d; margin-bottom: 8px;">Активные фильтры:</div>
+        <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px;">Активные фильтры:</div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="activeFiltersContainer"></div>
       </div>
 
       <!-- Shift Statistics -->
-      <div id="shiftStats" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e1e8ed; display: none;">
+      <div id="shiftStats" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--admin-border); display: none;">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
           <div>
-            <div style="font-size: 13px; color: #6c757d;">Заказов за период</div>
-            <div style="font-size: 24px; font-weight: 700; color: #1e88e5;" id="shiftOrderCount">0</div>
+            <div style="font-size: 13px; color: var(--color-text-secondary);">Заказов за период</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--color-primary);" id="shiftOrderCount">0</div>
           </div>
           <div>
-            <div style="font-size: 13px; color: #6c757d;">Сумма заказов</div>
-            <div style="font-size: 24px; font-weight: 700; color: #22c55e;" id="shiftTotalAmount">0 ₽</div>
+            <div style="font-size: 13px; color: var(--color-text-secondary);">Сумма заказов</div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--color-success);" id="shiftTotalAmount">0 ₽</div>
           </div>
           <div>
-            <div style="font-size: 13px; color: #6c757d;">Средний чек</div>
+            <div style="font-size: 13px; color: var(--color-text-secondary);">Средний чек</div>
             <div style="font-size: 24px; font-weight: 700; color: #8b5cf6;" id="shiftAvgAmount">0 ₽</div>
           </div>
         </div>
@@ -1471,7 +1471,7 @@ AUTH.requireAuth();
       <!-- Новые заказы -->
       <div class="kanban-column" data-status="pending">
         <div class="column-header">
-          <div class="column-title" style="color: #fb8c00;">
+          <div class="column-title" style="color: var(--color-warning);">
             🔔 Новые
           </div>
           <div class="column-count" id="countPending">0</div>
@@ -1487,7 +1487,7 @@ AUTH.requireAuth();
       <!-- Подтвержденные -->
       <div class="kanban-column" data-status="confirmed">
         <div class="column-header">
-          <div class="column-title" style="color: #1e88e5;">
+          <div class="column-title" style="color: var(--color-primary);">
             ✓ Подтверждены
           </div>
           <div class="column-count" id="countConfirmed">0</div>
@@ -1519,7 +1519,7 @@ AUTH.requireAuth();
       <!-- Готовы -->
       <div class="kanban-column" data-status="ready">
         <div class="column-header">
-          <div class="column-title" style="color: #43a047;">
+          <div class="column-title" style="color: var(--color-success);">
             ✅ Готовы
           </div>
           <div class="column-count" id="countReady">0</div>
@@ -1551,7 +1551,7 @@ AUTH.requireAuth();
       <!-- Доставлено -->
       <div class="kanban-column" data-status="delivered">
         <div class="column-header">
-          <div class="column-title" style="color: #22c55e;">
+          <div class="column-title" style="color: var(--color-success);">
             ✔️ Доставлено
           </div>
           <div class="column-count" id="countDelivered">0</div>
@@ -1578,7 +1578,7 @@ AUTH.requireAuth();
           <option value="">-- Выберите курьера --</option>
         </select>
         <div id="noCouriersWarning" class="warning-box">
-          ⚠️ Нет курьеров на смене. <a href="#" onclick="event.preventDefault(); closeCourierModal(); openCouriersManagement();" style="color: #1e88e5; text-decoration: underline;">Добавить курьера</a>
+          ⚠️ Нет курьеров на смене. <a href="#" onclick="event.preventDefault(); closeCourierModal(); openCouriersManagement();" style="color: var(--color-primary); text-decoration: underline;">Добавить курьера</a>
         </div>
       </div>
       <div class="modal-actions">
@@ -1594,7 +1594,7 @@ AUTH.requireAuth();
       <div class="modal-header">
         <h2 class="modal-title">👥 Управление курьерами на смене</h2>
       </div>
-      <div style="margin-bottom: 20px; color: #8b95a5; font-size: 14px;">
+      <div style="margin-bottom: 20px; color: var(--color-grey-5); font-size: 14px;">
         Включите курьеров, которые сейчас работают. Только курьеры на смене могут получать заказы.
       </div>
       <div id="couriersListManagement" style="margin-bottom: 20px;">
@@ -1798,7 +1798,7 @@ AUTH.requireAuth();
                 <span class="item-price">${item.price * item.quantity} ₽</span>
               </div>
             `).join('')}
-            ${order.items.length > 3 ? `<div class="item" style="color: #8b95a5; font-size: 12px;">... и еще ${order.items.length - 3} поз.</div>` : ''}
+            ${order.items.length > 3 ? `<div class="item" style="color: var(--color-grey-5); font-size: 12px;">... и еще ${order.items.length - 3} поз.</div>` : ''}
           </div>
           ${order.specialInstructions ? `
             <div class="comment-badge">💬 Есть комментарий</div>
@@ -1946,7 +1946,7 @@ AUTH.requireAuth();
         container.addEventListener('dragover', (e) => {
           e.preventDefault();
           const column = container.closest('.kanban-column');
-          column.style.background = 'rgba(30, 136, 229, 0.05)';
+          column.style.background = 'var(--color-primary-light)';
         });
 
         container.addEventListener('dragleave', () => {
@@ -2169,13 +2169,13 @@ AUTH.requireAuth();
         if (count > 0) {
           navButton.innerHTML = `👥 Курьеры (${count})`;
           navButton.style.background = 'rgba(67, 160, 71, 0.1)';
-          navButton.style.borderColor = '#43a047';
-          navButton.style.color = '#43a047';
+          navButton.style.borderColor = 'var(--color-success)';
+          navButton.style.color = 'var(--color-success)';
         } else {
           navButton.innerHTML = '👥 Курьеры';
           navButton.style.background = '';
-          navButton.style.borderColor = '#e1e8ed';
-          navButton.style.color = '#5a6c7d';
+          navButton.style.borderColor = 'var(--admin-border)';
+          navButton.style.color = 'var(--color-text-secondary)';
         }
       }
     }
@@ -2465,8 +2465,8 @@ AUTH.requireAuth();
           <span style="
             display: inline-block;
             padding: 6px 12px;
-            background: #e3f2fd;
-            color: #1976d2;
+            background: var(--color-primary-light);
+            color: var(--color-primary-hover);
             border-radius: 6px;
             font-size: 13px;
             font-weight: 600;

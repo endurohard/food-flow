@@ -212,14 +212,14 @@
 
     /* ── Sedap card style override ── */
     .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
-      background: #fff !important;
+      background: var(--admin-card-bg) !important;
       border-radius: 14px !important;
       box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
       border: none !important;
     }
 
     /* ── Button primary ── */
-    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
     button[style*="background: #667"], button[style*="background: linear"] {
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
@@ -250,20 +250,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
     /* Navbar */
     .navbar {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -279,7 +279,7 @@
     .menu-toggle {
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 24px;
       cursor: pointer;
       padding: 8px;
@@ -291,13 +291,13 @@
     }
 
     .menu-toggle:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .nav-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -311,8 +311,8 @@
       top: 0;
       width: 280px;
       height: 100vh;
-      background: #ffffff;
-      border-right: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       transition: left 0.3s ease;
       z-index: 200;
       overflow-y: auto;
@@ -342,13 +342,13 @@
 
     .sidebar-header {
       padding: 20px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .sidebar-title {
       font-size: 14px;
       font-weight: 600;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -362,7 +362,7 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       text-decoration: none;
       transition: all 0.3s;
       cursor: pointer;
@@ -370,14 +370,14 @@
     }
 
     .sidebar-item:hover {
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
     }
 
     .sidebar-item.active {
-      background: #f0f7ff;
-      color: #1e88e5;
-      border-left-color: #1e88e5;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
     }
 
     .sidebar-icon {
@@ -417,7 +417,7 @@
     .title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -430,7 +430,7 @@
       display: flex;
       gap: 8px;
       margin-bottom: 24px;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
       padding-bottom: 12px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -441,11 +441,11 @@
     }
 
     .tabs::-webkit-scrollbar-track {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .tabs::-webkit-scrollbar-thumb {
-      background: #c5cdd8;
+      background: var(--color-grey-3);
       border-radius: 2px;
     }
 
@@ -453,7 +453,7 @@
       padding: 10px 16px;
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
@@ -472,12 +472,12 @@
     }
 
     .tab:hover {
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .tab.active {
-      color: #1e88e5;
-      border-bottom-color: #1e88e5;
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
     }
 
     .tab-content {
@@ -503,50 +503,50 @@
     }
 
     .btn-primary {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-primary:hover {
-      background: #1976d2;
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+      background: var(--color-primary-hover);
+      box-shadow: 0 4px 12px rgba(0, 176, 116, 0.25);
     }
 
     .btn-secondary {
-      background: #ffffff;
-      color: #5a6c7d;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--admin-border);
     }
 
     .btn-secondary:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .btn-success {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .btn-success:hover {
-      background: #388e3c;
+      background: var(--color-success);
     }
 
     .btn-warning {
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
     }
 
     .btn-warning:hover {
-      background: #f57c00;
+      background: var(--color-warning);
     }
 
     .btn-danger {
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
     }
 
     .btn-danger:hover {
-      background: #d32f2f;
+      background: var(--color-danger);
     }
 
     .btn-small {
@@ -568,8 +568,8 @@
     }
 
     .stat-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       display: flex;
@@ -603,7 +603,7 @@
     }
 
     .stat-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 12px;
       margin-bottom: 4px;
     }
@@ -611,7 +611,7 @@
     .stat-value {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -634,8 +634,8 @@
     }
 
     .customer-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       transition: all 0.3s;
@@ -660,7 +660,7 @@
 
     .customer-card:hover {
       transform: translateY(-2px);
-      border-color: #1e88e5;
+      border-color: var(--color-primary);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     }
 
@@ -674,7 +674,7 @@
     .customer-name {
       font-size: 16px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -693,19 +693,19 @@
 
     .customer-tier.bronze { background: rgba(205, 127, 50, 0.1); color: #cd7f32; }
     .customer-tier.silver { background: rgba(192, 192, 192, 0.1); color: #757575; }
-    .customer-tier.gold { background: rgba(255, 215, 0, 0.1); color: #f57c00; }
+    .customer-tier.gold { background: rgba(255, 215, 0, 0.1); color: var(--color-warning); }
     .customer-tier.platinum { background: rgba(100, 116, 139, 0.1); color: #64748b; }
 
     .customer-info {
       margin: 12px 0;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 13px;
       line-height: 1.6;
     }
 
     .points-section {
-      background: #f5f7fa;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       margin: 16px 0;
@@ -714,7 +714,7 @@
     .points-value {
       font-size: 24px;
       font-weight: 700;
-      color: #1e88e5;
+      color: var(--color-primary);
     }
 
     @media (min-width: 768px) {
@@ -724,13 +724,13 @@
     }
 
     .points-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 13px;
     }
 
     .progress-bar {
       height: 6px;
-      background: #e1e8ed;
+      background: var(--admin-border);
       border-radius: 3px;
       overflow: hidden;
       margin-top: 10px;
@@ -738,7 +738,7 @@
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #1e88e5 0%, #1976d2 100%);
+      background: var(--color-primary);
       transition: all 0.3s;
     }
 
@@ -750,8 +750,8 @@
 
     /* Discount Cards */
     .discount-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       margin-bottom: 16px;
@@ -760,7 +760,7 @@
     }
 
     .discount-card:hover {
-      border-color: #1e88e5;
+      border-color: var(--color-primary);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
@@ -776,7 +776,7 @@
     .discount-name {
       font-size: 18px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -790,7 +790,7 @@
       border-radius: 8px;
       font-size: 16px;
       font-weight: 700;
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
     }
 
@@ -802,20 +802,20 @@
     }
 
     .discount-detail {
-      background: #f5f7fa;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
       padding: 12px;
     }
 
     .detail-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 11px;
       margin-bottom: 4px;
     }
 
     .detail-value {
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-weight: 600;
       font-size: 14px;
     }
@@ -834,20 +834,20 @@
 
     .status-toggle.active {
       background: rgba(67, 160, 71, 0.1);
-      color: #43a047;
-      border: 1px solid #43a047;
+      color: var(--color-success);
+      border: 1px solid var(--color-success);
     }
 
     .status-toggle.inactive {
       background: rgba(139, 149, 165, 0.1);
-      color: #8b95a5;
-      border: 1px solid #c5cdd8;
+      color: var(--color-grey-5);
+      border: 1px solid var(--color-grey-3);
     }
 
     /* Campaign Cards */
     .campaign-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       margin-bottom: 16px;
@@ -866,7 +866,7 @@
     .campaign-title {
       font-size: 18px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -876,7 +876,7 @@
     }
 
     .campaign-dates {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 13px;
       margin-top: 8px;
     }
@@ -902,8 +902,8 @@
     }
 
     .modal-content {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 24px;
       max-width: 700px;
@@ -924,7 +924,7 @@
     .modal-title {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -936,14 +936,14 @@
     .close-btn {
       background: none;
       border: none;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 24px;
       cursor: pointer;
       padding: 4px;
     }
 
     .close-btn:hover {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
     }
 
     .form-row {
@@ -963,7 +963,7 @@
 
     .form-label {
       display: block;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       margin-bottom: 8px;
       font-size: 14px;
@@ -972,17 +972,17 @@
     .form-input, .form-select, .form-textarea {
       width: 100%;
       padding: 10px 14px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .form-input:focus, .form-select:focus, .form-textarea:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .form-textarea {
@@ -998,17 +998,17 @@
     .search-input {
       width: 100%;
       padding: 12px 16px 12px 40px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .search-input:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .search-icon {
@@ -1016,15 +1016,15 @@
       left: 12px;
       top: 50%;
       transform: translateY(-50%);
-      color: #8b95a5;
+      color: var(--color-grey-5);
     }
 
     .notification {
       position: fixed;
       top: 80px;
       right: 20px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 12px 20px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -1032,7 +1032,7 @@
       display: none;
       animation: slideIn 0.3s ease-out;
       max-width: calc(100% - 40px);
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .notification.show {
@@ -1229,7 +1229,7 @@ AUTH.requireAuth();
     logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
     logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
       '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
-      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
       ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
       ' onmouseout="this.style.background=\'transparent\'">' +
       'Выйти из системы</button>';
@@ -1317,7 +1317,7 @@ AUTH.requireAuth();
     <div id="customersTab" class="tab-content active">
       <div class="stats-bar">
         <div class="stat-card">
-          <div class="stat-icon" style="background: rgba(30, 136, 229, 0.1);">👥</div>
+          <div class="stat-icon" style="background: var(--color-primary-light);">👥</div>
           <div class="stat-info">
             <div class="stat-label">Всего клиентов</div>
             <div class="stat-value" id="totalCustomers">0</div>
@@ -1359,7 +1359,7 @@ AUTH.requireAuth();
     <!-- Discounts Tab -->
     <div id="discountsTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
-        <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50;">💰 Конструктор скидок</h2>
+        <h2 style="font-size: 20px; font-weight: 700; color: var(--color-text-primary);">💰 Конструктор скидок</h2>
         <button class="btn btn-primary" onclick="openAddDiscountModal()">➕ Создать скидку</button>
       </div>
 
@@ -1371,7 +1371,7 @@ AUTH.requireAuth();
     <!-- Campaigns Tab -->
     <div id="campaignsTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
-        <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50;">📢 Маркетинговые акции</h2>
+        <h2 style="font-size: 20px; font-weight: 700; color: var(--color-text-primary);">📢 Маркетинговые акции</h2>
         <button class="btn btn-primary" onclick="openAddCampaignModal()">➕ Создать акцию</button>
       </div>
 
@@ -1382,9 +1382,9 @@ AUTH.requireAuth();
 
     <!-- Settings Tab -->
     <div id="settingsTab" class="tab-content">
-      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #2c3e50;">⚙️ Настройки программы лояльности</h2>
+      <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 24px; color: var(--color-text-primary);">⚙️ Настройки программы лояльности</h2>
 
-      <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 24px; max-width: 800px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+      <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 24px; max-width: 800px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
         <div class="form-group">
           <label class="form-label">Начисление баллов за каждый потраченный рубль:</label>
           <input type="number" class="form-input" id="pointsPerRuble" value="1" min="0" step="0.1">
@@ -1395,7 +1395,7 @@ AUTH.requireAuth();
           <input type="number" class="form-input" id="rublePerPoint" value="1" min="0" step="0.1">
         </div>
 
-        <h3 style="margin: 24px 0 16px; color: #2c3e50; font-size: 18px;">Уровни лояльности:</h3>
+        <h3 style="margin: 24px 0 16px; color: var(--color-text-primary); font-size: 18px;">Уровни лояльности:</h3>
 
         <div class="form-group">
           <label class="form-label">🥉 Bronze - минимум баллов для получения:</label>
@@ -1597,7 +1597,7 @@ AUTH.requireAuth();
 
     // Initialize — load from API with localStorage fallback
     async function initializeData() {
-      document.getElementById('customersGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8b95a5;">Загрузка...</div>';
+      document.getElementById('customersGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
 
       // Load customers
       try {
@@ -1731,7 +1731,7 @@ AUTH.requireAuth();
       );
 
       if (filteredCustomers.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8b95a5;background:#fff;border:1px solid #e1e8ed;border-radius:16px;">Клиенты не найдены</div>';
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Клиенты не найдены</div>';
         updateCustomerStats();
         return;
       }
@@ -1753,13 +1753,13 @@ AUTH.requireAuth();
               <div class="points-value">${customer.points}</div>
               <div class="points-label">баллов</div>
               ${tierProgress.next ? `
-                <div style="color: #8b95a5; font-size: 11px; margin-top: 8px;">
+                <div style="color: var(--color-grey-5); font-size: 11px; margin-top: 8px;">
                   До ${getTierName(tierProgress.next)}: ${loyaltySettings.tiers[tierProgress.next] - customer.points} баллов
                 </div>
                 <div class="progress-bar">
                   <div class="progress-fill" style="width: ${tierProgress.progress}%"></div>
                 </div>
-              ` : '<div style="color: #43a047; font-size: 11px; margin-top: 8px;">🏆 Максимальный уровень</div>'}
+              ` : '<div style="color: var(--color-success); font-size: 11px; margin-top: 8px;">🏆 Максимальный уровень</div>'}
             </div>
 
             <div class="customer-info">
@@ -1804,32 +1804,32 @@ AUTH.requireAuth();
 
       body.innerHTML = `
         <div style="text-align: center; margin-bottom: 24px;">
-          <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #1e88e5 0%, #1976d2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${initials}</div>
-          <h2 style="margin-bottom: 8px; color: #2c3e50;">${customer.name}</h2>
+          <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${initials}</div>
+          <h2 style="margin-bottom: 8px; color: var(--color-text-primary);">${customer.name}</h2>
           <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
         </div>
 
-        <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+        <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div>
-              <div style="color: #8b95a5; font-size: 13px;">Баллы</div>
-              <div style="font-size: 24px; font-weight: 700; color: #1e88e5;">${customer.points}</div>
+              <div style="color: var(--color-grey-5); font-size: 13px;">Баллы</div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--color-primary);">${customer.points}</div>
             </div>
             <div>
-              <div style="color: #8b95a5; font-size: 13px;">Всего потрачено</div>
-              <div style="font-size: 24px; font-weight: 700; color: #43a047;">${(customer.totalSpent || 0).toLocaleString('ru-RU')} ₽</div>
+              <div style="color: var(--color-grey-5); font-size: 13px;">Всего потрачено</div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--color-success);">${(customer.totalSpent || 0).toLocaleString('ru-RU')} ₽</div>
             </div>
           </div>
         </div>
 
-        <div style="color: #5a6c7d; line-height: 2;">
-          ${customer.phone ? `<div><strong style="color: #2c3e50;">Телефон:</strong> ${customer.phone}</div>` : ''}
-          ${customer.email ? `<div><strong style="color: #2c3e50;">Email:</strong> ${customer.email}</div>` : ''}
-          <div><strong style="color: #2c3e50;">Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+        <div style="color: var(--color-text-secondary); line-height: 2;">
+          ${customer.phone ? `<div><strong style="color: var(--color-text-primary);">Телефон:</strong> ${customer.phone}</div>` : ''}
+          ${customer.email ? `<div><strong style="color: var(--color-text-primary);">Email:</strong> ${customer.email}</div>` : ''}
+          <div><strong style="color: var(--color-text-primary);">Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
         </div>
 
         <div id="transactionsList" style="margin-top:20px;">
-          <div style="color:#8b95a5;font-size:13px;">Загрузка транзакций...</div>
+          <div style="color:var(--color-grey-5);font-size:13px;">Загрузка транзакций...</div>
         </div>
 
         <div style="display: flex; gap: 12px; margin-top: 24px;">
@@ -1848,18 +1848,18 @@ AUTH.requireAuth();
           const txList = document.getElementById('transactionsList');
           const txs = data.transactions || [];
           if (txs.length === 0) {
-            txList.innerHTML = '<div style="color:#8b95a5;font-size:13px;">Транзакций нет</div>';
+            txList.innerHTML = '<div style="color:var(--color-grey-5);font-size:13px;">Транзакций нет</div>';
           } else {
             txList.innerHTML = `
-              <div style="font-weight:600;color:#2c3e50;margin-bottom:10px;font-size:14px;">История транзакций</div>
+              <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">История транзакций</div>
               <div style="display:grid;gap:8px;">
                 ${txs.slice(0, 10).map(tx => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f5f7fa;border-radius:8px;font-size:13px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--admin-content-bg);border-radius:8px;font-size:13px;">
                     <div>
-                      <div style="font-weight:600;color:#2c3e50;">${tx.description || tx.type || 'Транзакция'}</div>
-                      <div style="color:#8b95a5;font-size:11px;">${tx.created_at ? new Date(tx.created_at).toLocaleDateString('ru-RU') : ''}</div>
+                      <div style="font-weight:600;color:var(--color-text-primary);">${tx.description || tx.type || 'Транзакция'}</div>
+                      <div style="color:var(--color-grey-5);font-size:11px;">${tx.created_at ? new Date(tx.created_at).toLocaleDateString('ru-RU') : ''}</div>
                     </div>
-                    <div style="font-weight:700;color:${(tx.amount || tx.points_change || 0) >= 0 ? '#43a047' : '#e53935'};">
+                    <div style="font-weight:700;color:${(tx.amount || tx.points_change || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">
                       ${(tx.amount || tx.points_change || 0) >= 0 ? '+' : ''}${tx.amount || tx.points_change || 0} ${tx.currency || 'баллов'}
                     </div>
                   </div>
@@ -1926,7 +1926,7 @@ AUTH.requireAuth();
           <div class="discount-header">
             <div>
               <div class="discount-name">${discount.name}</div>
-              <div style="color: #8b95a5; margin-top: 8px; font-size: 13px;">${discount.description}</div>
+              <div style="color: var(--color-grey-5); margin-top: 8px; font-size: 13px;">${discount.description}</div>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
               <div class="discount-badge">${discount.type === 'percentage' ? discount.value + '%' : discount.value + '₽'}</div>
@@ -2060,16 +2060,16 @@ AUTH.requireAuth();
             </span>
           </div>
 
-          <div style="color: #8b95a5; margin-bottom: 16px; font-size: 14px;">${campaign.description}</div>
+          <div style="color: var(--color-grey-5); margin-bottom: 16px; font-size: 14px;">${campaign.description}</div>
 
           <div style="display: flex; gap: 16px; margin-bottom: 16px;">
-            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px; flex: 1;">
-              <div style="color: #8b95a5; font-size: 11px;">Тип акции</div>
-              <div style="color: #2c3e50; font-weight: 600; font-size: 14px; margin-top: 4px;">${getCampaignTypeName(campaign.type)}</div>
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Тип акции</div>
+              <div style="color: var(--color-text-primary); font-weight: 600; font-size: 14px; margin-top: 4px;">${getCampaignTypeName(campaign.type)}</div>
             </div>
-            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px; flex: 1;">
-              <div style="color: #8b95a5; font-size: 11px;">Бонусные баллы</div>
-              <div style="color: #1e88e5; font-weight: 700; font-size: 18px; margin-top: 4px;">${campaign.bonusPoints}</div>
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Бонусные баллы</div>
+              <div style="color: var(--color-primary); font-weight: 700; font-size: 18px; margin-top: 4px;">${campaign.bonusPoints}</div>
             </div>
           </div>
 

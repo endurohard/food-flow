@@ -212,14 +212,14 @@
 
     /* ── Sedap card style override ── */
     .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
-      background: #fff !important;
+      background: var(--admin-card-bg) !important;
       border-radius: 14px !important;
       box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
       border: none !important;
     }
 
     /* ── Button primary ── */
-    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
     button[style*="background: #667"], button[style*="background: linear"] {
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
@@ -250,20 +250,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
     /* Navbar */
     .navbar {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -279,7 +279,7 @@
     .menu-toggle {
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 24px;
       cursor: pointer;
       padding: 8px;
@@ -291,13 +291,13 @@
     }
 
     .menu-toggle:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .nav-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -311,8 +311,8 @@
       top: 0;
       width: 280px;
       height: 100vh;
-      background: #ffffff;
-      border-right: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       transition: left 0.3s ease;
       z-index: 200;
       overflow-y: auto;
@@ -342,13 +342,13 @@
 
     .sidebar-header {
       padding: 20px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .sidebar-title {
       font-size: 14px;
       font-weight: 600;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -362,7 +362,7 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       text-decoration: none;
       transition: all 0.3s;
       cursor: pointer;
@@ -370,14 +370,14 @@
     }
 
     .sidebar-item:hover {
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
     }
 
     .sidebar-item.active {
-      background: #f0f7ff;
-      color: #1e88e5;
-      border-left-color: #1e88e5;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
     }
 
     .sidebar-icon {
@@ -417,7 +417,7 @@
     .title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -430,7 +430,7 @@
       display: flex;
       gap: 8px;
       margin-bottom: 24px;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
       padding-bottom: 12px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -441,11 +441,11 @@
     }
 
     .tabs::-webkit-scrollbar-track {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .tabs::-webkit-scrollbar-thumb {
-      background: #c5cdd8;
+      background: var(--color-grey-3);
       border-radius: 2px;
     }
 
@@ -453,7 +453,7 @@
       padding: 10px 16px;
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
@@ -472,12 +472,12 @@
     }
 
     .tab:hover {
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .tab.active {
-      color: #1e88e5;
-      border-bottom-color: #1e88e5;
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
     }
 
     .tab-content {
@@ -503,50 +503,50 @@
     }
 
     .btn-primary {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-primary:hover {
-      background: #1976d2;
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+      background: var(--color-primary-hover);
+      box-shadow: 0 4px 12px rgba(0, 176, 116, 0.25);
     }
 
     .btn-secondary {
-      background: #ffffff;
-      color: #5a6c7d;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--admin-border);
     }
 
     .btn-secondary:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .btn-success {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .btn-success:hover {
-      background: #388e3c;
+      background: var(--color-success);
     }
 
     .btn-warning {
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
     }
 
     .btn-warning:hover {
-      background: #f57c00;
+      background: var(--color-warning);
     }
 
     .btn-danger {
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
     }
 
     .btn-danger:hover {
-      background: #d32f2f;
+      background: var(--color-danger);
     }
 
     .btn-small {
@@ -568,8 +568,8 @@
     }
 
     .stat-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       display: flex;
@@ -603,7 +603,7 @@
     }
 
     .stat-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 12px;
       margin-bottom: 4px;
     }
@@ -611,7 +611,7 @@
     .stat-value {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -633,8 +633,8 @@
 
     /* Categories Sidebar */
     .categories-sidebar {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       height: fit-content;
@@ -658,7 +658,7 @@
     .sidebar-title-cat {
       font-size: 16px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .category-item {
@@ -670,25 +670,25 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
     }
 
     .category-item:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .category-item.active {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .category-count {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
       padding: 4px 8px;
       border-radius: 6px;
       font-size: 11px;
       font-weight: 600;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
     }
 
     .category-item.active .category-count {
@@ -710,8 +710,8 @@
     }
 
     .dish-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       overflow: hidden;
       transition: all 0.3s;
@@ -729,7 +729,7 @@
     .dish-image {
       width: 100%;
       height: 160px;
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -757,17 +757,17 @@
     }
 
     .badge-new {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .badge-hot {
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
     }
 
     .badge-sale {
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
     }
 
@@ -781,12 +781,12 @@
     .dish-name {
       font-size: 16px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       margin-bottom: 8px;
     }
 
     .dish-description {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 13px;
       margin-bottom: 12px;
       line-height: 1.5;
@@ -808,8 +808,8 @@
       border-radius: 6px;
       font-size: 11px;
       font-weight: 600;
-      background: #f5f7fa;
-      color: #5a6c7d;
+      background: var(--admin-content-bg);
+      color: var(--color-text-secondary);
     }
 
     .dish-footer {
@@ -817,14 +817,14 @@
       justify-content: space-between;
       align-items: center;
       padding-top: 12px;
-      border-top: 1px solid #e1e8ed;
+      border-top: 1px solid var(--admin-border);
       margin-top: auto;
     }
 
     .dish-price {
       font-size: 20px;
       font-weight: 700;
-      color: #1e88e5;
+      color: var(--color-primary);
     }
 
     .dish-actions {
@@ -848,7 +848,7 @@
     }
 
     .stop-list-text {
-      color: #e53935;
+      color: var(--color-danger);
       font-size: 16px;
       font-weight: 700;
       text-align: center;
@@ -875,8 +875,8 @@
     }
 
     .modal-content {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 24px;
       max-width: 800px;
@@ -897,7 +897,7 @@
     .modal-title {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -909,14 +909,14 @@
     .close-btn {
       background: none;
       border: none;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 24px;
       cursor: pointer;
       padding: 4px;
     }
 
     .close-btn:hover {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
     }
 
     .form-row {
@@ -936,7 +936,7 @@
 
     .form-label {
       display: block;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       margin-bottom: 8px;
       font-size: 14px;
@@ -945,17 +945,17 @@
     .form-input, .form-select, .form-textarea {
       width: 100%;
       padding: 10px 14px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .form-input:focus, .form-select:focus, .form-textarea:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .form-textarea {
@@ -984,17 +984,17 @@
     .search-input {
       width: 100%;
       padding: 12px 16px 12px 40px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .search-input:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .search-icon {
@@ -1002,15 +1002,15 @@
       left: 12px;
       top: 50%;
       transform: translateY(-50%);
-      color: #8b95a5;
+      color: var(--color-grey-5);
     }
 
     .notification {
       position: fixed;
       top: 80px;
       right: 20px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 12px 20px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -1018,7 +1018,7 @@
       display: none;
       animation: slideIn 0.3s ease-out;
       max-width: calc(100% - 40px);
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .notification.show {
@@ -1046,19 +1046,19 @@
       justify-content: space-between;
       align-items: center;
       padding: 10px;
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
       border-radius: 8px;
       margin-bottom: 8px;
     }
 
     .modifier-name {
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .modifier-price {
-      color: #1e88e5;
+      color: var(--color-primary);
       font-size: 13px;
     }
 
@@ -1239,7 +1239,7 @@ AUTH.requireAuth();
     logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
     logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
       '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
-      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
       ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
       ' onmouseout="this.style.background=\'transparent\'">' +
       'Выйти из системы</button>';
@@ -1419,7 +1419,7 @@ AUTH.requireAuth();
     <div id="pricesTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
         <h2 style="font-size: 20px; font-weight: 700;">💰 Цены и маржа по позициям</h2>
-        <span style="color:#5a6c7d;font-size:13px;align-self:center;">Себестоимость — фактическая по FIFO-партиям; опт/розница редактируются</span>
+        <span style="color:var(--color-text-secondary);font-size:13px;align-self:center;">Себестоимость — фактическая по FIFO-партиям; опт/розница редактируются</span>
       </div>
       <div class="table-wrapper" style="overflow-x:auto;">
         <table class="data-table">
@@ -1436,7 +1436,7 @@ AUTH.requireAuth();
             </tr>
           </thead>
           <tbody id="marginTableBody">
-            <tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Загрузка...</td></tr>
+            <tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1688,7 +1688,7 @@ AUTH.requireAuth();
 
     // Load data from API with localStorage fallback
     async function initializeData() {
-      document.getElementById('dishesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8b95a5;">Загрузка...</div>';
+      document.getElementById('dishesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
       try {
         // Get restaurant list and use first one
         const restRes = await AUTH.fetch('/api/restaurants');
@@ -1945,16 +1945,16 @@ AUTH.requireAuth();
     function renderMargins() {
       const tbody = document.getElementById('marginTableBody');
       if (!marginRows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Нет позиций с ценами — назначьте оптовую/розничную цену складским позициям</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Нет позиций с ценами — назначьте оптовую/розничную цену складским позициям</td></tr>';
         return;
       }
       tbody.innerHTML = marginRows.map(m => {
         const mw = m.wholesale_margin_percent;
         const mr = m.retail_margin_percent;
         const badge = v => v === null || v === undefined ? '—'
-          : '<span style="color:' + (v < 0 ? '#e53935' : v < 20 ? '#f59e0b' : '#22c55e') + ';font-weight:600;">' + v + '%</span>';
+          : '<span style="color:' + (v < 0 ? 'var(--color-danger)' : v < 20 ? 'var(--color-warning)' : 'var(--color-success)') + ';font-weight:600;">' + v + '%</span>';
         return `<tr>
-          <td><strong>${m.name}</strong>${m.is_produced ? ' <span style="font-size:11px;background:#eef4ff;color:#1e88e5;border-radius:6px;padding:1px 6px;">производится</span>' : ''}</td>
+          <td><strong>${m.name}</strong>${m.is_produced ? ' <span style="font-size:11px;background:#eef4ff;color:var(--color-primary);border-radius:6px;padding:1px 6px;">производится</span>' : ''}</td>
           <td>${parseFloat(m.total_stock).toLocaleString('ru-RU')} ${m.unit || ''}</td>
           <td>${fmtMoney(m.effective_cost)}</td>
           <td><input type="number" step="0.01" min="0" value="${m.wholesale_price !== null ? parseFloat(m.wholesale_price) : ''}" id="wp-${m.id}" class="form-input" style="width:110px;padding:6px 8px;"></td>
@@ -2036,7 +2036,7 @@ AUTH.requireAuth();
       });
 
       if (filteredDishes.length === 0) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #8b95a5; padding: 40px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">Блюда не найдены</div>';
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--color-grey-5); padding: 40px; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px;">Блюда не найдены</div>';
         updateStats();
         return;
       }
@@ -2072,14 +2072,14 @@ AUTH.requireAuth();
                 ${dish.isSpicy ? '<span class="info-tag">🌶️</span>' : ''}
               </div>
               ${recipe ? `
-                <div style="margin: 12px 0; padding: 8px; background: #f5f7fa; border-radius: 8px;">
+                <div style="margin: 12px 0; padding: 8px; background: var(--admin-content-bg); border-radius: 8px;">
                   <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
-                    <span style="color: #5a6c7d;">Себестоимость:</span>
-                    <span style="color: #1e88e5; font-weight: 600;">${dishCost.toFixed(2)} ₽</span>
+                    <span style="color: var(--color-text-secondary);">Себестоимость:</span>
+                    <span style="color: var(--color-primary); font-weight: 600;">${dishCost.toFixed(2)} ₽</span>
                   </div>
                   <div style="display: flex; justify-content: space-between; font-size: 11px;">
-                    <span style="color: #5a6c7d;">Прибыль:</span>
-                    <span style="color: ${profit > 0 ? '#43a047' : '#e53935'}; font-weight: 600;">${profit.toFixed(2)} ₽ (${profitMargin.toFixed(0)}%)</span>
+                    <span style="color: var(--color-text-secondary);">Прибыль:</span>
+                    <span style="color: ${profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-weight: 600;">${profit.toFixed(2)} ₽ (${profitMargin.toFixed(0)}%)</span>
                   </div>
                 </div>
               ` : ''}
@@ -2298,11 +2298,11 @@ AUTH.requireAuth();
       container.innerHTML = `
         <div style="display: grid; gap: 12px;">
           ${sortedCategories.map(cat => `
-            <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+            <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
               <div>
                 <div style="font-size: 24px; margin-bottom: 6px;">${cat.icon}</div>
-                <div style="font-size: 16px; font-weight: 700; color: #2c3e50; margin-bottom: 4px;">${cat.name}</div>
-                <div style="color: #8b95a5; font-size: 13px;">Блюд: ${dishes.filter(d => d.category === cat.id).length}</div>
+                <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">${cat.name}</div>
+                <div style="color: var(--color-grey-5); font-size: 13px;">Блюд: ${dishes.filter(d => d.category === cat.id).length}</div>
               </div>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-danger btn-small" onclick="deleteCategory(${cat.id})">🗑️</button>
@@ -2406,22 +2406,22 @@ AUTH.requireAuth();
       const container = document.getElementById('priceSchemes');
 
       container.innerHTML = `<div style="display: grid; gap: 12px;">${priceSchemes.map(scheme => `
-        <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 12px; padding: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+        <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 12px; padding: 16px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
             <div>
-              <div style="font-size: 18px; font-weight: 700; color: #2c3e50;">${scheme.name}</div>
-              <div style="color: #8b95a5; margin-top: 6px; font-size: 13px;">${scheme.description}</div>
+              <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">${scheme.name}</div>
+              <div style="color: var(--color-grey-5); margin-top: 6px; font-size: 13px;">${scheme.description}</div>
             </div>
-            ${scheme.isActive ? '<span style="padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: rgba(67, 160, 71, 0.1); color: #43a047;">✅ Активна</span>' : ''}
+            ${scheme.isActive ? '<span style="padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: rgba(67, 160, 71, 0.1); color: var(--color-success);">✅ Активна</span>' : ''}
           </div>
           <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
-              <div style="color: #8b95a5; font-size: 11px;">Множитель</div>
-              <div style="color: #1e88e5; font-weight: 700; font-size: 16px;">×${scheme.multiplier}</div>
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Множитель</div>
+              <div style="color: var(--color-primary); font-weight: 700; font-size: 16px;">×${scheme.multiplier}</div>
             </div>
-            <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
-              <div style="color: #8b95a5; font-size: 11px;">Пример (450₽)</div>
-              <div style="color: #2c3e50; font-weight: 700; font-size: 16px;">${Math.round(450 * scheme.multiplier)}₽</div>
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 10px; flex: 1; min-width: 120px;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Пример (450₽)</div>
+              <div style="color: var(--color-text-primary); font-weight: 700; font-size: 16px;">${Math.round(450 * scheme.multiplier)}₽</div>
             </div>
           </div>
         </div>
@@ -2485,7 +2485,7 @@ AUTH.requireAuth();
 
     async function renderStoplist() {
       const container = document.getElementById('stoplistManagement');
-      container.innerHTML = '<div style="text-align:center;padding:30px;color:#8b95a5;">Загрузка...</div>';
+      container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--color-grey-5);">Загрузка...</div>';
 
       // Try to load stop-list directly from API
       if (currentRestaurantId) {
@@ -2495,17 +2495,17 @@ AUTH.requireAuth();
             const data = await res.json();
             const apiItems = data.items || [];
             if (apiItems.length === 0) {
-              container.innerHTML = '<div style="text-align: center; color: #8b95a5; padding: 40px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">Стоп-лист пуст</div>';
+              container.innerHTML = '<div style="text-align: center; color: var(--color-grey-5); padding: 40px; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px;">Стоп-лист пуст</div>';
               return;
             }
             container.innerHTML = `
               <div style="display: grid; gap: 12px;">
                 ${apiItems.map(item => `
-                  <div style="background: #ffffff; border: 1px solid #e53935; border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(229, 57, 53, 0.1);">
+                  <div style="background: var(--admin-card-bg); border: 1px solid var(--color-danger); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(229, 57, 53, 0.1);">
                     <div>
-                      <div style="font-size: 16px; font-weight: 700; color: #2c3e50; margin-bottom: 4px;">${item.name || item.item_name || 'Блюдо'}</div>
-                      ${item.reason ? `<div style="color: #8b95a5; font-size: 13px; margin-bottom: 4px;">Причина: ${item.reason}</div>` : ''}
-                      <div style="color: #e53935; font-size: 13px;">Недоступно</div>
+                      <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">${item.name || item.item_name || 'Блюдо'}</div>
+                      ${item.reason ? `<div style="color: var(--color-grey-5); font-size: 13px; margin-bottom: 4px;">Причина: ${item.reason}</div>` : ''}
+                      <div style="color: var(--color-danger); font-size: 13px;">Недоступно</div>
                     </div>
                     <button class="btn btn-success btn-small" onclick="removeFromStoplist('${item.menu_item_id || item.id}')">Вернуть</button>
                   </div>
@@ -2523,7 +2523,7 @@ AUTH.requireAuth();
       const stoplistDishes = dishes.filter(d => stoplist.includes(d.id));
 
       if (stoplistDishes.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #8b95a5; padding: 40px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">Стоп-лист пуст</div>';
+        container.innerHTML = '<div style="text-align: center; color: var(--color-grey-5); padding: 40px; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px;">Стоп-лист пуст</div>';
         return;
       }
 
@@ -2532,13 +2532,13 @@ AUTH.requireAuth();
           ${stoplistDishes.map(dish => {
             const category = categories.find(c => c.id === dish.category);
             return `
-              <div style="background: #ffffff; border: 1px solid #e53935; border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(229, 57, 53, 0.1);">
+              <div style="background: var(--admin-card-bg); border: 1px solid var(--color-danger); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: 0 2px 4px rgba(229, 57, 53, 0.1);">
                 <div style="display: flex; gap: 16px; align-items: center;">
                   <div style="font-size: 36px;">${dish.icon || '🍽️'}</div>
                   <div>
-                    <div style="font-size: 16px; font-weight: 700; color: #2c3e50; margin-bottom: 4px;">${dish.name}</div>
-                    <div style="color: #8b95a5; font-size: 13px; margin-bottom: 4px;">${category ? category.name : ''}</div>
-                    <div style="color: #e53935; font-size: 13px;">Недоступно</div>
+                    <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">${dish.name}</div>
+                    <div style="color: var(--color-grey-5); font-size: 13px; margin-bottom: 4px;">${category ? category.name : ''}</div>
+                    <div style="color: var(--color-danger); font-size: 13px;">Недоступно</div>
                   </div>
                 </div>
                 <button class="btn btn-success btn-small" onclick="removeFromStoplist(${dish.id})">Вернуть</button>
@@ -2694,10 +2694,10 @@ AUTH.requireAuth();
 
       if (recipes.length === 0) {
         container.innerHTML = `
-          <div style="text-align: center; padding: 60px 20px; background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px;">
+          <div style="text-align: center; padding: 60px 20px; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px;">
             <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
-            <div style="font-size: 18px; font-weight: 600; color: #2c3e50; margin-bottom: 8px;">Техкарты не созданы</div>
-            <div style="color: #8b95a5; margin-bottom: 20px;">Создайте техкарты для автоматического списания ингредиентов</div>
+            <div style="font-size: 18px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 8px;">Техкарты не созданы</div>
+            <div style="color: var(--color-grey-5); margin-bottom: 20px;">Создайте техкарты для автоматического списания ингредиентов</div>
             <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Создать техкарту</button>
           </div>
         `;
@@ -2716,19 +2716,19 @@ AUTH.requireAuth();
             const markup = dishCost > 0 ? ((profit / dishCost) * 100) : 0;
 
             return `
-              <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+              <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
                   <div style="flex: 1;">
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
                       <span style="font-size: 32px;">${dish ? dish.icon : '🍽️'}</span>
                       <div>
-                        <div style="font-size: 18px; font-weight: 700; color: #2c3e50;">${recipe.name}</div>
-                        <div style="color: #8b95a5; font-size: 13px; margin-top: 4px;">
+                        <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">${recipe.name}</div>
+                        <div style="color: var(--color-grey-5); font-size: 13px; margin-top: 4px;">
                           ${category ? category.icon + ' ' + category.name : ''}
                         </div>
                       </div>
                     </div>
-                    ${recipe.description ? `<div style="color: #5a6c7d; font-size: 14px; margin-top: 8px; line-height: 1.5;">${recipe.description}</div>` : ''}
+                    ${recipe.description ? `<div style="color: var(--color-text-secondary); font-size: 14px; margin-top: 8px; line-height: 1.5;">${recipe.description}</div>` : ''}
                   </div>
                   <div style="display: flex; gap: 8px;">
                     <button class="btn btn-success btn-small" onclick="writeOffIngredients(${recipe.id})" title="Списать ингредиенты">📤 Списать</button>
@@ -2738,30 +2738,30 @@ AUTH.requireAuth();
 
                 <!-- Cost Analysis -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                  <div style="background: #f0f7ff; border: 1px solid #1e88e5; border-radius: 8px; padding: 12px;">
-                    <div style="color: #1e88e5; font-size: 11px; margin-bottom: 4px;">💰 Себестоимость</div>
-                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${dishCost.toFixed(2)} ₽</div>
+                  <div style="background: var(--color-primary-light); border: 1px solid var(--color-primary); border-radius: 8px; padding: 12px;">
+                    <div style="color: var(--color-primary); font-size: 11px; margin-bottom: 4px;">💰 Себестоимость</div>
+                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${dishCost.toFixed(2)} ₽</div>
                   </div>
-                  <div style="background: #f5f7fa; border: 1px solid #e1e8ed; border-radius: 8px; padding: 12px;">
-                    <div style="color: #5a6c7d; font-size: 11px; margin-bottom: 4px;">🏷️ Цена продажи</div>
-                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${sellPrice.toFixed(2)} ₽</div>
+                  <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px;">
+                    <div style="color: var(--color-text-secondary); font-size: 11px; margin-bottom: 4px;">🏷️ Цена продажи</div>
+                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${sellPrice.toFixed(2)} ₽</div>
                   </div>
-                  <div style="background: ${profit > 0 ? '#f1f8f4' : '#fef2f2'}; border: 1px solid ${profit > 0 ? '#43a047' : '#e53935'}; border-radius: 8px; padding: 12px;">
-                    <div style="color: ${profit > 0 ? '#43a047' : '#e53935'}; font-size: 11px; margin-bottom: 4px;">💵 Прибыль</div>
-                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${profit.toFixed(2)} ₽</div>
+                  <div style="background: ${profit > 0 ? '#f1f8f4' : '#fef2f2'}; border: 1px solid ${profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; border-radius: 8px; padding: 12px;">
+                    <div style="color: ${profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-size: 11px; margin-bottom: 4px;">💵 Прибыль</div>
+                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${profit.toFixed(2)} ₽</div>
                   </div>
-                  <div style="background: #fff8e1; border: 1px solid #fb8c00; border-radius: 8px; padding: 12px;">
-                    <div style="color: #fb8c00; font-size: 11px; margin-bottom: 4px;">📊 Наценка</div>
-                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${markup.toFixed(0)}%</div>
+                  <div style="background: #fff8e1; border: 1px solid var(--color-warning); border-radius: 8px; padding: 12px;">
+                    <div style="color: var(--color-warning); font-size: 11px; margin-bottom: 4px;">📊 Наценка</div>
+                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${markup.toFixed(0)}%</div>
                   </div>
                   <div style="background: #f3e5f5; border: 1px solid #9c27b0; border-radius: 8px; padding: 12px;">
                     <div style="color: #9c27b0; font-size: 11px; margin-bottom: 4px;">📈 Маржа</div>
-                    <div style="color: #2c3e50; font-weight: 700; font-size: 18px;">${profitMargin.toFixed(0)}%</div>
+                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${profitMargin.toFixed(0)}%</div>
                   </div>
                 </div>
 
-                <div style="background: #f5f7fa; border-radius: 12px; padding: 16px;">
-                  <div style="font-size: 14px; font-weight: 600; color: #2c3e50; margin-bottom: 12px;">📦 Ингредиенты:</div>
+                <div style="background: var(--admin-content-bg); border-radius: 12px; padding: 16px;">
+                  <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 12px;">📦 Ингредиенты:</div>
                   <div style="display: grid; gap: 8px;">
                     ${recipe.ingredients.map(ing => {
                       const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
@@ -2769,14 +2769,14 @@ AUTH.requireAuth();
                       const ingredientCost = inventoryItem && inventoryItem.costPrice ? (ing.quantity * inventoryItem.costPrice) : 0;
 
                       return `
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #ffffff; border-radius: 8px;">
-                          <span style="color: #2c3e50; font-size: 13px;">${ing.name}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--admin-card-bg); border-radius: 8px;">
+                          <span style="color: var(--color-text-primary); font-size: 13px;">${ing.name}</span>
                           <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="color: #5a6c7d; font-size: 13px; font-weight: 600;">${ing.quantity} ${ing.unit}</span>
-                            ${inventoryItem && inventoryItem.costPrice ? `<span style="color: #1e88e5; font-size: 11px; font-weight: 600;">${ingredientCost.toFixed(2)} ₽</span>` : ''}
+                            <span style="color: var(--color-text-secondary); font-size: 13px; font-weight: 600;">${ing.quantity} ${ing.unit}</span>
+                            ${inventoryItem && inventoryItem.costPrice ? `<span style="color: var(--color-primary); font-size: 11px; font-weight: 600;">${ingredientCost.toFixed(2)} ₽</span>` : ''}
                             ${hasEnough
-                              ? `<span style="color: #43a047; font-size: 11px;">✅ ${inventoryItem.quantity} ${ing.unit}</span>`
-                              : `<span style="color: #e53935; font-size: 11px;">⚠️ ${inventoryItem ? inventoryItem.quantity : 0} ${ing.unit}</span>`
+                              ? `<span style="color: var(--color-success); font-size: 11px;">✅ ${inventoryItem.quantity} ${ing.unit}</span>`
+                              : `<span style="color: var(--color-danger); font-size: 11px;">⚠️ ${inventoryItem ? inventoryItem.quantity : 0} ${ing.unit}</span>`
                             }
                           </div>
                         </div>
@@ -2928,16 +2928,16 @@ AUTH.requireAuth();
       const container = document.getElementById('costPricesManagement');
 
       container.innerHTML = `
-        <div style="background: #ffffff; border: 1px solid #e1e8ed; border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
-          <div style="color: #5a6c7d; font-size: 14px; margin-bottom: 16px;">
+        <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+          <div style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">
             Укажите стоимость закупки для каждого ингредиента (цена за единицу измерения). Это необходимо для расчёта себестоимости блюд.
           </div>
           <div style="display: grid; gap: 12px;">
             ${inventory.map(item => `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f5f7fa; border-radius: 8px; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--admin-content-bg); border-radius: 8px; flex-wrap: wrap; gap: 12px;">
                 <div style="flex: 1; min-width: 200px;">
-                  <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">${item.name}</div>
-                  <div style="color: #8b95a5; font-size: 13px;">Единица: ${item.unit}</div>
+                  <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px;">${item.name}</div>
+                  <div style="color: var(--color-grey-5); font-size: 13px;">Единица: ${item.unit}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -2951,9 +2951,9 @@ AUTH.requireAuth();
                       onchange="updateIngredientCostPrice(${item.id}, this.value)"
                       placeholder="0.00"
                     >
-                    <span style="color: #5a6c7d; font-weight: 600;">₽/${item.unit}</span>
+                    <span style="color: var(--color-text-secondary); font-weight: 600;">₽/${item.unit}</span>
                   </div>
-                  <div style="padding: 6px 12px; background: #ffffff; border-radius: 6px; color: #1e88e5; font-size: 13px; font-weight: 600; min-width: 80px; text-align: right;">
+                  <div style="padding: 6px 12px; background: var(--admin-card-bg); border-radius: 6px; color: var(--color-primary); font-size: 13px; font-weight: 600; min-width: 80px; text-align: right;">
                     ${item.costPrice ? (item.costPrice * (item.quantity || 0)).toFixed(2) + ' ₽' : '-'}
                   </div>
                 </div>

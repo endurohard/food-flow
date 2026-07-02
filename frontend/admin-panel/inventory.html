@@ -212,14 +212,14 @@
 
     /* ── Sedap card style override ── */
     .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
-      background: #fff !important;
+      background: var(--admin-card-bg) !important;
       border-radius: 14px !important;
       box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
       border: none !important;
     }
 
     /* ── Button primary ── */
-    .btn-primary, button[style*="background: #1e88e5"], button[style*="background:#1e88e5"],
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
     button[style*="background: #667"], button[style*="background: linear"] {
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
@@ -250,20 +250,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       min-height: 100vh;
       overflow-x: hidden;
     }
 
     /* Navbar */
     .navbar {
-      background: #ffffff;
+      background: var(--admin-card-bg);
       padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -279,7 +279,7 @@
     .menu-toggle {
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 24px;
       cursor: pointer;
       padding: 8px;
@@ -291,13 +291,13 @@
     }
 
     .menu-toggle:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .nav-brand {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -311,8 +311,8 @@
       top: 0;
       width: 280px;
       height: 100vh;
-      background: #ffffff;
-      border-right: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       transition: left 0.3s ease;
       z-index: 200;
       overflow-y: auto;
@@ -342,13 +342,13 @@
 
     .sidebar-header {
       padding: 20px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .sidebar-title {
       font-size: 14px;
       font-weight: 600;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -362,7 +362,7 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       text-decoration: none;
       transition: all 0.3s;
       cursor: pointer;
@@ -370,14 +370,14 @@
     }
 
     .sidebar-item:hover {
-      background: #f5f7fa;
-      color: #2c3e50;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
     }
 
     .sidebar-item.active {
-      background: #f0f7ff;
-      color: #1e88e5;
-      border-left-color: #1e88e5;
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
     }
 
     .sidebar-icon {
@@ -417,7 +417,7 @@
     .title {
       font-size: 24px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -430,7 +430,7 @@
       display: flex;
       gap: 8px;
       margin-bottom: 24px;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
       padding-bottom: 12px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -441,11 +441,11 @@
     }
 
     .tabs::-webkit-scrollbar-track {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .tabs::-webkit-scrollbar-thumb {
-      background: #c5cdd8;
+      background: var(--color-grey-3);
       border-radius: 2px;
     }
 
@@ -453,7 +453,7 @@
       padding: 10px 16px;
       background: none;
       border: none;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
@@ -472,12 +472,12 @@
     }
 
     .tab:hover {
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .tab.active {
-      color: #1e88e5;
-      border-bottom-color: #1e88e5;
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
     }
 
     .tab-content {
@@ -503,50 +503,50 @@
     }
 
     .btn-primary {
-      background: #1e88e5;
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-primary:hover {
-      background: #1976d2;
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.25);
+      background: var(--color-primary-hover);
+      box-shadow: 0 4px 12px rgba(0, 176, 116, 0.25);
     }
 
     .btn-secondary {
-      background: #ffffff;
-      color: #5a6c7d;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--admin-border);
     }
 
     .btn-secondary:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .btn-success {
-      background: #43a047;
+      background: var(--color-success);
       color: white;
     }
 
     .btn-success:hover {
-      background: #388e3c;
+      background: var(--color-success);
     }
 
     .btn-warning {
-      background: #fb8c00;
+      background: var(--color-warning);
       color: white;
     }
 
     .btn-warning:hover {
-      background: #f57c00;
+      background: var(--color-warning);
     }
 
     .btn-danger {
-      background: #e53935;
+      background: var(--color-danger);
       color: white;
     }
 
     .btn-danger:hover {
-      background: #d32f2f;
+      background: var(--color-danger);
     }
 
     .btn-small {
@@ -568,8 +568,8 @@
     }
 
     .stat-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       display: flex;
@@ -608,7 +608,7 @@
     }
 
     .stat-label {
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 12px;
       margin-bottom: 4px;
     }
@@ -616,7 +616,7 @@
     .stat-value {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -627,8 +627,8 @@
 
     /* Inventory Table */
     .table-wrapper {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 20px;
       overflow-x: auto;
@@ -665,17 +665,17 @@
     .search-input {
       width: 100%;
       padding: 12px 16px 12px 40px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
     .search-input:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .search-icon {
@@ -683,7 +683,7 @@
       left: 12px;
       top: 50%;
       transform: translateY(-50%);
-      color: #8b95a5;
+      color: var(--color-grey-5);
     }
 
     .filter-buttons {
@@ -694,9 +694,9 @@
 
     .filter-btn {
       padding: 8px 16px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
-      color: #5a6c7d;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      color: var(--color-text-secondary);
       border-radius: 8px;
       cursor: pointer;
       font-size: 13px;
@@ -705,14 +705,14 @@
     }
 
     .filter-btn:hover {
-      border-color: #1e88e5;
-      color: #2c3e50;
+      border-color: var(--color-primary);
+      color: var(--color-text-primary);
     }
 
     .filter-btn.active {
-      background: #f0f7ff;
-      border-color: #1e88e5;
-      color: #1e88e5;
+      background: var(--color-primary-light);
+      border-color: var(--color-primary);
+      color: var(--color-primary);
     }
 
     .data-table {
@@ -723,22 +723,22 @@
     }
 
     .data-table th {
-      background: #f5f7fa;
-      color: #5a6c7d;
+      background: var(--admin-content-bg);
+      color: var(--color-text-secondary);
       padding: 16px;
       text-align: left;
       font-weight: 600;
-      border-bottom: 2px solid #e1e8ed;
+      border-bottom: 2px solid var(--admin-border);
       white-space: nowrap;
     }
 
     .data-table td {
       padding: 16px;
-      border-bottom: 1px solid #e1e8ed;
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .data-table tr:hover {
-      background: #f5f7fa;
+      background: var(--admin-content-bg);
     }
 
     .stock-badge {
@@ -752,12 +752,12 @@
 
     .stock-badge.in-stock {
       background: rgba(34, 197, 94, 0.1);
-      color: #22c55e;
+      color: var(--color-success);
     }
 
     .stock-badge.low-stock {
       background: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
+      color: var(--color-warning);
     }
 
     .stock-badge.out-of-stock {
@@ -784,8 +784,8 @@
       transition: all 0.3s;
     }
 
-    .quantity-fill.high { background: #22c55e; }
-    .quantity-fill.medium { background: #f59e0b; }
+    .quantity-fill.high { background: var(--color-success); }
+    .quantity-fill.medium { background: var(--color-warning); }
     .quantity-fill.low { background: #ef4444; }
 
     /* Modal */
@@ -809,8 +809,8 @@
     }
 
     .modal-content {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 16px;
       padding: 24px;
       max-width: 600px;
@@ -843,7 +843,7 @@
     .modal-title {
       font-size: 20px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     @media (min-width: 768px) {
@@ -855,14 +855,14 @@
     .close-btn {
       background: none;
       border: none;
-      color: #8b95a5;
+      color: var(--color-grey-5);
       font-size: 24px;
       cursor: pointer;
       padding: 4px;
     }
 
     .close-btn:hover {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
     }
 
     .form-row {
@@ -888,7 +888,7 @@
 
     .form-label {
       display: block;
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-weight: 600;
       margin-bottom: 8px;
       font-size: 14px;
@@ -897,10 +897,10 @@
     .form-input, .form-select, .form-textarea {
       width: 100%;
       padding: 10px 14px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 8px;
-      color: #2c3e50;
+      color: var(--color-text-primary);
       font-size: 14px;
     }
 
@@ -912,8 +912,8 @@
 
     .form-input:focus, .form-select:focus, .form-textarea:focus {
       outline: none;
-      border-color: #1e88e5;
-      box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.1);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
     }
 
     .form-textarea {
@@ -925,8 +925,8 @@
       position: fixed;
       top: 80px;
       right: 20px;
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 12px 20px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -934,7 +934,7 @@
       display: none;
       animation: slideIn 0.3s ease-out;
       max-width: calc(100% - 40px);
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .notification.show {
@@ -953,8 +953,8 @@
     }
 
     .supplier-card {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 16px;
@@ -971,16 +971,16 @@
     .supplier-name {
       font-size: 18px;
       font-weight: 700;
-      color: #2c3e50;
+      color: var(--color-text-primary);
     }
 
     .supplier-rating {
-      color: #fb8c00;
+      color: var(--color-warning);
       font-size: 14px;
     }
 
     .supplier-info {
-      color: #5a6c7d;
+      color: var(--color-text-secondary);
       font-size: 14px;
       line-height: 1.6;
     }
@@ -993,8 +993,8 @@
     }
 
     .order-history-item {
-      background: #ffffff;
-      border: 1px solid #e1e8ed;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 12px;
       padding: 16px;
       margin-bottom: 12px;
@@ -1012,7 +1012,7 @@
 
     .order-number {
       font-weight: 700;
-      color: #1e88e5;
+      color: var(--color-primary);
     }
 
     .order-status {
@@ -1022,9 +1022,9 @@
       font-weight: 600;
     }
 
-    .order-status.pending { background: rgba(245, 158, 11, 0.1); color: #fb8c00; }
-    .order-status.completed { background: rgba(34, 197, 94, 0.1); color: #43a047; }
-    .order-status.cancelled { background: rgba(239, 68, 68, 0.1); color: #e53935; }
+    .order-status.pending { background: rgba(245, 158, 11, 0.1); color: var(--color-warning); }
+    .order-status.completed { background: rgba(34, 197, 94, 0.1); color: var(--color-success); }
+    .order-status.cancelled { background: rgba(239, 68, 68, 0.1); color: var(--color-danger); }
   </style>
 </head>
 <body>
@@ -1197,7 +1197,7 @@ AUTH.requireAuth();
     logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
     logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
       '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
-      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
       ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
       ' onmouseout="this.style.background=\'transparent\'">' +
       'Выйти из системы</button>';
@@ -1351,15 +1351,15 @@ AUTH.requireAuth();
           </tbody>
         </table>
 
-        <div style="margin-top: 24px; padding: 20px; background: #f0f7ff; border-radius: 12px; border: 2px solid #1e88e5;">
+        <div style="margin-top: 24px; padding: 20px; background: var(--color-primary-light); border-radius: 12px; border: 2px solid var(--color-primary);">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
-              <div style="font-size: 14px; color: #5a6c7d; margin-bottom: 4px;">Общая стоимость склада</div>
-              <div style="font-size: 28px; font-weight: 700; color: #1e88e5;" id="totalInventoryValueDisplay">0 ₽</div>
+              <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 4px;">Общая стоимость склада</div>
+              <div style="font-size: 28px; font-weight: 700; color: var(--color-primary);" id="totalInventoryValueDisplay">0 ₽</div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 14px; color: #5a6c7d; margin-bottom: 4px;">Всего позиций</div>
-              <div style="font-size: 24px; font-weight: 700; color: #2c3e50;" id="totalInventoryCount">0</div>
+              <div style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 4px;">Всего позиций</div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--color-text-primary);" id="totalInventoryCount">0</div>
             </div>
           </div>
         </div>
@@ -1450,7 +1450,7 @@ AUTH.requireAuth();
             </tr>
           </thead>
           <tbody id="productionTableBody">
-            <tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Загрузка...</td></tr>
+            <tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1461,7 +1461,7 @@ AUTH.requireAuth();
       <div class="table-wrapper" style="text-align:center;padding:48px 24px;">
         <div style="font-size:48px;margin-bottom:12px;">🚛</div>
         <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">Опт и отгрузка переехали в раздел «Опт»</h2>
-        <p style="color:#5a6c7d;margin-bottom:20px;">Оптовые заказы, контрагенты, возвраты, накладные и отчёты — в отдельном разделе.</p>
+        <p style="color:var(--color-text-secondary);margin-bottom:20px;">Оптовые заказы, контрагенты, возвраты, накладные и отчёты — в отдельном разделе.</p>
         <a class="btn btn-primary" href="/admin-panel/wholesale.html">Открыть раздел «Опт»</a>
       </div>
     </div>
@@ -1492,6 +1492,33 @@ AUTH.requireAuth();
 
     <!-- Reports Tab -->
     <div id="reportsTab" class="tab-content">
+      <!-- Взаиморасчёты с поставщиками -->
+      <div class="table-wrapper" style="margin-bottom:24px;">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:12px;">💰 Взаиморасчёты с поставщиками</h3>
+        <table class="data-table">
+          <thead><tr><th>Поставщик</th><th>Накладных</th><th>Закуплено</th><th>Оплачено</th><th>Долг</th></tr></thead>
+          <tbody id="settlementsBody"><tr><td colspan="5" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Анализ списаний и спроса -->
+      <div class="table-wrapper" style="margin-bottom:24px;">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:12px;">📉 Списания и спрос по позициям</h3>
+        <table class="data-table">
+          <thead><tr><th>Позиция</th><th>Приход</th><th>Продано</th><th>Списано</th><th>Списано на сумму</th><th>Остаток</th></tr></thead>
+          <tbody id="itemAnalysisBody"><tr><td colspan="6" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Спрос по блюдам -->
+      <div class="table-wrapper" style="margin-bottom:24px;">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:12px;">🍽 Спрос по блюдам (аутсайдеры — внизу)</h3>
+        <table class="data-table">
+          <thead><tr><th>Блюдо</th><th>Заказов</th><th>Продано порций</th><th>Выручка</th></tr></thead>
+          <tbody id="dishAnalysisBody"><tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+
       <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 24px;">📊 Отчёты по складу</h2>
 
       <div class="stats-bar">
@@ -1510,7 +1537,7 @@ AUTH.requireAuth();
       </div>
 
       <div class="table-wrapper">
-        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: #2c3e50;">Критические остатки</h3>
+        <h3 style="margin-bottom: 16px; font-size: 16px; font-weight: 700; color: var(--color-text-primary);">Критические остатки</h3>
         <table class="data-table">
           <thead>
             <tr>
@@ -1554,8 +1581,8 @@ AUTH.requireAuth();
           <label class="form-label">Количество (единиц продукции):</label>
           <input type="number" class="form-input" id="productionQty" step="0.001" min="0.001" required oninput="updateProductionCostPreview()">
         </div>
-        <div class="form-group" id="productionCostPreview" style="color:#5a6c7d;font-size:13px;"></div>
-        <div id="productionError" style="color:#e53935;font-size:13px;margin-bottom:10px;"></div>
+        <div class="form-group" id="productionCostPreview" style="color:var(--color-text-secondary);font-size:13px;"></div>
+        <div id="productionError" style="color:var(--color-danger);font-size:13px;margin-bottom:10px;"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
           <button type="button" class="btn" onclick="closeProductionModal()">Отмена</button>
           <button type="submit" class="btn btn-primary">🏭 Произвести</button>
@@ -1725,10 +1752,10 @@ AUTH.requireAuth();
           <textarea class="form-textarea" id="orderNotes" rows="3"></textarea>
         </div>
 
-        <div style="padding: 16px; background: #f5f7fa; border-radius: 8px; margin-bottom: 16px;">
+        <div style="padding: 16px; background: var(--admin-content-bg); border-radius: 8px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 600; color: #5a6c7d;">Общая сумма:</span>
-            <span style="font-size: 24px; font-weight: 700; color: #1e88e5;" id="orderTotalDisplay">0 ₽</span>
+            <span style="font-weight: 600; color: var(--color-text-secondary);">Общая сумма:</span>
+            <span style="font-size: 24px; font-weight: 700; color: var(--color-primary);" id="orderTotalDisplay">0 ₽</span>
           </div>
         </div>
 
@@ -1779,7 +1806,8 @@ AUTH.requireAuth();
             suppliers = suppData.suppliers.map(s => ({
               id: s.id, name: s.name, contact: s.contact_person || '',
               phone: s.phone || '', email: s.email || '',
-              address: s.address || '', categories: '', rating: 5
+              address: s.address || '', categories: '', rating: 5,
+              balance: parseFloat(s.balance) || 0
             }));
           }
         }
@@ -1962,7 +1990,7 @@ AUTH.requireAuth();
             <td>${item.minQuantity}</td>
             <td><span class="stock-badge ${status}">${getStatusLabel(status)}</span></td>
             <td>${(item.costPrice || 0).toFixed(2)} ₽/${item.unit}</td>
-            <td style="font-weight: 700; color: #1e88e5;">${totalValue.toFixed(2)} ₽</td>
+            <td style="font-weight: 700; color: var(--color-primary);">${totalValue.toFixed(2)} ₽</td>
             <td>${supplier ? supplier.name : '-'}</td>
             <td>
               <button class="btn btn-secondary btn-small" onclick="editItem(${item.id})">✏️</button>
@@ -2124,7 +2152,7 @@ AUTH.requireAuth();
       const resultEl = document.getElementById('movementResult');
 
       if (!warehouseId || !itemId) {
-        resultEl.style.color = '#e53935';
+        resultEl.style.color = 'var(--color-danger)';
         resultEl.textContent = 'Выберите склад и товар';
         return;
       }
@@ -2139,12 +2167,12 @@ AUTH.requireAuth();
           const err = await res.json().catch(() => ({}));
           throw new Error(err.message || 'HTTP ' + res.status);
         }
-        resultEl.style.color = '#22c55e';
+        resultEl.style.color = 'var(--color-success)';
         resultEl.textContent = 'Движение записано';
         document.getElementById('movementForm').reset();
         await reloadInventoryFromAPI();
       } catch (e) {
-        resultEl.style.color = '#e53935';
+        resultEl.style.color = 'var(--color-danger)';
         resultEl.textContent = 'Ошибка: ' + e.message;
       }
     }
@@ -2222,12 +2250,51 @@ AUTH.requireAuth();
             <div><strong>Адрес:</strong> ${s.address}</div>
             <div><strong>Категории:</strong> ${s.categories}</div>
           </div>
+          <div style="margin:10px 0;">
+            ${(s.balance || 0) > 0
+              ? '<span style="background:var(--color-danger-light);color:var(--color-danger);border-radius:8px;padding:4px 10px;font-weight:600;">Долг: ' + s.balance.toLocaleString('ru-RU') + ' ₽</span>'
+              : '<span style="background:var(--color-success-light);color:var(--color-success);border-radius:8px;padding:4px 10px;font-weight:600;">Долгов нет</span>'}
+          </div>
           <div class="supplier-actions">
             <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
-            <button class="btn btn-primary btn-small">📦 Заказать</button>
+            <button class="btn btn-primary btn-small" onclick="paySupplier('${s.id}', ${s.balance || 0})">💸 Оплатить</button>
           </div>
         </div>
       `).join('');
+    }
+
+    async function paySupplier(supplierId, debt) {
+      const raw = prompt('Сумма оплаты поставщику, ₽' + (debt > 0 ? ' (долг: ' + debt.toLocaleString('ru-RU') + ' ₽)' : ''), debt > 0 ? debt : '');
+      if (raw === null) return;
+      const amount = parseFloat(String(raw).replace(',', '.'));
+      if (!amount || amount <= 0) { alert('Некорректная сумма'); return; }
+      try {
+        const res = await AUTH.fetch('/api/suppliers/' + supplierId + '/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount, method: 'transfer' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        showNotification('💸 Оплачено ' + amount.toLocaleString('ru-RU') + ' ₽');
+        await reloadSuppliersFromAPI();
+      } catch (e) { alert('Ошибка оплаты: ' + e.message); }
+    }
+
+    async function reloadSuppliersFromAPI() {
+      try {
+        const res = await AUTH.fetch('/api/suppliers');
+        if (res.ok) {
+          const data = await res.json();
+          suppliers = (data.suppliers || []).map(s => ({
+            id: s.id, name: s.name, contact: s.contact_person || '',
+            phone: s.phone || '', email: s.email || '',
+            address: s.address || '', categories: '', rating: 5,
+            balance: parseFloat(s.balance) || 0
+          }));
+          renderSuppliers();
+        }
+      } catch (e) { /* not fatal */ }
     }
 
     function openAddSupplierModal() {
@@ -2272,17 +2339,17 @@ AUTH.requireAuth();
             <div class="order-header">
               <div>
                 <span class="order-number">Заказ #${order.id}</span>
-                <span style="color: #5a6c7d; margin-left: 12px;">${new Date(order.date).toLocaleDateString('ru-RU')}</span>
+                <span style="color: var(--color-text-secondary); margin-left: 12px;">${new Date(order.date).toLocaleDateString('ru-RU')}</span>
               </div>
               <span class="order-status ${order.status}">${order.status === 'completed' ? 'Завершён' : 'В обработке'}</span>
             </div>
-            <div style="color: #5a6c7d; margin-bottom: 8px;">
+            <div style="color: var(--color-text-secondary); margin-bottom: 8px;">
               <strong>Поставщик:</strong> ${supplier ? supplier.name : '-'}
             </div>
-            <div style="color: #2c3e50;">
+            <div style="color: var(--color-text-primary);">
               <strong>Товары:</strong> ${order.items.map(i => `${i.name} (${i.quantity} ${i.unit || 'шт'})`).join(', ')}
             </div>
-            <div style="color: #1e88e5; font-size: 18px; font-weight: 700; margin-top: 8px;">
+            <div style="color: var(--color-primary); font-size: 18px; font-weight: 700; margin-top: 8px;">
               Сумма: ${order.total.toLocaleString('ru-RU')} ₽
             </div>
           </div>
@@ -2378,7 +2445,41 @@ AUTH.requireAuth();
     });
 
     // Reports
+    async function loadAnalysisReports() {
+      try {
+        const [setRes, itemRes, dishRes] = await Promise.all([
+          AUTH.fetch('/api/suppliers/reports/settlements'),
+          AUTH.fetch('/api/inventory/reports/item-analysis'),
+          AUTH.fetch('/api/inventory/reports/dish-analysis')
+        ]);
+        const fmt = v => (parseFloat(v) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 2});
+
+        if (setRes.ok) {
+          const rows = (await setRes.json()).settlements || [];
+          document.getElementById('settlementsBody').innerHTML = rows.length ? rows.map(s => `<tr>
+            <td><strong>${s.name}</strong></td><td>${s.invoices_count}</td><td>${fmt(s.invoiced)} ₽</td><td>${fmt(s.paid)} ₽</td>
+            <td>${parseFloat(s.balance) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + fmt(s.balance) + ' ₽</span>' : '<span style="color:var(--color-success);">0 ₽</span>'}</td>
+          </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
+        }
+        if (itemRes.ok) {
+          const rows = (await itemRes.json()).items || [];
+          document.getElementById('itemAnalysisBody').innerHTML = rows.length ? rows.map(i => `<tr>
+            <td><strong>${i.name}</strong></td><td>${fmt(i.received_qty)}</td><td>${fmt(i.sold_qty)}</td>
+            <td>${parseFloat(i.written_off_qty) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + fmt(i.written_off_qty) + '</span>' : '0'}</td>
+            <td>${fmt(i.write_off_cost)} ₽</td><td>${fmt(i.stock)} ${i.unit || ''}</td>
+          </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
+        }
+        if (dishRes.ok) {
+          const rows = (await dishRes.json()).dishes || [];
+          document.getElementById('dishAnalysisBody').innerHTML = rows.length ? rows.map((d, idx) => `<tr${idx >= rows.length - 3 && parseFloat(d.sold_qty) === 0 ? ' style="opacity:.6"' : ''}>
+            <td><strong>${d.name}</strong></td><td>${d.orders_count}</td><td>${fmt(d.sold_qty)}</td><td>${fmt(d.revenue)} ₽</td>
+          </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
+        }
+      } catch (e) { /* отчёты не критичны */ }
+    }
+
     function renderReports() {
+      loadAnalysisReports();
       const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
       const monthlyPurchases = purchaseOrders
         .filter(o => new Date(o.date).getMonth() === new Date().getMonth())
@@ -2399,7 +2500,7 @@ AUTH.requireAuth();
             <td><strong>${item.name}</strong></td>
             <td>${item.quantity} ${item.unit}</td>
             <td>${item.minQuantity} ${item.unit}</td>
-            <td style="color: #fb8c00; font-weight: 700;">${needed.toFixed(1)} ${item.unit}</td>
+            <td style="color: var(--color-warning); font-weight: 700;">${needed.toFixed(1)} ${item.unit}</td>
             <td>${supplier ? supplier.name : '-'}</td>
             <td>
               <button class="btn btn-warning btn-small" onclick="quickRestock(${item.id})">📦 Заказать</button>
@@ -2436,7 +2537,7 @@ AUTH.requireAuth();
         completed.reduce((s, r) => s + (parseFloat(r.total_cost) || 0), 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
 
       if (!productionRuns.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Выпусков пока нет — запустите производство по техкарте</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Выпусков пока нет — запустите производство по техкарте</td></tr>';
         return;
       }
       tbody.innerHTML = productionRuns.map(r => {
@@ -2450,8 +2551,8 @@ AUTH.requireAuth();
           <td>${parseFloat(r.quantity).toLocaleString('ru-RU')} ${r.output_unit || ''}</td>
           <td>${(parseFloat(r.total_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
           <td>${(parseFloat(r.unit_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
-          <td style="font-size:12px;color:#5a6c7d;">${ings}</td>
-          <td>${cancelled ? '<span style="color:#e53935;">Отменён</span>' : '<span style="color:#22c55e;">Выполнен</span>'}</td>
+          <td style="font-size:12px;color:var(--color-text-secondary);">${ings}</td>
+          <td>${cancelled ? '<span style="color:var(--color-danger);">Отменён</span>' : '<span style="color:var(--color-success);">Выполнен</span>'}</td>
           <td>${cancelled ? '' : `<button class="btn btn-small" onclick="cancelProductionRun('${r.id}')">↩️ Отменить</button>`}</td>
         </tr>`;
       }).join('');
