@@ -9,6 +9,7 @@ declare global {
       userRole?: string;
       enterpriseId?: string;
       enterpriseRole?: string;
+      isInternal?: boolean;
     }
   }
 }
@@ -51,8 +52,21 @@ export const optionalAuth = async (req: Request, _res: Response, next: NextFunct
   next();
 };
 
+// Межсервисная аутентификация: X-Internal-Token (если задан INTERNAL_TOKEN),
+// иначе — обычная JWT-аутентификация пользователя.
+export const authenticateInternal = async (req: Request, res: Response, next: NextFunction): Promise<any> => {
+  const internalToken = req.headers['x-internal-token'];
+  if (config.internalToken && internalToken === config.internalToken) {
+    req.isInternal = true;
+    return next();
+  }
+  return authenticateUser(req, res, next);
+};
+
 export const requireRole = (...allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction): any => {
+    if (req.isInternal) return next();
+
     const userRole = req.userRole;
     const enterpriseRole = req.enterpriseRole;
 

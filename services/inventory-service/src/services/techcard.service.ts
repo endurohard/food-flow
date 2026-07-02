@@ -14,6 +14,8 @@ export class TechCardService {
 
     const result = await this.pool.query(
       `SELECT tc.*, mi.name as menu_item_name, mi.price as menu_item_price,
+        oi.name as output_item_name, oi.unit as output_item_unit,
+        oi.wholesale_price as output_wholesale_price, oi.retail_price as output_retail_price,
         COALESCE(
           json_agg(
             json_build_object(
@@ -28,12 +30,13 @@ export class TechCardService {
           ) FILTER (WHERE tci.id IS NOT NULL), '[]'
         ) as ingredients
        FROM tech_cards tc
-       INNER JOIN menu_items mi ON tc.menu_item_id = mi.id
+       LEFT JOIN menu_items mi ON tc.menu_item_id = mi.id
+       LEFT JOIN inventory_items oi ON tc.output_item_id = oi.id
        LEFT JOIN tech_card_ingredients tci ON tci.tech_card_id = tc.id
        LEFT JOIN inventory_items ii ON tci.inventory_item_id = ii.id
        ${condition}
-       GROUP BY tc.id, mi.name, mi.price
-       ORDER BY mi.name`,
+       GROUP BY tc.id, mi.name, mi.price, oi.name, oi.unit, oi.wholesale_price, oi.retail_price
+       ORDER BY COALESCE(tc.name, mi.name, oi.name)`,
       values
     );
     return result.rows;
@@ -41,9 +44,12 @@ export class TechCardService {
 
   async getById(techCardId: string): Promise<any> {
     const result = await this.pool.query(
-      `SELECT tc.*, mi.name as menu_item_name, mi.price as menu_item_price
+      `SELECT tc.*, mi.name as menu_item_name, mi.price as menu_item_price,
+        oi.name as output_item_name, oi.unit as output_item_unit,
+        oi.wholesale_price as output_wholesale_price, oi.retail_price as output_retail_price
        FROM tech_cards tc
-       INNER JOIN menu_items mi ON tc.menu_item_id = mi.id
+       LEFT JOIN menu_items mi ON tc.menu_item_id = mi.id
+       LEFT JOIN inventory_items oi ON tc.output_item_id = oi.id
        WHERE tc.id = $1`,
       [techCardId]
     );
@@ -66,9 +72,10 @@ export class TechCardService {
       await client.query('BEGIN');
 
       const tcResult = await client.query(
-        `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [data.menuItemId, enterpriseId || null, data.yieldWeight || null, data.cookingInstructions || null]
+        `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name, output_item_id, output_quantity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [data.menuItemId || null, enterpriseId || null, data.yieldWeight || null, data.cookingInstructions || null,
+         data.name || null, data.outputItemId || null, data.outputQuantity ?? 1]
       );
       const techCard = tcResult.rows[0];
 
@@ -105,6 +112,9 @@ export class TechCardService {
       if (data.yieldWeight !== undefined) { fields.push(`yield_weight = $${p++}`); values.push(data.yieldWeight); }
       if (data.cookingInstructions !== undefined) { fields.push(`cooking_instructions = $${p++}`); values.push(data.cookingInstructions); }
       if (data.isActive !== undefined) { fields.push(`is_active = $${p++}`); values.push(data.isActive); }
+      if (data.name !== undefined) { fields.push(`name = $${p++}`); values.push(data.name); }
+      if (data.outputItemId !== undefined) { fields.push(`output_item_id = $${p++}`); values.push(data.outputItemId); }
+      if (data.outputQuantity !== undefined) { fields.push(`output_quantity = $${p++}`); values.push(data.outputQuantity); }
 
       if (fields.length) {
         values.push(techCardId);
@@ -156,12 +166,28 @@ export class TechCardService {
     const menuPrice = parseFloat(card.menu_item_price) || 0;
     const margin = menuPrice > 0 ? ((menuPrice - totalCost) / menuPrice * 100) : 0;
 
+    // Для производственной техкарты: себестоимость единицы выпуска и маржа по опту/рознице
+    const outputQty = parseFloat(card.output_quantity) || 1;
+    const unitCost = totalCost / outputQty;
+    const wholesalePrice = card.output_wholesale_price !== null && card.output_wholesale_price !== undefined
+      ? parseFloat(card.output_wholesale_price) : null;
+    const retailPrice = card.output_retail_price !== null && card.output_retail_price !== undefined
+      ? parseFloat(card.output_retail_price) : null;
+
     return {
       techCardId: card.id,
+      name: card.name,
       menuItemName: card.menu_item_name,
+      outputItemName: card.output_item_name,
+      outputQuantity: outputQty,
       menuPrice,
       totalCost,
+      unitCost: Math.round(unitCost * 100) / 100,
       margin: Math.round(margin * 100) / 100,
+      wholesalePrice,
+      retailPrice,
+      wholesaleMargin: wholesalePrice && wholesalePrice > 0 ? Math.round((wholesalePrice - unitCost) / wholesalePrice * 10000) / 100 : null,
+      retailMargin: retailPrice && retailPrice > 0 ? Math.round((retailPrice - unitCost) / retailPrice * 10000) / 100 : null,
       ingredients: ingredientCosts
     };
   }

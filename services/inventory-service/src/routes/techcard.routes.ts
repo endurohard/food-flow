@@ -42,7 +42,10 @@ router.get('/:id/cost', authenticateUser, async (req: Request, res: Response) =>
 router.post('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
-      menuItemId: Joi.string().uuid().required(),
+      menuItemId: Joi.string().uuid().optional(),
+      name: Joi.string().max(255).optional(),
+      outputItemId: Joi.string().uuid().optional(),
+      outputQuantity: Joi.number().positive().optional(),
       yieldWeight: Joi.number().min(0).optional(),
       cookingInstructions: Joi.string().optional(),
       ingredients: Joi.array().items(Joi.object({
@@ -52,7 +55,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
         wastePercent: Joi.number().min(0).max(100).optional(),
         isOptional: Joi.boolean().optional()
       })).optional()
-    });
+    }).or('menuItemId', 'outputItemId');
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 

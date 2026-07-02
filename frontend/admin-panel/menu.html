@@ -1113,6 +1113,16 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
       <span>Склад</span>
     </a>
+    <a href="/admin-panel/wholesale.html" class="nav-item">
+      <!-- Truck / wholesale icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4h11v9H1z"/>
+        <path d="M12 7h4l3 3v3h-7"/>
+        <circle cx="5" cy="15.5" r="1.5"/>
+        <circle cx="15" cy="15.5" r="1.5"/>
+      </svg>
+      <span>Опт</span>
+    </a>
     <a href="/admin-panel/finance.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
       <span>Финансы</span>
@@ -1312,7 +1322,7 @@ AUTH.requireAuth();
       <button class="tab" onclick="switchTab('recipes')">📋 Техкарты</button>
       <button class="tab" onclick="switchTab('categories')">📁 Категории</button>
       <button class="tab" onclick="switchTab('modifiers')">🎨 Модификаторы</button>
-      <button class="tab" onclick="switchTab('prices')">💰 Схемы цен</button>
+      <button class="tab" onclick="switchTab('prices')">💰 Цены и маржа</button>
       <button class="tab" onclick="switchTab('costprices')">💵 Цены закупки</button>
       <button class="tab" onclick="switchTab('stoplist')">🚫 Стоп-лист</button>
     </div>
@@ -1405,13 +1415,31 @@ AUTH.requireAuth();
       <div id="modifiersManagement"></div>
     </div>
 
-    <!-- Price Schemes Tab -->
+    <!-- Prices & Margins Tab -->
     <div id="pricesTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-        <h2 style="font-size: 20px; font-weight: 700;">💰 Схемы цен</h2>
-        <button class="btn btn-primary" onclick="openAddPriceSchemeModal()">➕ Создать</button>
+        <h2 style="font-size: 20px; font-weight: 700;">💰 Цены и маржа по позициям</h2>
+        <span style="color:#5a6c7d;font-size:13px;align-self:center;">Себестоимость — фактическая по FIFO-партиям; опт/розница редактируются</span>
       </div>
-      <div id="priceSchemes"></div>
+      <div class="table-wrapper" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Позиция</th>
+              <th>Остаток</th>
+              <th>Себестоимость</th>
+              <th>Оптовая цена</th>
+              <th>Маржа опт</th>
+              <th>Розничная цена</th>
+              <th>Маржа розница</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="marginTableBody">
+            <tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Cost Prices Tab -->
@@ -1896,6 +1924,68 @@ AUTH.requireAuth();
       localStorage.setItem('inventory', JSON.stringify(inventory));
     }
 
+    // ── Цены и маржа (реальный API) ──
+    let marginRows = [];
+
+    async function loadMargins() {
+      try {
+        const res = await AUTH.fetch('/api/inventory/reports/margins');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        marginRows = (await res.json()).margins || [];
+      } catch (e) {
+        marginRows = [];
+      }
+      renderMargins();
+    }
+
+    function fmtMoney(v) {
+      return v === null || v === undefined ? '—' : parseFloat(v).toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽';
+    }
+
+    function renderMargins() {
+      const tbody = document.getElementById('marginTableBody');
+      if (!marginRows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Нет позиций с ценами — назначьте оптовую/розничную цену складским позициям</td></tr>';
+        return;
+      }
+      tbody.innerHTML = marginRows.map(m => {
+        const mw = m.wholesale_margin_percent;
+        const mr = m.retail_margin_percent;
+        const badge = v => v === null || v === undefined ? '—'
+          : '<span style="color:' + (v < 0 ? '#e53935' : v < 20 ? '#f59e0b' : '#22c55e') + ';font-weight:600;">' + v + '%</span>';
+        return `<tr>
+          <td><strong>${m.name}</strong>${m.is_produced ? ' <span style="font-size:11px;background:#eef4ff;color:#1e88e5;border-radius:6px;padding:1px 6px;">производится</span>' : ''}</td>
+          <td>${parseFloat(m.total_stock).toLocaleString('ru-RU')} ${m.unit || ''}</td>
+          <td>${fmtMoney(m.effective_cost)}</td>
+          <td><input type="number" step="0.01" min="0" value="${m.wholesale_price !== null ? parseFloat(m.wholesale_price) : ''}" id="wp-${m.id}" class="form-input" style="width:110px;padding:6px 8px;"></td>
+          <td>${badge(mw)}</td>
+          <td><input type="number" step="0.01" min="0" value="${m.retail_price !== null ? parseFloat(m.retail_price) : ''}" id="rp-${m.id}" class="form-input" style="width:110px;padding:6px 8px;"></td>
+          <td>${badge(mr)}</td>
+          <td><button class="btn btn-small btn-primary" onclick="savePrices('${m.id}')">💾</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function savePrices(itemId) {
+      const wp = document.getElementById('wp-' + itemId).value;
+      const rp = document.getElementById('rp-' + itemId).value;
+      try {
+        const res = await AUTH.fetch('/api/inventory/items/' + itemId + '/prices', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wholesalePrice: wp === '' ? null : parseFloat(wp),
+            retailPrice: rp === '' ? null : parseFloat(rp)
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        await loadMargins();
+      } catch (e) {
+        alert('Ошибка сохранения цен: ' + e.message);
+      }
+    }
+
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -1906,7 +1996,7 @@ AUTH.requireAuth();
       if (tab === 'recipes') renderRecipesManagement();
       else if (tab === 'categories') renderCategoriesManagement();
       else if (tab === 'modifiers') renderModifiersManagement();
-      else if (tab === 'prices') renderPriceSchemes();
+      else if (tab === 'prices') loadMargins();
       else if (tab === 'costprices') renderCostPrices();
       else if (tab === 'stoplist') renderStoplist();
     }

@@ -109,6 +109,22 @@ services:
           - /api/printers
         strip_path: false
 
+  - name: wholesale-service
+    url: http://wholesale-service:3013
+    routes:
+      - name: wholesale-routes
+        paths:
+          - /api/wholesale
+        strip_path: false
+
+  - name: whatsapp-service
+    url: http://whatsapp-service:3014
+    routes:
+      - name: whatsapp-routes
+        paths:
+          - /api/whatsapp
+        strip_path: false
+
   - name: pjsip-service
     url: http://pjsip-service:3009
     routes:
@@ -180,6 +196,6 @@ plugins:
 
   - name: rate-limiting
     config:
-      minute: 100
-      hour: 1000
+      minute: 300
+      hour: 5000
       policy: local

@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import inventoryRoutes from './routes/inventory.routes';
 import supplierRoutes from './routes/supplier.routes';
 import techCardRoutes from './routes/techcard.routes';
+import productionRoutes from './routes/production.routes';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // Routes
+app.use('/api/inventory', productionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/tech-cards', techCardRoutes);

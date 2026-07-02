@@ -1,5 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
+import { config } from '../config';
+import { logger } from '../utils/logger';
 
 export class SupplierService {
   private pool: InstanceType<typeof Pool>;
@@ -155,12 +157,63 @@ export class SupplierService {
 
       await client.query('COMMIT');
 
+      // После успешного COMMIT — создаём расход в finance-service.
+      // Ошибка вызова НЕ должна отменять подтверждение накладной: логируем и продолжаем.
+      await this.createFinanceExpense(invoice.rows[0], receivedBy);
+
       return { ...invoice.rows[0], status: 'received' };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Уведомляет finance-service о расходе по подтверждённой накладной.
+   * Идемпотентно на стороне finance-service (уникальный индекс по supply_invoice_id).
+   */
+  private async createFinanceExpense(invoice: any, receivedBy: string): Promise<void> {
+    if (!invoice.supplier_id) {
+      logger.info('Skipping finance expense for invoice: no supplier', { invoiceId: invoice.id });
+      return;
+    }
+    const amount = parseFloat(invoice.total_amount);
+    if (!amount || amount <= 0) {
+      logger.info('Skipping finance expense for invoice: no positive total_amount', { invoiceId: invoice.id });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${config.financeServiceUrl}/api/finance/expenses/from-supply-invoice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Token': config.internalToken
+        },
+        body: JSON.stringify({
+          supplyInvoiceId: invoice.id,
+          supplierId: invoice.supplier_id,
+          amount,
+          invoiceNumber: invoice.invoice_number || undefined,
+          enterpriseId: invoice.enterprise_id,
+          performedBy: receivedBy
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        logger.warn('Finance service rejected supply invoice expense', {
+          invoiceId: invoice.id, status: response.status, body: text
+        });
+      } else {
+        logger.info('Supply invoice expense created in finance service', { invoiceId: invoice.id });
+      }
+    } catch (error) {
+      logger.error('Failed to create supply invoice expense in finance service', {
+        invoiceId: invoice.id, error: (error as Error).message
+      });
     }
   }
 

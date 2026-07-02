@@ -23,5 +23,7 @@ export const config = {
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production'
-  }
+  },
+  financeServiceUrl: process.env.FINANCE_SERVICE_URL || 'http://finance-service:3012',
+  internalToken: process.env.INTERNAL_TOKEN || ''
 };

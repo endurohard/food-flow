@@ -83,6 +83,26 @@ export class InventoryService {
     return result.rows[0] || null;
   }
 
+  async updatePrices(itemId: string, data: { wholesalePrice?: number | null; retailPrice?: number | null }, enterpriseId?: string): Promise<any> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let p = 1;
+    if (data.wholesalePrice !== undefined) { fields.push(`wholesale_price = $${p++}`); values.push(data.wholesalePrice); }
+    if (data.retailPrice !== undefined) { fields.push(`retail_price = $${p++}`); values.push(data.retailPrice); }
+    if (!fields.length) return null;
+    fields.push('updated_at = NOW()');
+    const whereConds = [`id = $${p++}`];
+    values.push(itemId);
+    if (enterpriseId) {
+      whereConds.push(`enterprise_id = $${p++}`);
+      values.push(enterpriseId);
+    }
+    const result = await this.pool.query(
+      `UPDATE inventory_items SET ${fields.join(', ')} WHERE ${whereConds.join(' AND ')} RETURNING *`, values
+    );
+    return result.rows[0] || null;
+  }
+
   async deleteItem(itemId: string, enterpriseId?: string): Promise<boolean> {
     const conds = ['id = $1'];
     const vals: any[] = [itemId];

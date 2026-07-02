@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { FinanceService } from '../services/finance.service';
 import { ExportService } from '../services/export.service';
-import { authenticateUser, requireRole } from '../middleware/auth.middleware';
+import { authenticateUser, authenticateInternal, requireRole } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
 import { config } from '../config';
 
@@ -43,7 +43,13 @@ router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner
 
 router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const register = await financeService.closeRegister(req.params.id, req.userId!);
+    const schema = Joi.object({
+      actualBalance: Joi.number().min(0).optional()
+    });
+    const { error, value } = schema.validate(req.body || {});
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    const register = await financeService.closeRegister(req.params.id, req.userId!, value.actualBalance);
     return res.json({ register });
   } catch (error: any) {
     if (error.message === 'Register not found or already closed') return res.status(404).json({ error: error.message });
@@ -194,7 +200,61 @@ router.post('/expenses', authenticateUser, requireRole('admin', 'owner', 'manage
   } catch (error) { console.error('Create expense error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
+// Внутренний вызов из inventory-service: расход по подтверждённой накладной поставщика.
+// Аутентификация: X-Internal-Token (межсервисный) либо обычный JWT.
+router.post('/expenses/from-supply-invoice', authenticateInternal, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const schema = Joi.object({
+      supplyInvoiceId: Joi.string().uuid().required(),
+      supplierId: Joi.string().uuid().required(),
+      amount: Joi.number().positive().required(),
+      invoiceNumber: Joi.string().max(255).optional().allow(null, ''),
+      enterpriseId: Joi.string().uuid().optional().allow(null),
+      performedBy: Joi.string().uuid().optional().allow(null)
+    });
+    const { error, value } = schema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    // При JWT-запросе enterpriseId и performedBy берём из токена (нельзя подменить телом запроса)
+    const enterpriseId = req.isInternal ? value.enterpriseId : req.enterpriseId;
+    const performedBy = req.isInternal ? value.performedBy : req.userId;
+
+    const { expense, created } = await financeService.createExpenseFromSupplyInvoice({
+      supplyInvoiceId: value.supplyInvoiceId,
+      supplierId: value.supplierId,
+      amount: value.amount,
+      invoiceNumber: value.invoiceNumber || undefined,
+      enterpriseId,
+      performedBy
+    });
+    return res.status(created ? 201 : 200).json({ expense, created });
+  } catch (error) { console.error('Create expense from supply invoice error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
 // ========== ОТЧЁТЫ ==========
+
+router.get('/reports/cash-daily', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const reports = await financeService.getCashDailyReports({
+      enterpriseId: req.enterpriseId,
+      registerId: req.query.registerId as string,
+      from: req.query.from as string,
+      to: req.query.to as string
+    });
+    return res.json({ reports });
+  } catch (error) { console.error('Cash daily reports error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+router.get('/reports/supplier-expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const report = await financeService.getSupplierExpensesReport({
+      enterpriseId: req.enterpriseId,
+      from: req.query.from as string,
+      to: req.query.to as string
+    });
+    return res.json({ report });
+  } catch (error) { console.error('Supplier expenses report error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
 
 router.get('/reports/revenue', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {

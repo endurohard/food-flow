@@ -39,14 +39,14 @@ export class FinanceService {
     return result.rows[0] || null;
   }
 
-  async closeRegister(registerId: string, userId: string): Promise<any> {
+  async closeRegister(registerId: string, userId: string, actualBalance?: number): Promise<any> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
       // Блокируем кассу, чтобы никто не добавил операцию между чтением и закрытием
       const reg = await client.query(
-        `SELECT current_balance, enterprise_id
+        `SELECT current_balance, enterprise_id, opened_at, opening_balance
          FROM cash_registers
          WHERE id = $1 AND status = 'open'
          FOR UPDATE`,
@@ -54,10 +54,49 @@ export class FinanceService {
       );
       if (!reg.rows[0]) throw new Error('Register not found or already closed');
 
+      // Итоги смены по операциям с момента открытия (до закрывающей инкассации)
+      const openedAt = reg.rows[0].opened_at || new Date();
+      const totalsResult = await client.query(
+        `SELECT
+           COALESCE(SUM(amount) FILTER (WHERE operation_type = 'sale'), 0)       AS total_sales,
+           COALESCE(SUM(amount) FILTER (WHERE operation_type = 'refund'), 0)     AS total_refunds,
+           COALESCE(SUM(amount) FILTER (WHERE operation_type = 'cash_in'), 0)    AS total_cash_in,
+           COALESCE(SUM(amount) FILTER (WHERE operation_type = 'cash_out'), 0)   AS total_cash_out,
+           COALESCE(SUM(amount) FILTER (WHERE operation_type = 'encashment'), 0) AS total_encashment
+         FROM cash_operations
+         WHERE register_id = $1 AND created_at >= $2`,
+        [registerId, openedAt]
+      );
+      const t = totalsResult.rows[0];
+      const openingBalance = parseFloat(reg.rows[0].opening_balance) || 0;
+      const expectedBalance = openingBalance
+        + (parseFloat(t.total_sales) || 0)
+        - (parseFloat(t.total_refunds) || 0)
+        + (parseFloat(t.total_cash_in) || 0)
+        - (parseFloat(t.total_cash_out) || 0)
+        - (parseFloat(t.total_encashment) || 0);
+      const discrepancy = actualBalance !== undefined ? actualBalance - expectedBalance : null;
+
       await client.query(
         `INSERT INTO cash_operations (register_id, enterprise_id, operation_type, amount, payment_method, performed_by, description)
          VALUES ($1, $2, 'encashment', $3, 'cash', $4, 'Закрытие смены — инкассация')`,
         [registerId, reg.rows[0].enterprise_id, reg.rows[0].current_balance, userId]
+      );
+
+      // Z-отчёт (итог кассовой смены)
+      await client.query(
+        `INSERT INTO cash_daily_reports
+           (enterprise_id, register_id, report_date, opened_at, closed_at,
+            opening_balance, total_sales, total_refunds, total_cash_in, total_cash_out,
+            total_encashment, expected_balance, actual_balance, discrepancy, closed_by)
+         VALUES ($1, $2, DATE($3), $3, NOW(), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          reg.rows[0].enterprise_id, registerId, openedAt, openingBalance,
+          t.total_sales, t.total_refunds, t.total_cash_in, t.total_cash_out,
+          t.total_encashment, expectedBalance,
+          actualBalance !== undefined ? actualBalance : null,
+          discrepancy, userId
+        ]
       );
 
       const result = await client.query(
@@ -260,7 +299,7 @@ export class FinanceService {
   }
 
   async createExpenseCategory(data: {
-    enterpriseId: string;
+    enterpriseId?: string | null;
     name: string;
     parentId?: string;
   }): Promise<any> {
@@ -276,7 +315,7 @@ export class FinanceService {
   // ========== РАСХОДЫ ==========
 
   async createExpense(data: {
-    enterpriseId: string;
+    enterpriseId?: string | null;
     restaurantId?: string;
     categoryId: string;
     amount: number;
@@ -326,7 +365,153 @@ export class FinanceService {
     return result.rows;
   }
 
+  /**
+   * Создание расхода по подтверждённой накладной поставщика (вызов из inventory-service).
+   * Идемпотентно: уникальный индекс по supply_invoice_id — повторный вызов вернёт существующий расход.
+   */
+  async createExpenseFromSupplyInvoice(data: {
+    supplyInvoiceId: string;
+    supplierId: string;
+    amount: number;
+    invoiceNumber?: string;
+    enterpriseId?: string | null;
+    performedBy?: string;
+  }): Promise<{ expense: any; created: boolean }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Идемпотентность: расход по этой накладной уже создан
+      const existing = await client.query(
+        `SELECT * FROM expenses WHERE supply_invoice_id = $1`,
+        [data.supplyInvoiceId]
+      );
+      if (existing.rows[0]) {
+        await client.query('COMMIT');
+        return { expense: existing.rows[0], created: false };
+      }
+
+      // Находим или создаём категорию «Закупка у поставщиков» для предприятия
+      const categoryName = 'Закупка у поставщиков';
+      const catResult = await client.query(
+        `SELECT id FROM expense_categories
+         WHERE enterprise_id IS NOT DISTINCT FROM $1 AND name = $2 AND is_active = true
+         LIMIT 1`,
+        [data.enterpriseId, categoryName]
+      );
+      let categoryId = catResult.rows[0]?.id;
+      if (!categoryId) {
+        const inserted = await client.query(
+          `INSERT INTO expense_categories (enterprise_id, name) VALUES ($1, $2) RETURNING id`,
+          [data.enterpriseId, categoryName]
+        );
+        categoryId = inserted.rows[0].id;
+      }
+
+      const description = data.invoiceNumber
+        ? `Закупка у поставщика по накладной ${data.invoiceNumber}`
+        : 'Закупка у поставщика по накладной';
+
+      const result = await client.query(
+        `INSERT INTO expenses
+           (enterprise_id, category_id, amount, description, expense_date, recorded_by, supplier_id, supply_invoice_id)
+         VALUES ($1, $2, $3, $4, CURRENT_DATE, $5, $6, $7)
+         ON CONFLICT (supply_invoice_id) WHERE supply_invoice_id IS NOT NULL DO NOTHING
+         RETURNING *`,
+        [
+          data.enterpriseId, categoryId, data.amount, description,
+          data.performedBy || null, data.supplierId, data.supplyInvoiceId
+        ]
+      );
+
+      if (!result.rows[0]) {
+        // Конкурентный запрос успел создать расход — возвращаем его
+        const dup = await client.query(
+          `SELECT * FROM expenses WHERE supply_invoice_id = $1`,
+          [data.supplyInvoiceId]
+        );
+        await client.query('COMMIT');
+        return { expense: dup.rows[0], created: false };
+      }
+
+      await client.query('COMMIT');
+      return { expense: result.rows[0], created: true };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // ========== ОТЧЁТЫ ==========
+
+  async getCashDailyReports(filters: {
+    enterpriseId?: string;
+    registerId?: string;
+    from?: string;
+    to?: string;
+  }): Promise<any[]> {
+    const conds: string[] = []; const vals: any[] = []; let p = 1;
+    if (filters.enterpriseId) { conds.push(`cdr.enterprise_id = $${p++}`); vals.push(filters.enterpriseId); }
+    if (filters.registerId) { conds.push(`cdr.register_id = $${p++}`); vals.push(filters.registerId); }
+    if (filters.from) { conds.push(`cdr.report_date >= $${p++}`); vals.push(filters.from); }
+    if (filters.to) { conds.push(`cdr.report_date <= $${p++}`); vals.push(filters.to); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+
+    const result = await this.pool.query(
+      `SELECT cdr.*, r.name AS register_name, u.first_name, u.last_name
+       FROM cash_daily_reports cdr
+       LEFT JOIN cash_registers r ON cdr.register_id = r.id
+       LEFT JOIN users u ON cdr.closed_by = u.id
+       ${where}
+       ORDER BY cdr.report_date DESC, cdr.closed_at DESC`,
+      vals
+    );
+    return result.rows;
+  }
+
+  async getSupplierExpensesReport(filters: {
+    enterpriseId?: string | null;
+    from?: string;
+    to?: string;
+  }): Promise<any> {
+    const conds: string[] = ['e.supplier_id IS NOT NULL'];
+    const vals: any[] = []; let p = 1;
+    if (filters.enterpriseId) { conds.push(`e.enterprise_id = $${p++}`); vals.push(filters.enterpriseId); }
+    if (filters.from) { conds.push(`e.expense_date >= $${p++}`); vals.push(filters.from); }
+    if (filters.to) { conds.push(`e.expense_date <= $${p++}`); vals.push(filters.to); }
+    const where = 'WHERE ' + conds.join(' AND ');
+
+    const result = await this.pool.query(
+      `SELECT
+         e.supplier_id,
+         s.name AS supplier_name,
+         COUNT(*)::int              AS expenses_count,
+         COALESCE(SUM(e.amount), 0) AS total_amount
+       FROM expenses e
+       LEFT JOIN suppliers s ON e.supplier_id = s.id
+       ${where}
+       GROUP BY e.supplier_id, s.name
+       ORDER BY total_amount DESC`,
+      vals
+    );
+
+    const grandTotal = result.rows.reduce((sum: number, r: any) => sum + (parseFloat(r.total_amount) || 0), 0);
+    const bySupplier = result.rows.map((r: any) => ({
+      ...r,
+      share_percent: grandTotal > 0
+        ? parseFloat((((parseFloat(r.total_amount) || 0) / grandTotal) * 100).toFixed(2))
+        : 0
+    }));
+
+    return {
+      period: { from: filters.from || null, to: filters.to || null },
+      totalAmount: grandTotal,
+      suppliersCount: bySupplier.length,
+      bySupplier
+    };
+  }
 
   async getRevenueReport(filters: {
     restaurantId?: string;

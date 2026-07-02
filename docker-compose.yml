@@ -209,6 +209,8 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      FINANCE_SERVICE_URL: http://finance-service:3012
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     expose:
       - "3006"
     networks:
@@ -269,8 +271,79 @@ services:
       PORT: 3012
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     expose:
       - "3012"
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Wholesale Service (B2B: counterparties, wholesale orders, returns, invoices)
+  wholesale-service:
+    build:
+      context: ./services/wholesale-service
+      dockerfile: Dockerfile
+    container_name: wholesale-service
+    environment:
+      NODE_ENV: production
+      PORT: 3013
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      INVENTORY_SERVICE_URL: http://inventory-service:3005
+      FINANCE_SERVICE_URL: http://finance-service:3012
+      WHATSAPP_SERVICE_URL: http://whatsapp-service:3014
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+    expose:
+      - "3013"
+    networks:
+      - food-flow-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # WhatsApp Service (WhatsApp Web automation: messages, PDF invoices)
+  whatsapp-service:
+    build:
+      context: ./services/whatsapp-service
+      dockerfile: Dockerfile
+    container_name: whatsapp-service
+    environment:
+      NODE_ENV: production
+      PORT: 3014
+      WHATSAPP_TEST_MODE: "${WHATSAPP_TEST_MODE:-true}"
+      WHATSAPP_SESSION_DIR: /data/session
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+    volumes:
+      - whatsapp_session:/data/session
+    shm_size: 256mb
+    mem_limit: 1g
+    expose:
+      - "3014"
+    networks:
+      - food-flow-network
+    restart: unless-stopped
+
+  # Driver Bot Service (Telegram bot for delivery drivers)
+  driver-bot-service:
+    build:
+      context: ./services/driver-bot-service
+      dockerfile: Dockerfile
+    container_name: driver-bot-service
+    environment:
+      NODE_ENV: production
+      PORT: 3015
+      DRIVER_BOT_TOKEN: ${DRIVER_BOT_TOKEN:-}
+      DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      WHOLESALE_SERVICE_URL: http://wholesale-service:3013
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      POLL_INTERVAL_MS: 30000
+    expose:
+      - "3015"
     networks:
       - food-flow-network
     depends_on:
@@ -481,6 +554,7 @@ volumes:
   grafana_data:
   elasticsearch_data:
   telegram_uploads:
+  whatsapp_session:
 
 networks:
   food-flow-network:

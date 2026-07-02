@@ -1070,6 +1070,16 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
       <span>Склад</span>
     </a>
+    <a href="/admin-panel/wholesale.html" class="nav-item">
+      <!-- Truck / wholesale icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4h11v9H1z"/>
+        <path d="M12 7h4l3 3v3h-7"/>
+        <circle cx="5" cy="15.5" r="1.5"/>
+        <circle cx="15" cy="15.5" r="1.5"/>
+      </svg>
+      <span>Опт</span>
+    </a>
 
     <a href="/admin-panel/finance.html" class="nav-item">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
@@ -1398,36 +1408,29 @@ AUTH.requireAuth();
     <!-- Production Tab -->
     <div id="productionTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
-        <h2 style="font-size: 20px; font-weight: 700;">🏭 Производство</h2>
-        <button class="btn btn-primary" onclick="openNewProductionModal()">➕ Новое производство</button>
+        <h2 style="font-size: 20px; font-weight: 700;">🏭 Производство по техкартам</h2>
+        <button class="btn btn-primary" onclick="openNewProductionModal()">➕ Запустить производство</button>
       </div>
 
       <div class="stats-bar">
         <div class="stat-card">
           <div class="stat-icon total">🏭</div>
           <div class="stat-info">
-            <div class="stat-label">Всего производств</div>
+            <div class="stat-label">Выпусков</div>
             <div class="stat-value" id="totalProductions">0</div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon in-stock">✅</div>
+          <div class="stat-icon in-stock">📦</div>
           <div class="stat-info">
-            <div class="stat-label">Завершено</div>
-            <div class="stat-value" id="completedProductions">0</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon low-stock">⏳</div>
-          <div class="stat-info">
-            <div class="stat-label">В процессе</div>
-            <div class="stat-value" id="inProgressProductions">0</div>
+            <div class="stat-label">Произведено единиц</div>
+            <div class="stat-value" id="totalProducedQty">0</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-info" style="flex: 1;">
-            <div class="stat-label">Произведено за месяц</div>
-            <div class="stat-value" id="monthlyProduction">0 ₽</div>
+            <div class="stat-label">Себестоимость выпуска</div>
+            <div class="stat-value" id="totalProductionCost">0 ₽</div>
           </div>
         </div>
       </div>
@@ -1436,80 +1439,30 @@ AUTH.requireAuth();
         <table class="data-table">
           <thead>
             <tr>
-              <th>№</th>
               <th>Дата</th>
               <th>Продукт</th>
-              <th>Количество</th>
-              <th>Использовано материалов</th>
-              <th>Стоимость</th>
-              <th>Ответственный</th>
+              <th>Кол-во</th>
+              <th>Себестоимость</th>
+              <th>За ед.</th>
+              <th>Ингредиенты (списано)</th>
               <th>Статус</th>
               <th>Действия</th>
             </tr>
           </thead>
           <tbody id="productionTableBody">
-            <!-- Production records will be rendered here -->
+            <tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Wholesale and Shipping Tab -->
+    <!-- Wholesale Tab (перенесено в отдельный раздел) -->
     <div id="wholesaleTab" class="tab-content">
-      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
-        <h2 style="font-size: 20px; font-weight: 700;">📤 Оптовая отгрузка</h2>
-        <button class="btn btn-primary" onclick="openNewShipmentModal()">➕ Новая отгрузка</button>
-      </div>
-
-      <div class="stats-bar">
-        <div class="stat-card">
-          <div class="stat-icon total">📤</div>
-          <div class="stat-info">
-            <div class="stat-label">Всего отгрузок</div>
-            <div class="stat-value" id="totalShipments">0</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon in-stock">✅</div>
-          <div class="stat-info">
-            <div class="stat-label">Завершено</div>
-            <div class="stat-value" id="completedShipments">0</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon low-stock">🚚</div>
-          <div class="stat-info">
-            <div class="stat-label">В пути</div>
-            <div class="stat-value" id="inTransitShipments">0</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-info" style="flex: 1;">
-            <div class="stat-label">Сумма за месяц</div>
-            <div class="stat-value" id="monthlyRevenue">0 ₽</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="table-wrapper">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>№ Заказа</th>
-              <th>Дата</th>
-              <th>Клиент</th>
-              <th>Товары</th>
-              <th>Количество</th>
-              <th>Сумма</th>
-              <th>Путевой лист</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody id="shipmentsTableBody">
-            <!-- Shipment records will be rendered here -->
-          </tbody>
-        </table>
+      <div class="table-wrapper" style="text-align:center;padding:48px 24px;">
+        <div style="font-size:48px;margin-bottom:12px;">🚛</div>
+        <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">Опт и отгрузка переехали в раздел «Опт»</h2>
+        <p style="color:#5a6c7d;margin-bottom:20px;">Оптовые заказы, контрагенты, возвраты, накладные и отчёты — в отдельном разделе.</p>
+        <a class="btn btn-primary" href="/admin-panel/wholesale.html">Открыть раздел «Опт»</a>
       </div>
     </div>
 
@@ -1578,6 +1531,39 @@ AUTH.requireAuth();
   </div>
 
   <!-- Add/Edit Item Modal -->
+  <div class="modal" id="productionModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Запустить производство</h2>
+        <button class="close-btn" onclick="closeProductionModal()">&times;</button>
+      </div>
+      <form id="productionForm" onsubmit="submitProduction(event)">
+        <div class="form-group">
+          <label class="form-label">Производственная техкарта:</label>
+          <select class="form-select" id="productionTechCard" required onchange="updateProductionCostPreview()">
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Склад:</label>
+          <select class="form-select" id="productionWarehouse" required>
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Количество (единиц продукции):</label>
+          <input type="number" class="form-input" id="productionQty" step="0.001" min="0.001" required oninput="updateProductionCostPreview()">
+        </div>
+        <div class="form-group" id="productionCostPreview" style="color:#5a6c7d;font-size:13px;"></div>
+        <div id="productionError" style="color:#e53935;font-size:13px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn" onclick="closeProductionModal()">Отмена</button>
+          <button type="submit" class="btn btn-primary">🏭 Произвести</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal" id="itemModal">
     <div class="modal-content">
       <div class="modal-header">
@@ -1911,8 +1897,7 @@ AUTH.requireAuth();
       if (tab === 'suppliers') renderSuppliers();
       else if (tab === 'orders') renderOrders();
       else if (tab === 'reports') renderReports();
-      else if (tab === 'production') renderProduction();
-      else if (tab === 'wholesale') renderWholesale();
+      else if (tab === 'production') loadProductionRuns();
     }
 
     function getItemStatus(item) {
@@ -2425,178 +2410,139 @@ AUTH.requireAuth();
     }
 
     // Production rendering
-    function renderProduction() {
+    // ── Производство (реальный API) ──
+    let productionRuns = [];
+    let productionTechCards = [];
+
+    async function loadProductionRuns() {
+      try {
+        const res = await AUTH.fetch('/api/inventory/production');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        productionRuns = data.productionRuns || [];
+      } catch (e) {
+        productionRuns = [];
+      }
+      renderProductionRuns();
+    }
+
+    function renderProductionRuns() {
       const tbody = document.getElementById('productionTableBody');
+      const completed = productionRuns.filter(r => r.status === 'completed');
+      document.getElementById('totalProductions').textContent = completed.length;
+      document.getElementById('totalProducedQty').textContent =
+        completed.reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0).toLocaleString('ru-RU');
+      document.getElementById('totalProductionCost').textContent =
+        completed.reduce((s, r) => s + (parseFloat(r.total_cost) || 0), 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
 
-      if (productions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #999;">Нет данных о производстве</td></tr>';
-        document.getElementById('totalProductions').textContent = '0';
-        document.getElementById('completedProductions').textContent = '0';
-        document.getElementById('inProgressProductions').textContent = '0';
-        document.getElementById('monthlyProduction').textContent = '0 ₽';
+      if (!productionRuns.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#8a9aa8;">Выпусков пока нет — запустите производство по техкарте</td></tr>';
         return;
       }
-
-      tbody.innerHTML = productions.map(p => {
-        const statusColors = {
-          'completed': '#4caf50',
-          'in-progress': '#fb8c00',
-          'planned': '#1e88e5'
-        };
-        const statusLabels = {
-          'completed': 'Завершено',
-          'in-progress': 'В процессе',
-          'planned': 'Запланировано'
-        };
-
-        return `
-          <tr>
-            <td><strong>#${p.id}</strong></td>
-            <td>${new Date(p.date).toLocaleDateString('ru-RU')}</td>
-            <td><strong>${p.product}</strong></td>
-            <td>${p.quantity} ${p.unit}</td>
-            <td>${p.materialsCost.toLocaleString('ru-RU')} ₽</td>
-            <td><strong>${p.totalCost.toLocaleString('ru-RU')} ₽</strong></td>
-            <td>${p.responsible}</td>
-            <td><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${statusColors[p.status]}22; color: ${statusColors[p.status]};">${statusLabels[p.status]}</span></td>
-            <td>
-              <button class="btn btn-primary btn-small" onclick="viewProductionDetails(${p.id})">📋 Детали</button>
-              ${p.status !== 'completed' ? `<button class="btn btn-success btn-small" onclick="completeProduction(${p.id})">✅ Завершить</button>` : ''}
-            </td>
-          </tr>
-        `;
+      tbody.innerHTML = productionRuns.map(r => {
+        const ings = (r.ingredients || []).map(i =>
+          `${i.itemName}: ${parseFloat(i.quantity).toLocaleString('ru-RU', {maximumFractionDigits: 3})}`
+        ).join(', ');
+        const cancelled = r.status === 'cancelled';
+        return `<tr${cancelled ? ' style="opacity:.55"' : ''}>
+          <td>${new Date(r.produced_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+          <td><strong>${r.output_name || ''}</strong></td>
+          <td>${parseFloat(r.quantity).toLocaleString('ru-RU')} ${r.output_unit || ''}</td>
+          <td>${(parseFloat(r.total_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td>${(parseFloat(r.unit_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td style="font-size:12px;color:#5a6c7d;">${ings}</td>
+          <td>${cancelled ? '<span style="color:#e53935;">Отменён</span>' : '<span style="color:#22c55e;">Выполнен</span>'}</td>
+          <td>${cancelled ? '' : `<button class="btn btn-small" onclick="cancelProductionRun('${r.id}')">↩️ Отменить</button>`}</td>
+        </tr>`;
       }).join('');
-
-      // Update stats
-      document.getElementById('totalProductions').textContent = productions.length;
-      document.getElementById('completedProductions').textContent = productions.filter(p => p.status === 'completed').length;
-      document.getElementById('inProgressProductions').textContent = productions.filter(p => p.status === 'in-progress').length;
-
-      const monthlyTotal = productions
-        .filter(p => new Date(p.date).getMonth() === new Date().getMonth() && p.status === 'completed')
-        .reduce((sum, p) => sum + p.totalCost, 0);
-      document.getElementById('monthlyProduction').textContent = monthlyTotal.toLocaleString('ru-RU') + ' ₽';
     }
 
-    // Wholesale/Shipping rendering
-    function renderWholesale() {
-      const tbody = document.getElementById('shipmentsTableBody');
+    async function openNewProductionModal() {
+      document.getElementById('productionError').textContent = '';
+      document.getElementById('productionCostPreview').textContent = '';
+      document.getElementById('productionForm').reset();
 
-      if (shipments.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #999;">Нет данных об отгрузках</td></tr>';
-        document.getElementById('totalShipments').textContent = '0';
-        document.getElementById('completedShipments').textContent = '0';
-        document.getElementById('inTransitShipments').textContent = '0';
-        document.getElementById('monthlyRevenue').textContent = '0 ₽';
-        return;
+      try {
+        const [tcRes, whRes] = await Promise.all([
+          AUTH.fetch('/api/tech-cards'),
+          AUTH.fetch('/api/inventory/warehouses')
+        ]);
+        const tcData = tcRes.ok ? await tcRes.json() : { techCards: [] };
+        const whData = whRes.ok ? await whRes.json() : { warehouses: [] };
+
+        productionTechCards = (tcData.techCards || []).filter(tc => tc.output_item_id && tc.is_active !== false);
+        document.getElementById('productionTechCard').innerHTML =
+          '<option value="">Выберите техкарту</option>' +
+          productionTechCards.map(tc =>
+            `<option value="${tc.id}">${tc.name || tc.output_item_name || tc.menu_item_name} (выход: ${parseFloat(tc.output_quantity || 1).toLocaleString('ru-RU')} ${tc.output_item_unit || ''})</option>`
+          ).join('');
+
+        const whs = whData.warehouses || [];
+        document.getElementById('productionWarehouse').innerHTML =
+          whs.map(w => `<option value="${w.id}">${w.name}</option>`).join('') || '<option value="">Нет складов</option>';
+      } catch (e) {
+        document.getElementById('productionError').textContent = 'Ошибка загрузки данных: ' + e.message;
       }
 
-      tbody.innerHTML = shipments.map(s => {
-        const statusColors = {
-          'delivered': '#4caf50',
-          'in-transit': '#fb8c00',
-          'pending': '#1e88e5',
-          'cancelled': '#f44336'
-        };
-        const statusLabels = {
-          'delivered': 'Доставлено',
-          'in-transit': 'В пути',
-          'pending': 'Ожидает',
-          'cancelled': 'Отменено'
-        };
-
-        return `
-          <tr>
-            <td><strong>#${s.orderNumber}</strong></td>
-            <td>${new Date(s.date).toLocaleDateString('ru-RU')}</td>
-            <td><strong>${s.client}</strong><br><small style="color: #999;">${s.clientPhone}</small></td>
-            <td>${s.items.slice(0, 2).join(', ')}${s.items.length > 2 ? '...' : ''}</td>
-            <td>${s.totalQuantity} шт</td>
-            <td><strong>${s.totalAmount.toLocaleString('ru-RU')} ₽</strong></td>
-            <td>
-              ${s.waybillNumber ? `<a href="#" onclick="printWaybill('${s.waybillNumber}'); return false;" style="color: #1e88e5;">📄 ${s.waybillNumber}</a>` : '<button class="btn btn-secondary btn-small" onclick="generateWaybill(' + s.id + ')">📄 Создать</button>'}
-            </td>
-            <td><span style="padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${statusColors[s.status]}22; color: ${statusColors[s.status]};">${statusLabels[s.status]}</span></td>
-            <td>
-              <button class="btn btn-primary btn-small" onclick="viewShipmentDetails(${s.id})">📋 Детали</button>
-              ${s.status === 'pending' ? `<button class="btn btn-success btn-small" onclick="markInTransit(${s.id})">🚚 В путь</button>` : ''}
-              ${s.status === 'in-transit' ? `<button class="btn btn-success btn-small" onclick="markDelivered(${s.id})">✅ Доставлено</button>` : ''}
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      // Update stats
-      document.getElementById('totalShipments').textContent = shipments.length;
-      document.getElementById('completedShipments').textContent = shipments.filter(s => s.status === 'delivered').length;
-      document.getElementById('inTransitShipments').textContent = shipments.filter(s => s.status === 'in-transit').length;
-
-      const monthlyRevenue = shipments
-        .filter(s => new Date(s.date).getMonth() === new Date().getMonth() && s.status === 'delivered')
-        .reduce((sum, s) => sum + s.totalAmount, 0);
-      document.getElementById('monthlyRevenue').textContent = monthlyRevenue.toLocaleString('ru-RU') + ' ₽';
+      document.getElementById('productionModal').classList.add('active');
     }
 
-    // Modal stubs for new functionality
-    function openNewProductionModal() {
-      alert('🏭 Модальное окно для создания производства\n\nЗдесь можно будет:\n- Выбрать продукт\n- Указать количество\n- Выбрать материалы\n- Назначить ответственного');
+    function closeProductionModal() {
+      document.getElementById('productionModal').classList.remove('active');
     }
 
-    function openNewShipmentModal() {
-      alert('📤 Модальное окно для новой отгрузки\n\nЗдесь можно будет:\n- Выбрать клиента\n- Добавить товары\n- Указать количество\n- Сформировать путевой лист');
+    async function updateProductionCostPreview() {
+      const tcId = document.getElementById('productionTechCard').value;
+      const qty = parseFloat(document.getElementById('productionQty').value) || 0;
+      const el = document.getElementById('productionCostPreview');
+      if (!tcId) { el.textContent = ''; return; }
+      try {
+        const res = await AUTH.fetch('/api/tech-cards/' + tcId + '/cost');
+        if (!res.ok) return;
+        const data = await res.json();
+        const unitCost = data.cost && data.cost.unitCost ? data.cost.unitCost : 0;
+        el.textContent = 'Расчётная себестоимость: ' + unitCost.toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽/ед.'
+          + (qty > 0 ? ' × ' + qty.toLocaleString('ru-RU') + ' = ' + (unitCost * qty).toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽' : '')
+          + ' (фактическая — по FIFO-партиям при выпуске)';
+      } catch (e) { /* превью необязательно */ }
     }
 
-    function viewProductionDetails(id) {
-      const prod = productions.find(p => p.id === id);
-      if (prod) {
-        alert(`📋 Детали производства #${id}\n\nПродукт: ${prod.product}\nКоличество: ${prod.quantity} ${prod.unit}\nМатериалы: ${prod.materialsCost} ₽\nСтоимость: ${prod.totalCost} ₽\nОтветственный: ${prod.responsible}\nСтатус: ${prod.status}`);
+    async function submitProduction(event) {
+      event.preventDefault();
+      const errEl = document.getElementById('productionError');
+      errEl.textContent = '';
+      try {
+        const res = await AUTH.fetch('/api/inventory/production', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            techCardId: document.getElementById('productionTechCard').value,
+            warehouseId: document.getElementById('productionWarehouse').value,
+            quantity: parseFloat(document.getElementById('productionQty').value)
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        closeProductionModal();
+        showNotification('🏭 Выпуск проведён: себестоимость ' + (parseFloat(data.productionRun.unit_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽/ед.');
+        await loadProductionRuns();
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        errEl.textContent = e.message;
       }
     }
 
-    function completeProduction(id) {
-      const prod = productions.find(p => p.id === id);
-      if (prod && confirm(`Завершить производство #${id}?`)) {
-        prod.status = 'completed';
-        renderProduction();
-        showNotification('✅ Производство завершено');
-      }
-    }
-
-    function viewShipmentDetails(id) {
-      const ship = shipments.find(s => s.id === id);
-      if (ship) {
-        alert(`📋 Детали отгрузки #${id}\n\nКлиент: ${ship.client}\nТелефон: ${ship.clientPhone}\nТовары: ${ship.items.join(', ')}\nСумма: ${ship.totalAmount} ₽\nПутевой лист: ${ship.waybillNumber || 'Не создан'}\nСтатус: ${ship.status}`);
-      }
-    }
-
-    function generateWaybill(id) {
-      const ship = shipments.find(s => s.id === id);
-      if (ship) {
-        ship.waybillNumber = 'ПЛ-' + Date.now().toString().slice(-6);
-        renderWholesale();
-        showNotification(`📄 Путевой лист ${ship.waybillNumber} создан`);
-      }
-    }
-
-    function printWaybill(number) {
-      alert(`🖨️ Печать путевого листа ${number}\n\nЗдесь будет открыта форма путевого листа для печати`);
-    }
-
-    function markInTransit(id) {
-      const ship = shipments.find(s => s.id === id);
-      if (ship && confirm('Отметить отгрузку как "В пути"?')) {
-        ship.status = 'in-transit';
-        renderWholesale();
-        showNotification('🚚 Отгрузка отправлена в путь');
-      }
-    }
-
-    function markDelivered(id) {
-      const ship = shipments.find(s => s.id === id);
-      if (ship && confirm('Отметить отгрузку как "Доставлено"?')) {
-        ship.status = 'delivered';
-        renderWholesale();
-        showNotification('✅ Отгрузка доставлена');
+    async function cancelProductionRun(id) {
+      if (!confirm('Отменить выпуск? Продукция будет списана, ингредиенты вернутся на склад.')) return;
+      try {
+        const res = await AUTH.fetch('/api/inventory/production/' + id + '/cancel', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        showNotification('↩️ Выпуск отменён');
+        await loadProductionRuns();
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        alert('Ошибка: ' + e.message);
       }
     }
 
