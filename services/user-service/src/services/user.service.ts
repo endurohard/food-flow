@@ -1,5 +1,14 @@
 import pkg from 'pg';
 const { Pool } = pkg;
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import { config } from '../config';
+
+export interface CreateDriverInput {
+  firstName: string;
+  lastName?: string;
+  phone: string;
+}
 
 export interface UpdateProfileInput {
   firstName?: string;
@@ -76,6 +85,68 @@ export class UserService {
       return null;
     }
 
+    return result.rows[0];
+  }
+
+  // ── Водители (delivery_driver в рамках предприятия) ─────────────────────
+  // Водитель логинится через Telegram-бот, а не веб, поэтому веб-учётке
+  // проставляется служебный email и случайный пароль — только чтобы
+  // удовлетворить NOT NULL/UNIQUE-констрейнты таблицы users.
+
+  async listDrivers(enterpriseId: string): Promise<any[]> {
+    const result = await this.pool.query(
+      `SELECT id, first_name, last_name, phone, is_active,
+              (telegram_chat_id IS NOT NULL) AS bot_linked
+       FROM users
+       WHERE role = 'delivery_driver' AND enterprise_id = $1
+       ORDER BY is_active DESC, first_name ASC`,
+      [enterpriseId]
+    );
+    return result.rows;
+  }
+
+  async createDriver(enterpriseId: string, data: CreateDriverInput): Promise<any> {
+    const phoneDigits = (data.phone || '').replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      throw Object.assign(new Error('Некорректный телефон'), { statusCode: 400 });
+    }
+
+    // Не плодим двух водителей с одним телефоном в предприятии — бот ищет по
+    // последним 10 цифрам и иначе не сможет однозначно определить водителя.
+    const dup = await this.pool.query(
+      `SELECT id FROM users
+       WHERE role = 'delivery_driver' AND enterprise_id = $1
+         AND RIGHT(regexp_replace(phone, '\\D', '', 'g'), 10) = RIGHT($2, 10)`,
+      [enterpriseId, phoneDigits]
+    );
+    if (dup.rows.length > 0) {
+      throw Object.assign(new Error('Водитель с таким телефоном уже есть'), { statusCode: 409 });
+    }
+
+    const email = `driver.${crypto.randomUUID()}@foodflow.local`;
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), config.bcrypt.saltRounds);
+
+    const result = await this.pool.query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id)
+       VALUES ($1, $2, $3, $4, $5, 'delivery_driver', $6)
+       RETURNING id, first_name, last_name, phone, is_active,
+                 (telegram_chat_id IS NOT NULL) AS bot_linked`,
+      [email, passwordHash, data.firstName, data.lastName || null, data.phone, enterpriseId]
+    );
+    return result.rows[0];
+  }
+
+  async setDriverActive(enterpriseId: string, driverId: string, isActive: boolean): Promise<any> {
+    const result = await this.pool.query(
+      `UPDATE users SET is_active = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND enterprise_id = $2 AND role = 'delivery_driver'
+       RETURNING id, first_name, last_name, phone, is_active,
+                 (telegram_chat_id IS NOT NULL) AS bot_linked`,
+      [driverId, enterpriseId, isActive]
+    );
+    if (result.rows.length === 0) {
+      throw Object.assign(new Error('Водитель не найден'), { statusCode: 404 });
+    }
     return result.rows[0];
   }
 

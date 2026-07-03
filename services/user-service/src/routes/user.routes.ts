@@ -3,7 +3,12 @@ import Joi from 'joi';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { UserService } from '../services/user.service';
-import { authenticateUser } from '../middleware/enterprise.middleware';
+import { EnterpriseService } from '../services/enterprise.service';
+import {
+  authenticateUser,
+  enterpriseContext,
+  requireEnterpriseRole
+} from '../middleware/enterprise.middleware';
 
 const requireAdmin = (req: Request, res: Response, next: Function): any => {
   if (req.userRole !== 'admin') {
@@ -16,6 +21,63 @@ import { logPiiAccess } from '../middleware/pii-audit.middleware';
 
 const router = Router();
 const userService = new UserService(config.database.url);
+const enterpriseService = new EnterpriseService(config.database.url);
+
+// ── Водители предприятия (управление для отгрузок опта/доставки) ──────────
+const driverContext = [
+  authenticateUser,
+  enterpriseContext(enterpriseService),
+  requireEnterpriseRole('owner', 'admin', 'manager')
+];
+
+const createDriverSchema = Joi.object({
+  firstName: Joi.string().min(1).max(100).required(),
+  lastName: Joi.string().max(100).allow('', null).optional(),
+  phone: Joi.string().min(10).max(20).required()
+});
+
+// Список водителей предприятия (для выпадающего списка при отгрузке)
+router.get('/drivers', ...driverContext, async (req: Request, res: Response) => {
+  try {
+    const drivers = await userService.listDrivers(req.enterpriseId!);
+    return res.json({ drivers });
+  } catch (error: any) {
+    console.error('Failed to list drivers:', error);
+    return res.status(500).json({ error: 'Failed to list drivers' });
+  }
+});
+
+// Добавить водителя (веб-учётка служебная, вход — через Telegram-бот по телефону)
+router.post('/drivers', ...driverContext, async (req: Request, res: Response) => {
+  try {
+    const { error, value } = createDriverSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    const driver = await userService.createDriver(req.enterpriseId!, value);
+    return res.status(201).json({ driver });
+  } catch (error: any) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to create driver:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Не удалось создать водителя' : error.message });
+  }
+});
+
+// Активировать / деактивировать водителя
+router.patch('/drivers/:driverId', ...driverContext, async (req: Request, res: Response) => {
+  try {
+    const { isActive } = req.body;
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({ error: 'isActive (boolean) обязателен' });
+    }
+    const driver = await userService.setDriverActive(req.enterpriseId!, req.params.driverId, isActive);
+    return res.json({ driver });
+  } catch (error: any) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to update driver:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Не удалось обновить водителя' : error.message });
+  }
+});
 
 // Pool for PBX queries (preserving existing functionality)
 const pool = new Pool({ connectionString: config.database.url });

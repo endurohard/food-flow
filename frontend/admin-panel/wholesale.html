@@ -545,6 +545,7 @@ AUTH.requireAuth();
       <button class="fin-tab active" onclick="switchTab('orders', this)">Заказы</button>
       <button class="fin-tab" onclick="switchTab('counterparties', this)">Контрагенты</button>
       <button class="fin-tab" onclick="switchTab('returns', this)">Возвраты</button>
+      <button class="fin-tab" onclick="switchTab('drivers', this)">Водители</button>
       <button class="fin-tab" onclick="switchTab('reports', this)">Отчёты</button>
     </div>
 
@@ -645,6 +646,31 @@ AUTH.requireAuth();
           </thead>
           <tbody id="returnsBody">
             <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--color-grey-5);">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════ TAB: ВОДИТЕЛИ ═══════════ -->
+    <div id="tab-drivers" class="fin-tab-content">
+      <div class="date-range-bar">
+        <span style="font-size:13px;color:var(--color-grey-5);">Водители появляются в выборе при отгрузке. Вход в бота — по телефону, указанному здесь.</span>
+        <button class="btn btn-sm btn-primary" style="margin-left:auto;" onclick="openDriverModal()">➕ Добавить водителя</button>
+      </div>
+
+      <div class="card" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Имя</th>
+              <th>Телефон</th>
+              <th>Telegram-бот</th>
+              <th>Статус</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="driversBody">
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
@@ -754,6 +780,34 @@ AUTH.requireAuth();
     <div style="display:flex;gap:10px;margin-top:16px;">
       <button class="btn btn-primary" style="flex:1;" onclick="submitShip()">🚚 Отгрузить</button>
       <button class="btn btn-secondary" onclick="closeModal('shipModal')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Modal: добавить водителя ═══════════ -->
+<div class="modal" id="driverModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Новый водитель</span>
+      <button class="modal-close" onclick="closeModal('driverModal')">&times;</button>
+    </div>
+    <div id="driverAlert" style="display:none;" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label">Имя *</label>
+      <input type="text" class="form-control" id="driverFirstName" placeholder="Иван">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Фамилия</label>
+      <input type="text" class="form-control" id="driverLastName" placeholder="Петров">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Телефон *</label>
+      <input type="tel" class="form-control" id="driverPhone" placeholder="+7 900 000-00-00">
+      <span style="font-size:12px;color:var(--color-grey-5);">По этому номеру водитель авторизуется в Telegram-боте.</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="submitDriver()">Добавить</button>
+      <button class="btn btn-secondary" onclick="closeModal('driverModal')">Отмена</button>
     </div>
   </div>
 </div>
@@ -1046,6 +1100,7 @@ AUTH.requireAuth();
     if (name === 'orders') loadOrders();
     if (name === 'counterparties') loadCounterparties();
     if (name === 'returns') loadReturns();
+    if (name === 'drivers') loadDrivers();
     if (name === 'reports') initReportsDates();
   }
 
@@ -1111,12 +1166,18 @@ AUTH.requireAuth();
     return itemsCache;
   }
 
-  async function ensureDrivers() {
-    if (driversCache) return driversCache;
+  async function ensureDrivers(force) {
+    if (driversCache && !force) return driversCache;
     try {
-      const data = await apiJson('/api/users?role=delivery_driver');
-      // API может игнорировать фильтр role — фильтруем на клиенте
-      driversCache = (data.users || []).filter(u => u.role === 'delivery_driver');
+      const data = await apiJson('/api/users/drivers');
+      driversCache = (data.drivers || []).map(d => ({
+        id: d.id,
+        first_name: d.first_name,
+        last_name: d.last_name,
+        phone: d.phone,
+        is_active: d.is_active,
+        bot_linked: d.bot_linked
+      }));
     } catch (e) { driversCache = []; }
     return driversCache;
   }
@@ -1336,12 +1397,84 @@ AUTH.requireAuth();
     const sel = document.getElementById('shipDriver');
     sel.innerHTML = '<option value="">Загрузка...</option>';
     openModal('shipModal');
-    const drivers = await ensureDrivers();
+    const drivers = (await ensureDrivers()).filter(d => d.is_active);
     if (drivers.length) {
       sel.innerHTML = '<option value="">Выберите водителя</option>' +
         drivers.map(d => '<option value="' + d.id + '">' + esc(personName(d.first_name, d.last_name)) + (d.phone ? ' (' + esc(d.phone) + ')' : '') + '</option>').join('');
     } else {
-      sel.innerHTML = '<option value="">Водители не найдены</option>';
+      sel.innerHTML = '<option value="">Нет активных водителей — добавьте на вкладке «Водители»</option>';
+    }
+  }
+
+  // ════════════════════════════════════
+  // TAB: ВОДИТЕЛИ
+  // ════════════════════════════════════
+  async function loadDrivers() {
+    const tbody = document.getElementById('driversBody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+    const drivers = await ensureDrivers(true);
+    if (!drivers.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-grey-5);">Водителей нет. Добавьте первого.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = drivers.map(d => {
+      const bot = d.bot_linked
+        ? '<span class="badge badge-success">Подключён</span>'
+        : '<span class="badge badge-grey">Не подключён</span>';
+      const status = d.is_active
+        ? '<span class="badge badge-success">Активен</span>'
+        : '<span class="badge badge-grey">Отключён</span>';
+      const action = d.is_active
+        ? '<button class="btn btn-sm btn-secondary" onclick="toggleDriver(\'' + d.id + '\', false)">Отключить</button>'
+        : '<button class="btn btn-sm btn-primary" onclick="toggleDriver(\'' + d.id + '\', true)">Включить</button>';
+      return '<tr>' +
+        '<td>' + esc(personName(d.first_name, d.last_name)) + '</td>' +
+        '<td>' + esc(d.phone || '—') + '</td>' +
+        '<td>' + bot + '</td>' +
+        '<td>' + status + '</td>' +
+        '<td style="text-align:right;">' + action + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function openDriverModal() {
+    hideAlert('driverAlert');
+    document.getElementById('driverFirstName').value = '';
+    document.getElementById('driverLastName').value = '';
+    document.getElementById('driverPhone').value = '';
+    openModal('driverModal');
+  }
+
+  async function submitDriver() {
+    hideAlert('driverAlert');
+    const firstName = document.getElementById('driverFirstName').value.trim();
+    const lastName = document.getElementById('driverLastName').value.trim();
+    const phone = document.getElementById('driverPhone').value.trim();
+    if (!firstName) { showAlert('driverAlert', 'Укажите имя', false); return; }
+    if (phone.replace(/\D/g, '').length < 10) { showAlert('driverAlert', 'Укажите корректный телефон', false); return; }
+    try {
+      await apiJson('/api/users/drivers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName, lastName, phone })
+      });
+      closeModal('driverModal');
+      await loadDrivers();
+    } catch (e) {
+      showAlert('driverAlert', 'Ошибка: ' + e.message, false);
+    }
+  }
+
+  async function toggleDriver(id, active) {
+    try {
+      await apiJson('/api/users/drivers/' + id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: active })
+      });
+      await loadDrivers();
+    } catch (e) {
+      alert('Ошибка: ' + e.message);
     }
   }
 
