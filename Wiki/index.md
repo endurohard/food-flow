@@ -7,19 +7,22 @@
 - [[log]] — хронология операций
 - [[sources]] — карта raw-sources → страницы
 
-## Services (13)
+## Services (16)
 - [[services/user-service]] — auth, пользователи, enterprise/multi-tenant (порт 3001)
 - [[services/restaurant-service]] — рестораны, меню, PBX-настройки (3002)
 - [[services/order-service]] — заказы, столы, POS (3003)
 - [[services/delivery-service]] — доставка, зоны, трекинг (3004)
 - [[services/kitchen-service]] — KDS, принтеры (3005)
-- [[services/inventory-service]] — склад, поставщики, техкарты (3006)
+- [[services/inventory-service]] — склад, поставщики, техкарты, производство по техкартам, взаиморасчёты (3006)
 - [[services/telegram-bot-service]] — бот для инвойсов/инвентаря (3007)
 - [[services/yeastar-service]] — Yeastar PBX WebSocket (3008)
 - [[services/pjsip-service]] — нативный SIP/PJSIP (3009)
 - [[services/hr-service]] — HR, штат, смены (3010)
 - [[services/crm-service]] — CRM, лояльность, промо (3011)
-- [[services/finance-service]] — финансы, платежи, касса (3012)
+- [[services/finance-service]] — финансы, платежи, касса, Z-отчёты (3012)
+- **wholesale-service** — оптовый B2B: контрагенты, заказы, отгрузки FIFO, возвраты, PDF-накладные (3013) _(нет вики-страницы)_
+- **whatsapp-service** — WhatsApp Web автоматизация (puppeteer), отправка накладных (3014) _(нет вики-страницы)_
+- **driver-bot-service** — Telegram-бот водителей: доставки, наличные, возвраты (3015) _(нет вики-страницы)_
 - [[services/frontend-service]] — статика админ-панели (3000)
 
 ## Concepts
