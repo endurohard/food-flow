@@ -14,8 +14,10 @@ const exportService = new ExportService(config.database.url);
 
 router.get('/registers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const registers = await financeService.listRegisters({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       restaurantId: req.query.restaurantId as string,
       status: req.query.status as string
     });
@@ -32,7 +34,10 @@ router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const register = await financeService.openRegister(value.restaurantId, req.userId!, value.openingBalance);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
+    const register = await financeService.openRegister(value.restaurantId, req.userId!, value.openingBalance, isSuper ? undefined : req.enterpriseId);
     if (!register) return res.status(404).json({ error: 'Register not found or already open' });
     return res.json({ register });
   } catch (error: any) {
@@ -49,7 +54,10 @@ router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owne
     const { error, value } = schema.validate(req.body || {});
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const register = await financeService.closeRegister(req.params.id, req.userId!, value.actualBalance);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
+    const register = await financeService.closeRegister(req.params.id, req.userId!, value.actualBalance, isSuper ? undefined : req.enterpriseId);
     return res.json({ register });
   } catch (error: any) {
     if (error.message === 'Register not found or already closed') return res.status(404).json({ error: error.message });
@@ -59,7 +67,9 @@ router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owne
 
 router.get('/registers/:id/operations', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const operations = await financeService.getCashOperations(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const operations = await financeService.getCashOperations(req.params.id, isSuper ? undefined : req.enterpriseId);
     return res.json({ operations });
   } catch (error) { console.error('Get operations error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
@@ -76,9 +86,12 @@ router.post('/registers/:id/operations', authenticateUser, requireRole('admin', 
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
     const operation = await financeService.addCashOperation({
       registerId: req.params.id,
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       operationType: value.operationType,
       amount: value.amount,
       paymentMethod: value.paymentMethod,
@@ -94,8 +107,10 @@ router.post('/registers/:id/operations', authenticateUser, requireRole('admin', 
 
 router.get('/payments', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const payments = await financeService.getPayments({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       orderId: req.query.orderId as string,
       status: req.query.status as string,
       paymentMethod: req.query.paymentMethod as string,
@@ -133,7 +148,10 @@ router.put('/payments/:id/status', authenticateUser, requireRole('admin', 'owner
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const payment = await financeService.updatePaymentStatus(req.params.id, value.status, value.refundAmount, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
+    const payment = await financeService.updatePaymentStatus(req.params.id, value.status, value.refundAmount, isSuper ? undefined : req.enterpriseId);
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
     return res.json({ payment });
   } catch (error) { console.error('Update payment status error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -168,8 +186,10 @@ router.post('/expense-categories', authenticateUser, requireRole('admin', 'owner
 
 router.get('/expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const expenses = await financeService.listExpenses({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       restaurantId: req.query.restaurantId as string,
       categoryId: req.query.categoryId as string,
       dateFrom: req.query.dateFrom as string,
@@ -235,8 +255,10 @@ router.post('/expenses/from-supply-invoice', authenticateInternal, requireRole('
 
 router.get('/reports/cash-daily', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const reports = await financeService.getCashDailyReports({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       registerId: req.query.registerId as string,
       from: req.query.from as string,
       to: req.query.to as string
@@ -247,8 +269,10 @@ router.get('/reports/cash-daily', authenticateUser, requireRole('admin', 'owner'
 
 router.get('/reports/supplier-expenses', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const report = await financeService.getSupplierExpensesReport({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       from: req.query.from as string,
       to: req.query.to as string
     });
@@ -261,8 +285,11 @@ router.get('/reports/revenue', authenticateUser, requireRole('admin', 'owner', '
     const { dateFrom, dateTo, restaurantId } = req.query;
     if (!dateFrom || !dateTo) return res.status(400).json({ error: 'dateFrom and dateTo are required' });
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
     const report = await financeService.getRevenueReport({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       restaurantId: restaurantId as string,
       dateFrom: dateFrom as string,
       dateTo: dateTo as string
@@ -276,8 +303,11 @@ router.get('/reports/pnl', authenticateUser, requireRole('admin', 'owner', 'mana
     const { dateFrom, dateTo, restaurantId } = req.query;
     if (!dateFrom || !dateTo) return res.status(400).json({ error: 'dateFrom and dateTo are required' });
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
     const report = await financeService.getPnLReport({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       restaurantId: restaurantId as string,
       dateFrom: dateFrom as string,
       dateTo: dateTo as string
@@ -352,7 +382,9 @@ router.post('/webhooks/yookassa', async (req: Request, res: Response) => {
 // Получение фискальных чеков по заказу
 router.get('/fiscal-receipts/:orderId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const receipts = await financeService.getFiscalReceipts(req.params.orderId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const receipts = await financeService.getFiscalReceipts(req.params.orderId, isSuper ? undefined : req.enterpriseId);
     return res.json({ receipts });
   } catch (err) {
     console.error('Get fiscal receipts error:', err);

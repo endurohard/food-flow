@@ -20,37 +20,48 @@ export class FinanceService {
 
   // ========== КАССЫ ==========
 
-  async openRegister(restaurantId: string, userId: string, openingBalance: number): Promise<any> {
-    // Проверяем — нет ли уже открытой кассы в этом ресторане
+  async openRegister(restaurantId: string, userId: string, openingBalance: number, enterpriseId?: string): Promise<any> {
+    // Проверяем — нет ли уже открытой кассы в этом ресторане (в рамках предприятия)
+    const existingConds = ['restaurant_id = $1', `status = 'open'`];
+    const existingVals: any[] = [restaurantId];
+    if (enterpriseId) { existingConds.push(`enterprise_id = $${existingVals.length + 1}`); existingVals.push(enterpriseId); }
     const existing = await this.pool.query(
-      `SELECT id FROM cash_registers WHERE restaurant_id = $1 AND status = 'open'`,
-      [restaurantId]
+      `SELECT id FROM cash_registers WHERE ${existingConds.join(' AND ')}`,
+      existingVals
     );
     if (existing.rows.length > 0) throw new Error('Register already open for this restaurant');
 
+    // Открываем только кассу, принадлежащую предприятию (защита cross-tenant)
+    const updConds = ['restaurant_id = $3', `status = 'closed'`];
+    const updVals: any[] = [userId, openingBalance, restaurantId];
+    if (enterpriseId) { updConds.push(`enterprise_id = $${updVals.length + 1}`); updVals.push(enterpriseId); }
     const result = await this.pool.query(
       `UPDATE cash_registers
        SET status = 'open', opened_by = $1, opened_at = NOW(),
            opening_balance = $2, current_balance = $2
-       WHERE restaurant_id = $3 AND status = 'closed'
+       WHERE ${updConds.join(' AND ')}
        RETURNING *`,
-      [userId, openingBalance, restaurantId]
+      updVals
     );
     return result.rows[0] || null;
   }
 
-  async closeRegister(registerId: string, userId: string, actualBalance?: number): Promise<any> {
+  async closeRegister(registerId: string, userId: string, actualBalance?: number, enterpriseId?: string): Promise<any> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
       // Блокируем кассу, чтобы никто не добавил операцию между чтением и закрытием
+      // (только в рамках предприятия — защита cross-tenant)
+      const regConds = ['id = $1', `status = 'open'`];
+      const regVals: any[] = [registerId];
+      if (enterpriseId) { regConds.push(`enterprise_id = $${regVals.length + 1}`); regVals.push(enterpriseId); }
       const reg = await client.query(
         `SELECT current_balance, enterprise_id, opened_at, opening_balance
          FROM cash_registers
-         WHERE id = $1 AND status = 'open'
+         WHERE ${regConds.join(' AND ')}
          FOR UPDATE`,
-        [registerId]
+        regVals
       );
       if (!reg.rows[0]) throw new Error('Register not found or already closed');
 
@@ -136,9 +147,13 @@ export class FinanceService {
       await client.query('BEGIN');
 
       // Блокируем строку кассы на время обновления баланса
+      // (только в рамках предприятия — защита cross-tenant)
+      const regConds = ['id = $1'];
+      const regVals: any[] = [data.registerId];
+      if (data.enterpriseId) { regConds.push(`enterprise_id = $${regVals.length + 1}`); regVals.push(data.enterpriseId); }
       const reg = await client.query(
-        `SELECT id, status FROM cash_registers WHERE id = $1 FOR UPDATE`,
-        [data.registerId]
+        `SELECT id, status FROM cash_registers WHERE ${regConds.join(' AND ')} FOR UPDATE`,
+        regVals
       );
       if (!reg.rows[0]) throw new Error('Register not found');
       if (reg.rows[0].status !== 'open') throw new Error('Register is not open');
@@ -170,14 +185,17 @@ export class FinanceService {
     }
   }
 
-  async getCashOperations(registerId: string): Promise<any[]> {
+  async getCashOperations(registerId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['co.register_id = $1'];
+    const vals: any[] = [registerId];
+    if (enterpriseId) { conds.push(`co.enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT co.*, u.first_name, u.last_name
        FROM cash_operations co
        LEFT JOIN users u ON co.performed_by = u.id
-       WHERE co.register_id = $1
+       WHERE ${conds.join(' AND ')}
        ORDER BY co.created_at DESC`,
-      [registerId]
+      vals
     );
     return result.rows;
   }
@@ -833,10 +851,13 @@ export class FinanceService {
   /**
    * Получение фискальных чеков по заказу.
    */
-  async getFiscalReceipts(orderId: string): Promise<any[]> {
+  async getFiscalReceipts(orderId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['order_id = $1'];
+    const vals: any[] = [orderId];
+    if (enterpriseId) { conds.push(`enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
     const result = await this.pool.query(
-      `SELECT * FROM fiscal_receipts WHERE order_id = $1 ORDER BY printed_at DESC`,
-      [orderId]
+      `SELECT * FROM fiscal_receipts WHERE ${conds.join(' AND ')} ORDER BY printed_at DESC`,
+      vals
     );
     return result.rows;
   }
