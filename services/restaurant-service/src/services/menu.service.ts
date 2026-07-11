@@ -61,7 +61,7 @@ export class MenuService {
     return result.rows[0];
   }
 
-  async updateCategory(categoryId: string, data: Partial<CreateCategoryInput> & { isActive?: boolean }): Promise<any> {
+  async updateCategory(categoryId: string, data: Partial<CreateCategoryInput> & { isActive?: boolean }, enterpriseId?: string): Promise<any> {
     const fields: string[] = [];
     const values: any[] = [];
     let p = 1;
@@ -74,17 +74,22 @@ export class MenuService {
     if (fields.length === 0) return null;
 
     values.push(categoryId);
+    let where = `id = $${p++}`;
+    if (enterpriseId) { where += ` AND enterprise_id = $${p++}`; values.push(enterpriseId); }
     const result = await this.pool.query(
-      `UPDATE menu_categories SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+      `UPDATE menu_categories SET ${fields.join(', ')} WHERE ${where} RETURNING *`,
       values
     );
     return result.rows[0] || null;
   }
 
-  async deleteCategory(categoryId: string): Promise<boolean> {
+  async deleteCategory(categoryId: string, enterpriseId?: string): Promise<boolean> {
+    const conditions = ['id = $1'];
+    const values: any[] = [categoryId];
+    if (enterpriseId) { conditions.push('enterprise_id = $2'); values.push(enterpriseId); }
     const result = await this.pool.query(
-      'UPDATE menu_categories SET is_active = false WHERE id = $1',
-      [categoryId]
+      `UPDATE menu_categories SET is_active = false WHERE ${conditions.join(' AND ')}`,
+      values
     );
     return (result.rowCount ?? 0) > 0;
   }
@@ -150,7 +155,7 @@ export class MenuService {
     return result.rows[0];
   }
 
-  async updateItem(itemId: string, data: Partial<CreateMenuItemInput> & { isAvailable?: boolean }): Promise<any> {
+  async updateItem(itemId: string, data: Partial<CreateMenuItemInput> & { isAvailable?: boolean }, enterpriseId?: string): Promise<any> {
     const fieldMap: Record<string, string> = {
       categoryId: 'category_id', name: 'name', description: 'description',
       price: 'price', imageUrl: 'image_url', isAvailable: 'is_available',
@@ -174,17 +179,22 @@ export class MenuService {
     if (fields.length === 0) return null;
 
     values.push(itemId);
+    let where = `id = $${p++}`;
+    if (enterpriseId) { where += ` AND enterprise_id = $${p++}`; values.push(enterpriseId); }
     const result = await this.pool.query(
-      `UPDATE menu_items SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+      `UPDATE menu_items SET ${fields.join(', ')} WHERE ${where} RETURNING *`,
       values
     );
     return result.rows[0] || null;
   }
 
-  async deleteItem(itemId: string): Promise<boolean> {
+  async deleteItem(itemId: string, enterpriseId?: string): Promise<boolean> {
+    const conditions = ['id = $1'];
+    const values: any[] = [itemId];
+    if (enterpriseId) { conditions.push('enterprise_id = $2'); values.push(enterpriseId); }
     const result = await this.pool.query(
-      'DELETE FROM menu_items WHERE id = $1',
-      [itemId]
+      `DELETE FROM menu_items WHERE ${conditions.join(' AND ')}`,
+      values
     );
     return (result.rowCount ?? 0) > 0;
   }
@@ -211,7 +221,7 @@ export class MenuService {
     return result.rows[0];
   }
 
-  async updateModifier(modifierId: string, data: Partial<CreateModifierInput> & { isAvailable?: boolean }): Promise<any> {
+  async updateModifier(modifierId: string, data: Partial<CreateModifierInput> & { isAvailable?: boolean }, enterpriseId?: string): Promise<any> {
     const fields: string[] = [];
     const values: any[] = [];
     let p = 1;
@@ -225,17 +235,22 @@ export class MenuService {
     if (fields.length === 0) return null;
 
     values.push(modifierId);
+    let where = `id = $${p++}`;
+    if (enterpriseId) { where += ` AND enterprise_id = $${p++}`; values.push(enterpriseId); }
     const result = await this.pool.query(
-      `UPDATE menu_item_modifiers SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+      `UPDATE menu_item_modifiers SET ${fields.join(', ')} WHERE ${where} RETURNING *`,
       values
     );
     return result.rows[0] || null;
   }
 
-  async deleteModifier(modifierId: string): Promise<boolean> {
+  async deleteModifier(modifierId: string, enterpriseId?: string): Promise<boolean> {
+    const conditions = ['id = $1'];
+    const values: any[] = [modifierId];
+    if (enterpriseId) { conditions.push('enterprise_id = $2'); values.push(enterpriseId); }
     const result = await this.pool.query(
-      'DELETE FROM menu_item_modifiers WHERE id = $1',
-      [modifierId]
+      `DELETE FROM menu_item_modifiers WHERE ${conditions.join(' AND ')}`,
+      values
     );
     return (result.rowCount ?? 0) > 0;
   }

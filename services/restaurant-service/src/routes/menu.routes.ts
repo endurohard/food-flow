@@ -95,7 +95,11 @@ router.post('/:restaurantId/menu-categories', authenticateUser, requireRole('adm
 
 router.put('/menu-categories/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const category = await menuService.updateCategory(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const category = await menuService.updateCategory(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!category) {
       return res.status(404).json({ error: 'Category not found' });
     }
@@ -108,7 +112,11 @@ router.put('/menu-categories/:id', authenticateUser, requireRole('admin', 'owner
 
 router.delete('/menu-categories/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const deleted = await menuService.deleteCategory(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const deleted = await menuService.deleteCategory(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) {
       return res.status(404).json({ error: 'Category not found' });
     }
@@ -163,7 +171,11 @@ router.post('/:restaurantId/menu-items', authenticateUser, requireRole('admin', 
 
 router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const item = await menuService.updateItem(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const item = await menuService.updateItem(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -176,7 +188,11 @@ router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'm
 
 router.delete('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const deleted = await menuService.deleteItem(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const deleted = await menuService.deleteItem(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) {
       return res.status(404).json({ error: 'Item not found' });
     }
@@ -200,12 +216,16 @@ router.post('/menu-items/:id/stop', authenticateUser, requireRole('admin', 'owne
     if (error) {
       return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const item = await menuService.stopMenuItem(
       req.params.id,
       value.reason,
       req.userId!,
       value.stopUntil,
-      req.enterpriseId
+      isSuper ? undefined : req.enterpriseId
     );
     if (!item) {
       return res.status(404).json({ error: 'Menu item not found' });
@@ -219,7 +239,11 @@ router.post('/menu-items/:id/stop', authenticateUser, requireRole('admin', 'owne
 
 router.post('/menu-items/:id/unstop', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
-    const item = await menuService.unstopMenuItem(req.params.id, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const item = await menuService.unstopMenuItem(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!item) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
@@ -272,7 +296,11 @@ router.post('/menu-items/:itemId/modifiers', authenticateUser, requireRole('admi
 
 router.put('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const modifier = await menuService.updateModifier(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const modifier = await menuService.updateModifier(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!modifier) {
       return res.status(404).json({ error: 'Modifier not found' });
     }
@@ -285,7 +313,11 @@ router.put('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'ma
 
 router.delete('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const deleted = await menuService.deleteModifier(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const deleted = await menuService.deleteModifier(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) {
       return res.status(404).json({ error: 'Modifier not found' });
     }
