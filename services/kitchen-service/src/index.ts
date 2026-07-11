@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { config } from './config';
@@ -104,17 +105,34 @@ const rabbitmqService = new RabbitMQService(printerService, kitchenDisplayServic
 io.on('connection', (socket) => {
   logger.info(`Kitchen display connected: ${socket.id}`);
 
-  socket.on('authenticate', async (data: { restaurantId: string; token: string; enterpriseId?: string }) => {
+  socket.on('authenticate', async (data: { restaurantId: string; token: string }) => {
     try {
-      // TODO: Validate token and restaurant access
-      const room = data.enterpriseId
-        ? `enterprise:${data.enterpriseId}:restaurant:${data.restaurantId}`
+      // Верифицируем JWT: enterpriseId берём ТОЛЬКО из проверенного токена,
+      // а не из payload клиента (иначе дисплей мог бы подписаться на чужой tenant).
+      let decoded: any;
+      try {
+        decoded = jwt.verify(data.token, config.jwt.secret);
+      } catch {
+        socket.emit('error', { message: 'Invalid token' });
+        return;
+      }
+      const enterpriseId: string | undefined = decoded.enterpriseId;
+      const isSuper = decoded.role === 'super_admin';
+      if (!enterpriseId && !isSuper) {
+        socket.emit('error', { message: 'No enterprise context' });
+        return;
+      }
+      // Сохраняем на сокете для последующих мутаций
+      (socket.data as any).enterpriseId = enterpriseId;
+
+      const room = enterpriseId
+        ? `enterprise:${enterpriseId}:restaurant:${data.restaurantId}`
         : `restaurant:${data.restaurantId}`;
 
       socket.join(room);
       logger.info(`Display authenticated for room: ${room}`);
 
-      await kitchenDisplayService.sendActiveOrders(data.restaurantId, socket, data.enterpriseId);
+      await kitchenDisplayService.sendActiveOrders(data.restaurantId, socket, enterpriseId);
     } catch (error) {
       logger.error('Authentication error:', error);
       socket.emit('error', { message: 'Authentication failed' });
@@ -123,10 +141,13 @@ io.on('connection', (socket) => {
 
   socket.on('updateOrderStatus', async (data: { orderId: string; status: string }) => {
     try {
-      // TODO: multi-tenant — pass a VERIFIED enterpriseId as the 3rd arg once Socket.IO
-      // auth is hardened (the `authenticate` payload is currently unverified, so we must
-      // NOT trust data.enterpriseId here). Until then updateOrderStatus runs unscoped.
-      await kitchenDisplayService.updateOrderStatus(data.orderId, data.status);
+      // enterpriseId из верифицированного при authenticate токена (не из payload)
+      const enterpriseId: string | undefined = (socket.data as any).enterpriseId;
+      if (!enterpriseId) {
+        socket.emit('error', { message: 'Not authenticated' });
+        return;
+      }
+      await kitchenDisplayService.updateOrderStatus(data.orderId, data.status, enterpriseId);
       logger.info(`Order ${data.orderId} status updated to ${data.status}`);
     } catch (error) {
       logger.error('Update order status error:', error);
