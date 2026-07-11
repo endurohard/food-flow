@@ -78,8 +78,11 @@ export class DeliveryService {
     return result.rows[0] || null;
   }
 
-  async createFromOrder(orderId: string): Promise<any> {
-    // Get order with addresses
+  async createFromOrder(orderId: string, enterpriseId?: string): Promise<any> {
+    // Get order with addresses — tenant guard via orders.enterprise_id
+    const conds = ['o.id = $1'];
+    const vals: any[] = [orderId];
+    if (enterpriseId) { conds.push(`o.enterprise_id = $2`); vals.push(enterpriseId); }
     const orderResult = await this.pool.query(
       `SELECT o.*, ra.latitude as pickup_lat, ra.longitude as pickup_lng,
               a.latitude as delivery_lat, a.longitude as delivery_lng
@@ -87,8 +90,8 @@ export class DeliveryService {
        LEFT JOIN restaurants r ON o.restaurant_id = r.id
        LEFT JOIN restaurant_addresses ra ON ra.restaurant_id = r.id
        LEFT JOIN addresses a ON o.delivery_address_id = a.id
-       WHERE o.id = $1`,
-      [orderId]
+       WHERE ${conds.join(' AND ')}`,
+      vals
     );
 
     if (!orderResult.rows[0]) throw new Error('Order not found');
@@ -177,7 +180,17 @@ export class DeliveryService {
     }
   }
 
-  async updateLocation(deliveryId: string, lat: number, lng: number, speed?: number, heading?: number): Promise<void> {
+  async updateLocation(deliveryId: string, lat: number, lng: number, speed?: number, heading?: number, enterpriseId?: string): Promise<boolean> {
+    // Tenant guard via parent: deliveries -> orders.enterprise_id
+    if (enterpriseId) {
+      const owner = await this.pool.query(
+        `SELECT 1 FROM deliveries d INNER JOIN orders o ON d.order_id = o.id
+         WHERE d.id = $1 AND o.enterprise_id = $2`,
+        [deliveryId, enterpriseId]
+      );
+      if (owner.rowCount === 0) return false;
+    }
+
     // Update current position
     await this.pool.query(
       `UPDATE deliveries SET current_latitude = $1, current_longitude = $2 WHERE id = $3`,
@@ -190,12 +203,21 @@ export class DeliveryService {
        VALUES ($1, $2, $3, $4, $5)`,
       [deliveryId, lat, lng, speed || null, heading || null]
     );
+    return true;
   }
 
-  async getTrackingHistory(deliveryId: string): Promise<any[]> {
+  async getTrackingHistory(deliveryId: string, enterpriseId?: string): Promise<any[]> {
+    // Tenant guard via parent: delivery_tracking -> deliveries -> orders.enterprise_id
+    const conds = ['dt.delivery_id = $1'];
+    const vals: any[] = [deliveryId];
+    if (enterpriseId) { conds.push(`o.enterprise_id = $2`); vals.push(enterpriseId); }
     const result = await this.pool.query(
-      `SELECT * FROM delivery_tracking WHERE delivery_id = $1 ORDER BY recorded_at ASC`,
-      [deliveryId]
+      `SELECT dt.* FROM delivery_tracking dt
+       INNER JOIN deliveries d ON dt.delivery_id = d.id
+       INNER JOIN orders o ON d.order_id = o.id
+       WHERE ${conds.join(' AND ')}
+       ORDER BY dt.recorded_at ASC`,
+      vals
     );
     return result.rows;
   }
@@ -203,14 +225,19 @@ export class DeliveryService {
   // ========== DRIVERS ==========
 
   async getAvailableDrivers(enterpriseId?: string): Promise<any[]> {
+    // Tenant isolation via driver_shifts.enterprise_id
+    const conds = [`u.role = 'delivery_driver'`, `u.is_active = true`];
+    const vals: any[] = [];
+    if (enterpriseId) { conds.push(`ds.enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT u.id, u.first_name, u.last_name, u.phone,
               ds.id as shift_id, ds.deliveries_completed,
               (SELECT COUNT(*) FROM deliveries d WHERE d.driver_id = u.id AND d.status IN ('assigned', 'picked_up', 'in_transit')) as active_deliveries
        FROM users u
        INNER JOIN driver_shifts ds ON ds.driver_id = u.id AND ds.status = 'active'
-       WHERE u.role = 'delivery_driver' AND u.is_active = true
-       ORDER BY active_deliveries ASC, ds.deliveries_completed ASC`
+       WHERE ${conds.join(' AND ')}
+       ORDER BY active_deliveries ASC, ds.deliveries_completed ASC`,
+      vals
     );
     return result.rows;
   }
@@ -242,10 +269,13 @@ export class DeliveryService {
 
   // ========== DELIVERY ZONES ==========
 
-  async listZones(restaurantId: string): Promise<any[]> {
+  async listZones(restaurantId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['restaurant_id = $1', 'is_active = true'];
+    const vals: any[] = [restaurantId];
+    if (enterpriseId) { conds.push(`enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
     const result = await this.pool.query(
-      `SELECT * FROM delivery_zones WHERE restaurant_id = $1 AND is_active = true ORDER BY name`,
-      [restaurantId]
+      `SELECT * FROM delivery_zones WHERE ${conds.join(' AND ')} ORDER BY name`,
+      vals
     );
     return result.rows;
   }
@@ -260,7 +290,7 @@ export class DeliveryService {
     return result.rows[0];
   }
 
-  async updateZone(zoneId: string, data: any): Promise<any> {
+  async updateZone(zoneId: string, data: any, enterpriseId?: string): Promise<any> {
     const fields: string[] = [];
     const values: any[] = [];
     let p = 1;
@@ -273,14 +303,20 @@ export class DeliveryService {
 
     if (!fields.length) return null;
     values.push(zoneId);
+    const idParam = p++;
+    let where = `id = $${idParam}`;
+    if (enterpriseId) { values.push(enterpriseId); where += ` AND enterprise_id = $${p}`; }
     const result = await this.pool.query(
-      `UPDATE delivery_zones SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`, values
+      `UPDATE delivery_zones SET ${fields.join(', ')} WHERE ${where} RETURNING *`, values
     );
     return result.rows[0] || null;
   }
 
-  async deleteZone(zoneId: string): Promise<boolean> {
-    const r = await this.pool.query('UPDATE delivery_zones SET is_active = false WHERE id = $1', [zoneId]);
+  async deleteZone(zoneId: string, enterpriseId?: string): Promise<boolean> {
+    const vals: any[] = [zoneId];
+    let where = 'id = $1';
+    if (enterpriseId) { vals.push(enterpriseId); where += ' AND enterprise_id = $2'; }
+    const r = await this.pool.query(`UPDATE delivery_zones SET is_active = false WHERE ${where}`, vals);
     return (r.rowCount ?? 0) > 0;
   }
 

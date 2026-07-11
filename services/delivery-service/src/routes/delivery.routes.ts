@@ -41,7 +41,11 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
     if (!orderId) return res.status(400).json({ error: 'orderId is required' });
-    const delivery = await deliveryService.createFromOrder(orderId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const delivery = await deliveryService.createFromOrder(orderId, isSuper ? undefined : req.enterpriseId);
     return res.status(201).json({ delivery });
   } catch (error) {
     console.error('Create delivery error:', error);
@@ -53,7 +57,11 @@ router.put('/:id/assign', authenticateUser, async (req: Request, res: Response) 
   try {
     const { driverId } = req.body;
     if (!driverId) return res.status(400).json({ error: 'driverId is required' });
-    const delivery = await deliveryService.assignDriver(req.params.id, driverId, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const delivery = await deliveryService.assignDriver(req.params.id, driverId, isSuper ? undefined : req.enterpriseId);
     if (!delivery) return res.status(404).json({ error: 'Delivery not found or access denied' });
     return res.json({ delivery });
   } catch (error) {
@@ -69,7 +77,11 @@ router.put('/:id/status', authenticateUser, async (req: Request, res: Response) 
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
     }
-    const delivery = await deliveryService.updateStatus(req.params.id, status, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const delivery = await deliveryService.updateStatus(req.params.id, status, isSuper ? undefined : req.enterpriseId);
     if (!delivery) return res.status(404).json({ error: 'Delivery not found or access denied' });
     return res.json({ delivery });
   } catch (error) {
@@ -91,7 +103,12 @@ router.post('/:id/track', authenticateUser, async (req: Request, res: Response) 
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    await deliveryService.updateLocation(req.params.id, value.latitude, value.longitude, value.speed, value.heading);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const ok = await deliveryService.updateLocation(req.params.id, value.latitude, value.longitude, value.speed, value.heading, isSuper ? undefined : req.enterpriseId);
+    if (!ok) return res.status(404).json({ error: 'Delivery not found or access denied' });
     return res.json({ message: 'Location updated' });
   } catch (error) {
     console.error('Track error:', error);
@@ -101,7 +118,11 @@ router.post('/:id/track', authenticateUser, async (req: Request, res: Response) 
 
 router.get('/:id/track', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const history = await deliveryService.getTrackingHistory(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const history = await deliveryService.getTrackingHistory(req.params.id, isSuper ? undefined : req.enterpriseId);
     return res.json({ tracking: history });
   } catch (error) {
     console.error('Get tracking error:', error);
@@ -113,7 +134,11 @@ router.get('/:id/track', authenticateUser, async (req: Request, res: Response) =
 
 router.get('/drivers/available', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const drivers = await deliveryService.getAvailableDrivers(req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const drivers = await deliveryService.getAvailableDrivers(isSuper ? undefined : req.enterpriseId);
     return res.json({ drivers });
   } catch (error) {
     console.error('Get drivers error:', error);
@@ -148,7 +173,11 @@ router.get('/zones', authenticateUser, async (req: Request, res: Response) => {
   try {
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const zones = await deliveryService.listZones(restaurantId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const zones = await deliveryService.listZones(restaurantId, isSuper ? undefined : req.enterpriseId);
     return res.json({ zones });
   } catch (error) {
     console.error('List zones error:', error);
@@ -170,7 +199,11 @@ router.post('/zones', authenticateUser, async (req: Request, res: Response) => {
 
 router.put('/zones/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const zone = await deliveryService.updateZone(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const zone = await deliveryService.updateZone(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!zone) return res.status(404).json({ error: 'Zone not found' });
     return res.json({ zone });
   } catch (error) {
@@ -181,7 +214,11 @@ router.put('/zones/:id', authenticateUser, async (req: Request, res: Response) =
 
 router.delete('/zones/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const deleted = await deliveryService.deleteZone(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const deleted = await deliveryService.deleteZone(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Zone not found' });
     return res.json({ message: 'Zone deleted' });
   } catch (error) {
