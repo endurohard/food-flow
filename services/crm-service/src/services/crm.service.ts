@@ -226,14 +226,18 @@ export class CRMService {
 
   // ========== POINTS (LOYALTY TRANSACTIONS) ==========
 
-  async earnPoints(customerId: string, orderId: string, amount: number): Promise<any> {
-    // Получаем профиль и активную программу лояльности
+  async earnPoints(customerId: string, orderId: string, amount: number, enterpriseId?: string): Promise<any> {
+    // Получаем профиль и активную программу лояльности.
+    // Профиль должен принадлежать предприятию из токена (кроме super_admin).
+    const profileConds = ['cp.id = $1'];
+    const profileVals: any[] = [customerId];
+    if (enterpriseId) { profileConds.push(`cp.enterprise_id = $${profileVals.length + 1}`); profileVals.push(enterpriseId); }
     const profileResult = await this.pool.query(
       `SELECT cp.*, lp.points_per_currency, lp.tier_thresholds
        FROM customer_profiles cp
        LEFT JOIN loyalty_programs lp
          ON lp.enterprise_id = cp.enterprise_id AND lp.is_active = true AND lp.program_type = 'points'
-       WHERE cp.id = $1`, [customerId]
+       WHERE ${profileConds.join(' AND ')}`, profileVals
     );
     const profile = profileResult.rows[0];
     if (!profile) throw new Error('Customer profile not found');
@@ -268,36 +272,43 @@ export class CRMService {
     return txResult.rows[0];
   }
 
-  async redeemPoints(customerId: string, points: number): Promise<any> {
+  async redeemPoints(customerId: string, points: number, enterpriseId?: string): Promise<any> {
     if (points <= 0) throw new Error('Points to redeem must be positive');
 
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
+      // Профиль должен принадлежать предприятию из токена (кроме super_admin).
+      const updConds = ['id = $2', 'loyalty_points >= $1'];
+      const updVals: any[] = [points, customerId];
+      if (enterpriseId) { updConds.push(`enterprise_id = $${updVals.length + 1}`); updVals.push(enterpriseId); }
       const updateResult = await client.query(
         `UPDATE customer_profiles
          SET loyalty_points = loyalty_points - $1
-         WHERE id = $2 AND loyalty_points >= $1
+         WHERE ${updConds.join(' AND ')}
          RETURNING enterprise_id, loyalty_points`,
-        [points, customerId]
+        updVals
       );
 
       if (updateResult.rowCount === 0) {
+        const existConds = ['id = $1'];
+        const existVals: any[] = [customerId];
+        if (enterpriseId) { existConds.push(`enterprise_id = $${existVals.length + 1}`); existVals.push(enterpriseId); }
         const exists = await client.query(
-          `SELECT 1 FROM customer_profiles WHERE id = $1`, [customerId]
+          `SELECT 1 FROM customer_profiles WHERE ${existConds.join(' AND ')}`, existVals
         );
         await client.query('ROLLBACK');
         if (exists.rowCount === 0) throw new Error('Customer profile not found');
         throw new Error('Insufficient loyalty points');
       }
 
-      const enterpriseId = updateResult.rows[0].enterprise_id;
+      const profileEnterpriseId = updateResult.rows[0].enterprise_id;
       const txResult = await client.query(
         `INSERT INTO loyalty_transactions
            (customer_profile_id, enterprise_id, transaction_type, points, description)
          VALUES ($1, $2, 'redeem', $3, $4) RETURNING *`,
-        [customerId, enterpriseId, -points, `Списание ${points} баллов`]
+        [customerId, profileEnterpriseId, -points, `Списание ${points} баллов`]
       );
 
       await client.query('COMMIT');
@@ -336,12 +347,15 @@ export class CRMService {
     return result.rows[0] || null;
   }
 
-  async getTransactions(customerId: string): Promise<any[]> {
+  async getTransactions(customerId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['customer_profile_id = $1'];
+    const vals: any[] = [customerId];
+    if (enterpriseId) { conds.push(`enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT * FROM loyalty_transactions
-       WHERE customer_profile_id = $1
+       WHERE ${conds.join(' AND ')}
        ORDER BY created_at DESC
-       LIMIT 100`, [customerId]
+       LIMIT 100`, vals
     );
     return result.rows;
   }

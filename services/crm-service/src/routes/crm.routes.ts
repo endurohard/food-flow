@@ -12,8 +12,10 @@ const crmService = new CRMService(config.database.url);
 
 router.get('/customers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const customers = await crmService.listCustomers({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       loyaltyTier: req.query.loyaltyTier as string,
       tag: req.query.tag as string
     });
@@ -23,7 +25,9 @@ router.get('/customers', authenticateUser, requireRole('admin', 'owner', 'manage
 
 router.get('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await crmService.getCustomerProfile(req.params.userId, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const profile = await crmService.getCustomerProfile(req.params.userId, isSuper ? undefined : req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Customer profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Get customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -42,8 +46,12 @@ router.post('/customers', authenticateUser, requireRole('admin', 'owner', 'manag
     });
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
-    // Используем enterpriseId из токена если не передан явно
-    if (!value.enterpriseId) value.enterpriseId = req.enterpriseId;
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    // Обычный пользователь ВСЕГДА создаёт профиль в своём предприятии (из токена).
+    // super_admin может явно указать enterpriseId в теле запроса.
+    if (!isSuper) value.enterpriseId = req.enterpriseId;
+    else if (!value.enterpriseId) value.enterpriseId = req.enterpriseId;
     const profile = await crmService.createProfile(value);
     return res.status(201).json({ profile });
   } catch (error) { console.error('Create customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -51,7 +59,9 @@ router.post('/customers', authenticateUser, requireRole('admin', 'owner', 'manag
 
 router.put('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await crmService.updateProfile(req.params.userId, req.body, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const profile = await crmService.updateProfile(req.params.userId, req.body, isSuper ? undefined : req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Customer profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Update customer error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -88,7 +98,9 @@ router.post('/loyalty-programs', authenticateUser, requireRole('admin', 'owner',
 
 router.put('/loyalty-programs/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const program = await crmService.updateLoyaltyProgram(req.params.id, req.body, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const program = await crmService.updateLoyaltyProgram(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!program) return res.status(404).json({ error: 'Loyalty program not found' });
     return res.json({ program });
   } catch (error) { console.error('Update loyalty program error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -99,9 +111,11 @@ router.put('/loyalty-programs/:id', authenticateUser, requireRole('admin', 'owne
 // ВАЖНО: маршрут validate-code должен быть ДО маршрута /:id, иначе Express поглотит его как id
 router.get('/promotions/validate-code', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const code = req.query.code as string;
     if (!code) return res.status(400).json({ error: 'code query parameter is required' });
-    const promotion = await crmService.validatePromoCode(code, req.enterpriseId);
+    const promotion = await crmService.validatePromoCode(code, isSuper ? undefined : req.enterpriseId);
     if (!promotion) return res.status(404).json({ error: 'Promo code not found or expired' });
     return res.json({ promotion, valid: true });
   } catch (error) { console.error('Validate promo code error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -117,7 +131,9 @@ router.post('/promotions/apply', authenticateUser, requireRole('admin', 'owner',
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    const promotion = await crmService.redeemPromoCode(value.code, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const promotion = await crmService.redeemPromoCode(value.code, isSuper ? undefined : req.enterpriseId);
     if (!promotion) {
       return res.status(410).json({
         error: 'Promo code not found, expired, or usage limit exhausted'
@@ -132,8 +148,10 @@ router.post('/promotions/apply', authenticateUser, requireRole('admin', 'owner',
 
 router.get('/promotions', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const promotions = await crmService.listPromotions({
-      enterpriseId: req.enterpriseId,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       isActive: req.query.isActive !== 'false',
       promoType: req.query.promoType as string
     });
@@ -164,7 +182,9 @@ router.post('/promotions', authenticateUser, requireRole('admin', 'owner', 'mana
 
 router.put('/promotions/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const promotion = await crmService.updatePromotion(req.params.id, req.body, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const promotion = await crmService.updatePromotion(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!promotion) return res.status(404).json({ error: 'Promotion not found' });
     return res.json({ promotion });
   } catch (error) { console.error('Update promotion error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -181,7 +201,9 @@ router.post('/points/earn', authenticateUser, requireRole('admin', 'owner', 'man
     });
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
-    const transaction = await crmService.earnPoints(value.customerId, value.orderId, value.amount);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const transaction = await crmService.earnPoints(value.customerId, value.orderId, value.amount, isSuper ? undefined : req.enterpriseId);
     return res.status(201).json({ transaction });
   } catch (error: any) {
     if (error.message === 'Customer profile not found') return res.status(404).json({ error: error.message });
@@ -197,7 +219,9 @@ router.post('/points/redeem', authenticateUser, requireRole('admin', 'owner', 'm
     });
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
-    const transaction = await crmService.redeemPoints(value.customerId, value.points);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const transaction = await crmService.redeemPoints(value.customerId, value.points, isSuper ? undefined : req.enterpriseId);
     return res.status(201).json({ transaction });
   } catch (error: any) {
     if (error.message === 'Customer profile not found') return res.status(404).json({ error: error.message });
@@ -210,9 +234,11 @@ router.post('/points/redeem', authenticateUser, requireRole('admin', 'owner', 'm
 
 router.get('/transactions', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const customerId = req.query.customerId as string;
     if (!customerId) return res.status(400).json({ error: 'customerId query parameter is required' });
-    const transactions = await crmService.getTransactions(customerId);
+    const transactions = await crmService.getTransactions(customerId, isSuper ? undefined : req.enterpriseId);
     return res.json({ transactions });
   } catch (error) { console.error('Get transactions error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
