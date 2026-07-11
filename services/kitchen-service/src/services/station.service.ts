@@ -138,7 +138,22 @@ export class StationService {
     menuItemId: string,
     stationId: string,
     preparationOrder?: number,
+    enterpriseId?: string,
   ): Promise<any> {
+    // Tenant guard: both the station and the menu item must belong to the caller's enterprise.
+    // (menu_item_stations itself has no enterprise_id — scoped via its parents.)
+    if (enterpriseId) {
+      const { rows: own } = await this.db.query(
+        `SELECT
+           EXISTS(SELECT 1 FROM kitchen_stations WHERE id = $1 AND enterprise_id = $2) AS station_ok,
+           EXISTS(SELECT 1 FROM menu_items       WHERE id = $3 AND enterprise_id = $2) AS item_ok`,
+        [stationId, enterpriseId, menuItemId],
+      );
+      if (!own[0].station_ok || !own[0].item_ok) {
+        return null;
+      }
+    }
+
     const { rows } = await this.db.query(
       `INSERT INTO menu_item_stations (menu_item_id, station_id, preparation_order)
        VALUES ($1, $2, $3)
@@ -154,7 +169,25 @@ export class StationService {
     return rows[0];
   }
 
-  async removeItemFromStation(menuItemId: string, stationId: string): Promise<boolean> {
+  async removeItemFromStation(
+    menuItemId: string,
+    stationId: string,
+    enterpriseId?: string,
+  ): Promise<boolean> {
+    // Tenant guard: only delete when the target station belongs to the caller's enterprise.
+    if (enterpriseId) {
+      const { rowCount } = await this.db.query(
+        `DELETE FROM menu_item_stations mis
+         USING kitchen_stations ks
+         WHERE mis.station_id = ks.id
+           AND mis.menu_item_id = $1
+           AND mis.station_id = $2
+           AND ks.enterprise_id = $3`,
+        [menuItemId, stationId, enterpriseId],
+      );
+      return (rowCount ?? 0) > 0;
+    }
+
     const { rowCount } = await this.db.query(
       `DELETE FROM menu_item_stations WHERE menu_item_id = $1 AND station_id = $2`,
       [menuItemId, stationId],
@@ -232,10 +265,29 @@ export class StationService {
     stationId: string,
     status: string,
     cookId?: string,
+    enterpriseId?: string,
   ): Promise<any> {
     const client: PoolClient = await this.db.connect();
     try {
       await client.query('BEGIN');
+
+      // Tenant guard: the order item's parent order and the station must both
+      // belong to the caller's enterprise. Prevents cross-tenant status writes
+      // and cross-tenant order auto-completion via checkAutoComplete.
+      if (enterpriseId) {
+        const { rows: own } = await client.query(
+          `SELECT
+             EXISTS(SELECT 1 FROM order_items oi
+                    JOIN orders o ON o.id = oi.order_id
+                    WHERE oi.id = $1 AND o.enterprise_id = $2) AS item_ok,
+             EXISTS(SELECT 1 FROM kitchen_stations WHERE id = $3 AND enterprise_id = $2) AS station_ok`,
+          [orderItemId, enterpriseId, stationId],
+        );
+        if (!own[0].item_ok || !own[0].station_ok) {
+          await client.query('ROLLBACK');
+          return null;
+        }
+      }
 
       // 1. Upsert the station status row
       const startedExpr = status === 'in_progress' ? 'NOW()' : 'oiss.started_at';
@@ -270,7 +322,7 @@ export class StationService {
 
       // 2. If status is 'done', check auto-complete logic
       if (status === 'done') {
-        await this.checkAutoComplete(client, orderItemId);
+        await this.checkAutoComplete(client, orderItemId, enterpriseId);
       }
 
       await client.query('COMMIT');
@@ -291,7 +343,11 @@ export class StationService {
    * 2) If yes, are ALL items in the parent order done?
    * 3) If yes, set order status = 'ready'.
    */
-  private async checkAutoComplete(client: PoolClient, orderItemId: string): Promise<void> {
+  private async checkAutoComplete(
+    client: PoolClient,
+    orderItemId: string,
+    enterpriseId?: string,
+  ): Promise<void> {
     // Count pending/in_progress stations for this order item
     const { rows: itemCheck } = await client.query(
       `SELECT COUNT(*) AS remaining
@@ -333,13 +389,21 @@ export class StationService {
     }
 
     // All items in the order are fully done at every station — mark order ready
+    const autoVals: any[] = [orderItemId];
+    let autoEnterpriseCond = '';
+    if (enterpriseId) {
+      autoVals.push(enterpriseId);
+      autoEnterpriseCond = `AND enterprise_id = $${autoVals.length}`;
+    }
+
     const { rows: updatedOrder } = await client.query(
       `UPDATE orders
        SET status = 'ready', updated_at = NOW()
        WHERE id = (SELECT order_id FROM order_items WHERE id = $1)
          AND status IN ('confirmed', 'preparing')
+         ${autoEnterpriseCond}
        RETURNING id, order_number`,
-      [orderItemId],
+      autoVals,
     );
 
     if (updatedOrder.length > 0) {

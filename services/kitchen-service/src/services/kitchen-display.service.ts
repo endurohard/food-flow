@@ -125,14 +125,24 @@ export class KitchenDisplayService {
   /**
    * Update order status from kitchen display
    */
-  async updateOrderStatus(orderId: string, status: string): Promise<void> {
+  async updateOrderStatus(orderId: string, status: string, enterpriseId?: string): Promise<void> {
     try {
+      // Tenant scope: filter by enterprise when a (verified) enterpriseId is supplied.
+      // TODO: Socket.IO caller passes enterpriseId from an unverified payload — enterpriseId
+      // is currently undefined here until socket auth is hardened (separate task).
+      const vals: any[] = [status, orderId];
+      let entCond = '';
+      if (enterpriseId) {
+        vals.push(enterpriseId);
+        entCond = `AND enterprise_id = $${vals.length}`;
+      }
+
       const result = await this.db.query(
         `UPDATE orders
          SET status = $1, updated_at = NOW()
-         WHERE id = $2
+         WHERE id = $2 ${entCond}
          RETURNING restaurant_id as "restaurantId", enterprise_id as "enterpriseId", order_number as "orderNumber"`,
-        [status, orderId]
+        vals
       );
 
       if (result.rows.length > 0) {
@@ -156,13 +166,21 @@ export class KitchenDisplayService {
   /**
    * Get order statistics for a restaurant
    */
-  async getOrderStats(restaurantId: string): Promise<{
+  async getOrderStats(restaurantId: string, enterpriseId?: string): Promise<{
     pending: number;
     preparing: number;
     ready: number;
     averageTime: number;
   }> {
     try {
+      // TODO: enterpriseId is undefined until Socket.IO auth is hardened (separate task).
+      const vals: any[] = [restaurantId];
+      let entCond = '';
+      if (enterpriseId) {
+        vals.push(enterpriseId);
+        entCond = `AND enterprise_id = $${vals.length}`;
+      }
+
       const result = await this.db.query(
         `SELECT
           COUNT(CASE WHEN status = 'confirmed' THEN 1 END) as pending,
@@ -172,8 +190,9 @@ export class KitchenDisplayService {
         FROM orders
         WHERE restaurant_id = $1
           AND status IN ('confirmed', 'preparing', 'ready')
-          AND created_at > NOW() - INTERVAL '1 day'`,
-        [restaurantId]
+          AND created_at > NOW() - INTERVAL '1 day'
+          ${entCond}`,
+        vals
       );
 
       return {
@@ -191,14 +210,22 @@ export class KitchenDisplayService {
   /**
    * Mark order as complete (picked up or delivered)
    */
-  async completeOrder(orderId: string): Promise<void> {
+  async completeOrder(orderId: string, enterpriseId?: string): Promise<void> {
     try {
+      // TODO: enterpriseId is undefined until Socket.IO auth is hardened (separate task).
+      const vals: any[] = [orderId];
+      let entCond = '';
+      if (enterpriseId) {
+        vals.push(enterpriseId);
+        entCond = `AND enterprise_id = $${vals.length}`;
+      }
+
       const result = await this.db.query(
         `UPDATE orders
          SET status = 'picked_up', updated_at = NOW()
-         WHERE id = $1
+         WHERE id = $1 ${entCond}
          RETURNING restaurant_id as "restaurantId", enterprise_id as "enterpriseId"`,
-        [orderId]
+        vals
       );
 
       if (result.rows.length > 0) {
@@ -214,8 +241,16 @@ export class KitchenDisplayService {
   /**
    * Get overdue orders (orders taking too long)
    */
-  async getOverdueOrders(restaurantId: string): Promise<KitchenOrder[]> {
+  async getOverdueOrders(restaurantId: string, enterpriseId?: string): Promise<KitchenOrder[]> {
     try {
+      // TODO: enterpriseId is undefined until Socket.IO auth is hardened (separate task).
+      const vals: any[] = [restaurantId];
+      let entCond = '';
+      if (enterpriseId) {
+        vals.push(enterpriseId);
+        entCond = `AND o.enterprise_id = $${vals.length}`;
+      }
+
       const result = await this.db.query(
         `SELECT
           o.id,
@@ -227,8 +262,9 @@ export class KitchenDisplayService {
         WHERE o.restaurant_id = $1
           AND o.status IN ('confirmed', 'preparing')
           AND o.created_at < NOW() - INTERVAL '30 minutes'
+          ${entCond}
         ORDER BY o.created_at ASC`,
-        [restaurantId]
+        vals
       );
 
       return result.rows;

@@ -33,9 +33,14 @@ router.get('/orders', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'restaurantId is required' });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const conds = [`o.restaurant_id = $1`, `o.status IN ('confirmed', 'preparing', 'ready')`];
     const vals: any[] = [restaurantId];
-    if (req.enterpriseId) {
+    if (!isSuper) {
       conds.push(`o.enterprise_id = $${vals.length + 1}`);
       vals.push(req.enterpriseId);
     }
@@ -112,10 +117,15 @@ router.put('/orders/:orderId/status', async (req: Request, res: Response) => {
       });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     // Tenant guard: fail if JWT tenant doesn't match the order's enterprise
     const whereConds = ['id = $2'];
     const vals: any[] = [status, orderId];
-    if (req.enterpriseId) {
+    if (!isSuper) {
       whereConds.push(`enterprise_id = $3`);
       vals.push(req.enterpriseId);
     }
@@ -159,13 +169,18 @@ router.get('/stats', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'restaurantId is required' });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const conds = [
       `restaurant_id = $1`,
       `status IN ('confirmed', 'preparing', 'ready')`,
       `created_at > NOW() - INTERVAL '1 day'`
     ];
     const vals: any[] = [restaurantId];
-    if (req.enterpriseId) {
+    if (!isSuper) {
       conds.push(`enterprise_id = $${vals.length + 1}`);
       vals.push(req.enterpriseId);
     }

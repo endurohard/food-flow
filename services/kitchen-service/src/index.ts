@@ -123,6 +123,9 @@ io.on('connection', (socket) => {
 
   socket.on('updateOrderStatus', async (data: { orderId: string; status: string }) => {
     try {
+      // TODO: multi-tenant — pass a VERIFIED enterpriseId as the 3rd arg once Socket.IO
+      // auth is hardened (the `authenticate` payload is currently unverified, so we must
+      // NOT trust data.enterpriseId here). Until then updateOrderStatus runs unscoped.
       await kitchenDisplayService.updateOrderStatus(data.orderId, data.status);
       logger.info(`Order ${data.orderId} status updated to ${data.status}`);
     } catch (error) {

@@ -61,6 +61,11 @@ router.get('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'restaurantId query parameter is required' });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const stations = await stationService.listStations(
       restaurantId as string,
       req.enterpriseId,
@@ -105,6 +110,11 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const station = await stationService.createStation({
       ...value,
       enterpriseId: req.enterpriseId,
@@ -139,6 +149,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const station = await stationService.updateStation(req.params.id, value, req.enterpriseId);
     if (!station) {
       return res.status(404).json({ error: 'Station not found or access denied' });
@@ -168,6 +183,11 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const deleted = await stationService.deleteStation(req.params.id, req.enterpriseId);
     if (!deleted) {
       return res.status(404).json({ error: 'Station not found or access denied' });
@@ -216,11 +236,20 @@ router.post('/:stationId/items', async (req: Request, res: Response) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const assignment = await stationService.assignItemToStation(
       value.menuItemId,
       req.params.stationId,
       value.preparationOrder,
+      req.enterpriseId,
     );
+    if (!assignment) {
+      return res.status(404).json({ error: 'Station or menu item not found or access denied' });
+    }
     res.status(201).json(assignment);
   } catch (error) {
     logger.error('Error assigning item to station:', error);
@@ -251,9 +280,15 @@ router.post('/:stationId/items', async (req: Request, res: Response) => {
  */
 router.delete('/:stationId/items/:menuItemId', async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const removed = await stationService.removeItemFromStation(
       req.params.menuItemId,
       req.params.stationId,
+      req.enterpriseId,
     );
     if (!removed) {
       return res.status(404).json({ error: 'Assignment not found' });
@@ -285,6 +320,11 @@ router.delete('/:stationId/items/:menuItemId', async (req: Request, res: Respons
  */
 router.get('/:stationId/orders', async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const orders = await stationService.getStationOrders(
       req.params.stationId,
       req.enterpriseId,
@@ -337,12 +377,21 @@ router.put('/:stationId/items/:orderItemId/status', async (req: Request, res: Re
       return res.status(400).json({ error: error.details[0].message });
     }
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const result = await stationService.updateItemStationStatus(
       req.params.orderItemId,
       req.params.stationId,
       value.status,
       req.userId,
+      req.enterpriseId,
     );
+    if (!result) {
+      return res.status(404).json({ error: 'Order item or station not found or access denied' });
+    }
     res.json(result);
   } catch (error) {
     logger.error('Error updating item station status:', error);

@@ -9,6 +9,9 @@ router.use(authenticateUser);
 router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
 const printerService = new PrinterService();
 
+// TODO: multi-tenant — printer stations/settings below are process-global in-memory state
+// shared across ALL enterprises (cross-tenant leak). Needs per-enterprise tenant scoping,
+// which requires moving this to PostgreSQL keyed by enterprise_id (separate task).
 // In-memory storage (in production, use PostgreSQL)
 let printerStations: PrinterStation[] = [
   {
