@@ -10,12 +10,6 @@ import {
   requireEnterpriseRole
 } from '../middleware/enterprise.middleware';
 
-const requireAdmin = (req: Request, res: Response, next: Function): any => {
-  if (req.userRole !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden', message: 'Admin role required' });
-  }
-  next();
-};
 import { config } from '../config';
 import { logPiiAccess } from '../middleware/pii-audit.middleware';
 
@@ -111,13 +105,35 @@ const createAddressSchema = Joi.object({
  *       200:
  *         description: Users list retrieved successfully
  */
-router.get('/', authenticateUser, requireAdmin, logPiiAccess('users', ['email', 'phone', 'pbx_extension']), async (req: Request, res: Response) => {
+router.get('/', authenticateUser, logPiiAccess('users', ['email', 'phone', 'pbx_extension']), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    // Tenant isolation: обычный запрос отдаёт только пользователей своего
+    // предприятия. Без super_admin и без enterprise-контекста — отказ,
+    // иначе endpoint утёк бы всех пользователей всех предприятий.
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
+    const conds: string[] = [];
+    const values: any[] = [];
+    if (!isSuper) {
+      values.push(req.enterpriseId);
+      conds.push(`enterprise_id = $${values.length}`);
+    }
+    if (req.query.role) {
+      values.push(req.query.role);
+      conds.push(`role = $${values.length}`);
+    }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
     const result = await pool.query(
       `SELECT id, email, first_name, last_name, phone, role,
               pbx_extension, pbx_username, pbx_display_name
        FROM users
-       ORDER BY created_at DESC`
+       ${where}
+       ORDER BY created_at DESC`,
+      values
     );
 
     return res.json({ users: result.rows });
@@ -386,14 +402,18 @@ router.delete('/addresses/:addressId', authenticateUser, async (req: Request, re
 router.get('/:userId/pbx-settings', authenticateUser, logPiiAccess('users', ['pbx_extension', 'pbx_username', 'pbx_password', 'pbx_ws_password']), async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
-    if (req.userRole !== 'admin' && req.userId !== userId) {
+    const isSuper = req.userRole === 'super_admin';
+    const isSelf = req.userId === userId;
+    // Чужие PBX/SIP-креды доступны только в рамках своего предприятия
+    if (!isSuper && !isSelf && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
+    const scoped = !isSuper && !isSelf;
     const result = await pool.query(
       `SELECT pbx_extension, pbx_username, pbx_password, pbx_display_name, pbx_ws_password
        FROM users
-       WHERE id = $1`,
-      [userId]
+       WHERE id = $1${scoped ? ' AND enterprise_id = $2' : ''}`,
+      scoped ? [userId, req.enterpriseId] : [userId]
     );
 
     if (result.rows.length === 0) {
@@ -439,9 +459,17 @@ router.get('/:userId/pbx-settings', authenticateUser, logPiiAccess('users', ['pb
  *       200:
  *         description: PBX settings updated successfully
  */
-router.put('/:userId/pbx-settings', authenticateUser, requireAdmin, async (req: Request, res: Response) => {
+router.put('/:userId/pbx-settings', authenticateUser, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const isSuper = req.userRole === 'super_admin';
+    // Только админ (в рамках своего предприятия) или платформенный супер-админ
+    if (!isSuper && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden', message: 'Admin role required' });
+    }
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const {
       pbx_extension,
       pbx_username,
@@ -450,20 +478,16 @@ router.put('/:userId/pbx-settings', authenticateUser, requireAdmin, async (req: 
       pbx_ws_password
     } = req.body;
 
+    const scoped = !isSuper;
     const result = await pool.query(
       `UPDATE users
        SET pbx_extension = $1, pbx_username = $2, pbx_password = $3,
            pbx_display_name = $4, pbx_ws_password = $5, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6
+       WHERE id = $6${scoped ? ' AND enterprise_id = $7' : ''}
        RETURNING id, pbx_extension, pbx_username, pbx_display_name`,
-      [
-        pbx_extension,
-        pbx_username,
-        pbx_password,
-        pbx_display_name,
-        pbx_ws_password,
-        userId
-      ]
+      scoped
+        ? [pbx_extension, pbx_username, pbx_password, pbx_display_name, pbx_ws_password, userId, req.enterpriseId]
+        : [pbx_extension, pbx_username, pbx_password, pbx_display_name, pbx_ws_password, userId]
     );
 
     if (result.rows.length === 0) {

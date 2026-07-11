@@ -740,8 +740,13 @@ router.put(
       if (!fields.length) return res.status(400).json({ error: 'No fields to update' });
 
       values.push(req.params.templateId);
+      const templateParam = p++;
+      values.push(req.enterpriseId);
+      // Tenant guard: шаблон должен принадлежать предприятию из контекста,
+      // иначе по чужому templateId можно обновить шаблон другого предприятия
       const result = await pool.query(
-        `UPDATE enterprise_menu_templates SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+        `UPDATE enterprise_menu_templates SET ${fields.join(', ')}
+         WHERE id = $${templateParam} AND enterprise_id = $${p} RETURNING *`,
         values
       );
       if (!result.rows[0]) return res.status(404).json({ error: 'Template not found' });
