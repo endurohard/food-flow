@@ -64,6 +64,22 @@ export class SupplierService {
     return (r.rowCount ?? 0) > 0;
   }
 
+  // ========== OWNERSHIP HELPERS (multi-tenant) ==========
+
+  async supplierBelongsTo(supplierId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM suppliers WHERE id = $1 AND enterprise_id = $2', [supplierId, enterpriseId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async invoiceBelongsTo(invoiceId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM supply_invoices WHERE id = $1 AND enterprise_id = $2', [invoiceId, enterpriseId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
   // ========== INVOICES ==========
 
   async listInvoices(filters: { enterpriseId?: string; supplierId?: string; status?: string }): Promise<any[]> {
@@ -121,13 +137,16 @@ export class SupplierService {
     return result.rows;
   }
 
-  async confirmInvoice(invoiceId: string, receivedBy: string, inventoryService: any): Promise<any> {
+  async confirmInvoice(invoiceId: string, receivedBy: string, inventoryService: any, enterpriseId?: string): Promise<any> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Get invoice and items
-      const invoice = await client.query('SELECT * FROM supply_invoices WHERE id = $1 FOR UPDATE', [invoiceId]);
+      // Get invoice and items (scoped to enterprise unless super_admin)
+      const invConds = ['id = $1'];
+      const invVals: any[] = [invoiceId];
+      if (enterpriseId) { invConds.push('enterprise_id = $2'); invVals.push(enterpriseId); }
+      const invoice = await client.query(`SELECT * FROM supply_invoices WHERE ${invConds.join(' AND ')} FOR UPDATE`, invVals);
       if (!invoice.rows[0]) throw new Error('Invoice not found');
       if (invoice.rows[0].status === 'received') throw new Error('Invoice already confirmed');
 

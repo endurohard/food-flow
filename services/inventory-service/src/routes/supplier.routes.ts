@@ -100,6 +100,18 @@ router.get('/invoices', authenticateUser, async (req: Request, res: Response) =>
 
 router.post('/invoices', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    if (!isSuper) {
+      if (req.body.warehouseId && !(await inventoryService.warehouseBelongsTo(req.body.warehouseId, req.enterpriseId!))) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Склад не принадлежит предприятию' });
+      }
+      if (req.body.supplierId && !(await supplierService.supplierBelongsTo(req.body.supplierId, req.enterpriseId!))) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Поставщик не принадлежит предприятию' });
+      }
+    }
     const invoice = await supplierService.createInvoice(req.body, req.enterpriseId);
     return res.status(201).json({ invoice });
   } catch (error) {
@@ -110,6 +122,13 @@ router.post('/invoices', authenticateUser, async (req: Request, res: Response) =
 
 router.get('/invoices/:id/items', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    if (!isSuper && !(await supplierService.invoiceBelongsTo(req.params.id, req.enterpriseId!))) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
     const items = await supplierService.getInvoiceItems(req.params.id);
     return res.json({ items });
   } catch (error) {
@@ -120,6 +139,13 @@ router.get('/invoices/:id/items', authenticateUser, async (req: Request, res: Re
 
 router.post('/invoices/:id/items', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    if (!isSuper && !(await supplierService.invoiceBelongsTo(req.params.id, req.enterpriseId!))) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
     const item = await supplierService.addInvoiceItem(req.params.id, req.body);
     return res.status(201).json({ item });
   } catch (error) {
@@ -130,7 +156,11 @@ router.post('/invoices/:id/items', authenticateUser, async (req: Request, res: R
 
 router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const invoice = await supplierService.confirmInvoice(req.params.id, req.userId!, inventoryService);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const invoice = await supplierService.confirmInvoice(req.params.id, req.userId!, inventoryService, isSuper ? undefined : req.enterpriseId);
     return res.json({ invoice });
   } catch (error: any) {
     if (error.message === 'Invoice already confirmed' || error.message === 'Invoice not found') {

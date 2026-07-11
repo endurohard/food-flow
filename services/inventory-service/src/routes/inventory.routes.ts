@@ -83,9 +83,13 @@ router.delete('/items/:id', authenticateUser, requireRole('admin', 'owner', 'man
 
 router.get('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
-    const warehouses = await inventoryService.listWarehouses(restaurantId);
+    const warehouses = await inventoryService.listWarehouses(restaurantId, isSuper ? undefined : req.enterpriseId);
     return res.json({ warehouses });
   } catch (error) {
     console.error('List warehouses error:', error);
@@ -95,8 +99,15 @@ router.get('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manag
 
 router.post('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const { restaurantId, name, warehouseType } = req.body;
     if (!restaurantId || !name) return res.status(400).json({ error: 'restaurantId and name are required' });
+    if (!isSuper && !(await inventoryService.restaurantBelongsTo(restaurantId, req.enterpriseId!))) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Ресторан не принадлежит предприятию' });
+    }
     const warehouse = await inventoryService.createWarehouse(restaurantId, { name, warehouseType }, req.enterpriseId);
     return res.status(201).json({ warehouse });
   } catch (error) {
@@ -120,7 +131,11 @@ router.put('/warehouses/:id', authenticateUser, requireRole('admin', 'owner', 'm
 
 router.get('/stock/:warehouseId', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
-    const stock = await inventoryService.getStock(req.params.warehouseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const stock = await inventoryService.getStock(req.params.warehouseId, isSuper ? undefined : req.enterpriseId);
     return res.json({ stock });
   } catch (error) {
     console.error('Get stock error:', error);
@@ -149,6 +164,20 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    if (!isSuper) {
+      const [wOk, iOk] = await Promise.all([
+        inventoryService.warehouseBelongsTo(value.warehouseId, req.enterpriseId!),
+        inventoryService.itemBelongsTo(value.inventoryItemId, req.enterpriseId!)
+      ]);
+      if (!wOk || !iOk) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Склад или позиция не принадлежат предприятию' });
+      }
+    }
+
     const movement = await inventoryService.addStockMovement({
       ...value,
       performedBy: req.userId,
@@ -163,7 +192,12 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
 
 router.get('/movements', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const movements = await inventoryService.getMovements({
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       warehouseId: req.query.warehouseId as string,
       inventoryItemId: req.query.inventoryItemId as string,
       movementType: req.query.movementType as string,
@@ -181,7 +215,12 @@ router.get('/movements', authenticateUser, requireRole('admin', 'owner', 'manage
 
 router.get('/batches', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const batches = await inventoryService.listBatches({
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       inventoryItemId: req.query.inventoryItemId as string,
       warehouseId: req.query.warehouseId as string,
       includeExpired: req.query.includeExpired === 'true',
@@ -196,10 +235,14 @@ router.get('/batches', authenticateUser, requireRole('admin', 'owner', 'manager'
 
 router.get('/expiring', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     const warehouseId = req.query.warehouseId as string;
     if (!warehouseId) return res.status(400).json({ error: 'warehouseId is required' });
     const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
-    const items = await inventoryService.getExpiringItems(warehouseId, days);
+    const items = await inventoryService.getExpiringItems(warehouseId, days, isSuper ? undefined : req.enterpriseId);
     return res.json({ items });
   } catch (error) {
     console.error('Get expiring items error:', error);

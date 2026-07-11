@@ -42,7 +42,10 @@ export class TechCardService {
     return result.rows;
   }
 
-  async getById(techCardId: string): Promise<any> {
+  async getById(techCardId: string, enterpriseId?: string): Promise<any> {
+    const conds = ['tc.id = $1'];
+    const values: any[] = [techCardId];
+    if (enterpriseId) { conds.push(`tc.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT tc.*, mi.name as menu_item_name, mi.price as menu_item_price,
         oi.name as output_item_name, oi.unit as output_item_unit,
@@ -50,8 +53,8 @@ export class TechCardService {
        FROM tech_cards tc
        LEFT JOIN menu_items mi ON tc.menu_item_id = mi.id
        LEFT JOIN inventory_items oi ON tc.output_item_id = oi.id
-       WHERE tc.id = $1`,
-      [techCardId]
+       WHERE ${conds.join(' AND ')}`,
+      values
     );
     if (!result.rows[0]) return null;
 
@@ -100,10 +103,20 @@ export class TechCardService {
     }
   }
 
-  async update(techCardId: string, data: any): Promise<any> {
+  async update(techCardId: string, data: any, enterpriseId?: string): Promise<any> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Ownership guard: refuse to touch a tech card from another enterprise
+      const ownConds = ['id = $1'];
+      const ownVals: any[] = [techCardId];
+      if (enterpriseId) { ownConds.push('enterprise_id = $2'); ownVals.push(enterpriseId); }
+      const owned = await client.query(`SELECT id FROM tech_cards WHERE ${ownConds.join(' AND ')} FOR UPDATE`, ownVals);
+      if (!owned.rows[0]) {
+        await client.query('ROLLBACK');
+        return null;
+      }
 
       const fields: string[] = [];
       const values: any[] = [];
@@ -137,7 +150,7 @@ export class TechCardService {
       }
 
       await client.query('COMMIT');
-      return this.getById(techCardId);
+      return this.getById(techCardId, enterpriseId);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -146,13 +159,16 @@ export class TechCardService {
     }
   }
 
-  async delete(techCardId: string): Promise<boolean> {
-    const r = await this.pool.query('UPDATE tech_cards SET is_active = false WHERE id = $1', [techCardId]);
+  async delete(techCardId: string, enterpriseId?: string): Promise<boolean> {
+    const conds = ['id = $1'];
+    const vals: any[] = [techCardId];
+    if (enterpriseId) { conds.push('enterprise_id = $2'); vals.push(enterpriseId); }
+    const r = await this.pool.query(`UPDATE tech_cards SET is_active = false WHERE ${conds.join(' AND ')}`, vals);
     return (r.rowCount ?? 0) > 0;
   }
 
-  async getCostCalculation(techCardId: string): Promise<any> {
-    const card = await this.getById(techCardId);
+  async getCostCalculation(techCardId: string, enterpriseId?: string): Promise<any> {
+    const card = await this.getById(techCardId, enterpriseId);
     if (!card) return null;
 
     let totalCost = 0;

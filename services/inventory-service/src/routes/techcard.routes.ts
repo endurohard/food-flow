@@ -19,7 +19,11 @@ router.get('/', authenticateUser, async (req: Request, res: Response) => {
 
 router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const techCard = await techCardService.getById(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const techCard = await techCardService.getById(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!techCard) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ techCard });
   } catch (error) {
@@ -30,7 +34,11 @@ router.get('/:id', authenticateUser, async (req: Request, res: Response) => {
 
 router.get('/:id/cost', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const cost = await techCardService.getCostCalculation(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const cost = await techCardService.getCostCalculation(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!cost) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ cost });
   } catch (error) {
@@ -69,7 +77,11 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
 
 router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const techCard = await techCardService.update(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const techCard = await techCardService.update(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!techCard) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ techCard });
   } catch (error) {
@@ -80,7 +92,11 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
 
 router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const deleted = await techCardService.delete(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const deleted = await techCardService.delete(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ message: 'Tech card deactivated' });
   } catch (error) {

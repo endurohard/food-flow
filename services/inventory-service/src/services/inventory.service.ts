@@ -117,13 +117,39 @@ export class InventoryService {
     return (r.rowCount ?? 0) > 0;
   }
 
+  // ========== OWNERSHIP HELPERS (multi-tenant) ==========
+
+  async warehouseBelongsTo(warehouseId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM warehouses WHERE id = $1 AND enterprise_id = $2', [warehouseId, enterpriseId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async itemBelongsTo(itemId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM inventory_items WHERE id = $1 AND enterprise_id = $2', [itemId, enterpriseId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async restaurantBelongsTo(restaurantId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM restaurants WHERE id = $1 AND enterprise_id = $2', [restaurantId, enterpriseId]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
   // ========== WAREHOUSES ==========
 
-  async listWarehouses(restaurantId: string): Promise<any[]> {
+  async listWarehouses(restaurantId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['w.restaurant_id = $1', 'w.is_active = true'];
+    const values: any[] = [restaurantId];
+    if (enterpriseId) { conds.push(`w.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT w.*, (SELECT COUNT(*) FROM inventory_stock s WHERE s.warehouse_id = w.id) as items_count
-       FROM warehouses w WHERE w.restaurant_id = $1 AND w.is_active = true ORDER BY w.name`,
-      [restaurantId]
+       FROM warehouses w WHERE ${conds.join(' AND ')} ORDER BY w.name`,
+      values
     );
     return result.rows;
   }
@@ -159,14 +185,19 @@ export class InventoryService {
 
   // ========== STOCK ==========
 
-  async getStock(warehouseId: string): Promise<any[]> {
+  async getStock(warehouseId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['s.warehouse_id = $1'];
+    const values: any[] = [warehouseId];
+    // inventory_stock has no enterprise_id — scope through the parent warehouse
+    if (enterpriseId) { conds.push(`w.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT s.*, i.name, i.sku, i.category, i.unit, i.min_stock, i.cost_price
        FROM inventory_stock s
        INNER JOIN inventory_items i ON s.inventory_item_id = i.id
-       WHERE s.warehouse_id = $1
+       INNER JOIN warehouses w ON s.warehouse_id = w.id
+       WHERE ${conds.join(' AND ')}
        ORDER BY i.name`,
-      [warehouseId]
+      values
     );
     return result.rows;
   }
@@ -245,10 +276,11 @@ export class InventoryService {
     }
   }
 
-  async getMovements(filters: { warehouseId?: string; inventoryItemId?: string; movementType?: string; limit?: number; offset?: number }): Promise<any[]> {
+  async getMovements(filters: { enterpriseId?: string; warehouseId?: string; inventoryItemId?: string; movementType?: string; limit?: number; offset?: number }): Promise<any[]> {
     const conditions: string[] = [];
     const values: any[] = [];
     let p = 1;
+    if (filters.enterpriseId) { conditions.push(`m.enterprise_id = $${p++}`); values.push(filters.enterpriseId); }
     if (filters.warehouseId) { conditions.push(`m.warehouse_id = $${p++}`); values.push(filters.warehouseId); }
     if (filters.inventoryItemId) { conditions.push(`m.inventory_item_id = $${p++}`); values.push(filters.inventoryItemId); }
     if (filters.movementType) { conditions.push(`m.movement_type = $${p++}`); values.push(filters.movementType); }
@@ -368,6 +400,7 @@ export class InventoryService {
   }
 
   async listBatches(filters: {
+    enterpriseId?: string;
     inventoryItemId?: string;
     warehouseId?: string;
     includeExpired?: boolean;
@@ -377,6 +410,10 @@ export class InventoryService {
     const values: any[] = [];
     let p = 1;
 
+    if (filters.enterpriseId) {
+      conditions.push(`b.enterprise_id = $${p++}`);
+      values.push(filters.enterpriseId);
+    }
     if (filters.inventoryItemId) {
       conditions.push(`b.inventory_item_id = $${p++}`);
       values.push(filters.inventoryItemId);
@@ -478,18 +515,23 @@ export class InventoryService {
     }
   }
 
-  async getExpiringItems(warehouseId: string, daysAhead?: number): Promise<any[]> {
+  async getExpiringItems(warehouseId: string, daysAhead?: number, enterpriseId?: string): Promise<any[]> {
     const days = daysAhead ?? 7;
+    const conds = [
+      'b.warehouse_id = $1',
+      'b.is_depleted = false',
+      'b.expiry_date IS NOT NULL',
+      'b.expiry_date <= NOW() + make_interval(days => $2)'
+    ];
+    const values: any[] = [warehouseId, days];
+    if (enterpriseId) { conds.push(`b.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
     const result = await this.pool.query(
       `SELECT b.*, i.name as item_name, i.unit, i.category
        FROM inventory_batches b
        INNER JOIN inventory_items i ON b.inventory_item_id = i.id
-       WHERE b.warehouse_id = $1
-         AND b.is_depleted = false
-         AND b.expiry_date IS NOT NULL
-         AND b.expiry_date <= NOW() + make_interval(days => $2)
+       WHERE ${conds.join(' AND ')}
        ORDER BY b.expiry_date ASC`,
-      [warehouseId, days]
+      values
     );
     return result.rows;
   }
