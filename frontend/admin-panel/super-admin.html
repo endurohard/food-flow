@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Супер-админ — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <script src="js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: var(--font-family);
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+      margin: 0; min-height: 100vh;
+    }
+    .topbar {
+      background: var(--color-primary); color: #fff;
+      padding: 16px 28px; display: flex; align-items: center; gap: 12px;
+    }
+    .topbar h1 { font-size: 18px; margin: 0; font-weight: 700; }
+    .topbar .who { margin-left: auto; font-size: 13px; opacity: .9; }
+    .topbar button {
+      background: rgba(255,255,255,.15); color: #fff; border: 0;
+      padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 20px; display: grid; gap: 24px; }
+    .card {
+      background: var(--admin-card-bg, #FFFDF7); border: 1px solid var(--admin-border, #E7E0CF);
+      border-radius: 16px; padding: 22px;
+    }
+    .card h2 { margin: 0 0 16px; font-size: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+    input, select {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--admin-border, #E7E0CF);
+      border-radius: 10px; font-size: 14px; background: #fff; font-family: inherit;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn {
+      background: var(--color-primary); color: #fff; border: 0; padding: 11px 20px;
+      border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 14px; margin-top: 16px;
+    }
+    .btn:disabled { opacity: .6; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px; border-bottom: 2px solid var(--admin-border, #E7E0CF); font-size: 12px; color: var(--color-text-secondary); text-transform: uppercase; }
+    td { padding: 10px; border-bottom: 1px solid var(--admin-border, #E7E0CF); }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; background: var(--color-primary-light, #E3F0E8); color: var(--color-primary); }
+    .alert { padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-top: 14px; display: none; }
+    .alert-ok { background: #E3F5E9; color: #1E7B44; }
+    .alert-err { background: #FBE4E0; color: #B23A20; }
+    .creds { font-family: monospace; background: #FBF7EC; padding: 10px 12px; border-radius: 8px; margin-top: 8px; font-size: 13px; }
+    .denied { max-width: 520px; margin: 80px auto; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="app" style="display:none;">
+    <div class="topbar">
+      <span style="font-size:22px;">🛡️</span>
+      <h1>Супер-администратор — управление организациями</h1>
+      <span class="who" id="whoami"></span>
+      <button onclick="AUTH.logout()">Выйти</button>
+    </div>
+
+    <div class="wrap">
+      <div class="card">
+        <h2>➕ Новая организация</h2>
+        <label>Название организации *</label>
+        <input id="orgName" placeholder="Кофейня «Базилик»">
+        <div class="grid2">
+          <div>
+            <label>Тип заведения</label>
+            <select id="orgType">
+              <option value="restaurant">Ресторан</option>
+              <option value="cafe">Кафе</option>
+              <option value="coffee_shop">Кофейня</option>
+              <option value="production">Производство</option>
+            </select>
+          </div>
+          <div>
+            <label>ИНН</label>
+            <input id="orgTax" placeholder="необязательно">
+          </div>
+        </div>
+
+        <h2 style="margin:22px 0 4px; font-size:14px;">Владелец организации</h2>
+        <div class="grid2">
+          <div>
+            <label>Имя *</label>
+            <input id="ownFirst" placeholder="Иван">
+          </div>
+          <div>
+            <label>Фамилия</label>
+            <input id="ownLast" placeholder="Петров">
+          </div>
+        </div>
+        <label>Email владельца *</label>
+        <input id="ownEmail" type="email" placeholder="owner@example.com">
+        <label>Пароль владельца * (мин. 8 символов)</label>
+        <input id="ownPass" type="text" placeholder="передайте владельцу для входа">
+
+        <button class="btn" id="createBtn" onclick="createOrg()">Создать организацию</button>
+        <div class="alert" id="alert"></div>
+      </div>
+
+      <div class="card">
+        <h2>🏢 Все организации (<span id="orgCount">0</span>)</h2>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr><th>Название</th><th>Тип</th><th>ИНН</th><th>Тариф</th><th>Создана</th></tr>
+            </thead>
+            <tbody id="orgsBody">
+              <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="denied" class="denied" style="display:none;">
+    <h2>Доступ только для супер-администратора</h2>
+    <p style="color:var(--color-text-secondary);">Эта страница управляет организациями всей платформы.</p>
+    <button class="btn" onclick="location.href='/admin-panel/login.html'">На вход</button>
+  </div>
+
+  <script>
+    AUTH.requireAuth();
+
+    const BT = { restaurant: 'Ресторан', cafe: 'Кафе', coffee_shop: 'Кофейня', production: 'Производство' };
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+    function showAlert(msg, ok) {
+      const a = document.getElementById('alert');
+      a.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
+      a.innerHTML = msg; a.style.display = 'block';
+    }
+
+    // Гейт: только super_admin
+    (function () {
+      if (AUTH.getRole() !== 'super_admin') {
+        document.getElementById('denied').style.display = 'block';
+        return;
+      }
+      document.getElementById('app').style.display = 'block';
+      const u = AUTH.getUser() || {};
+      document.getElementById('whoami').textContent = u.email || 'super_admin';
+      loadOrgs();
+    })();
+
+    async function loadOrgs() {
+      const body = document.getElementById('orgsBody');
+      try {
+        const res = await AUTH.fetch('/api/enterprises');
+        const data = await res.json();
+        const list = data.enterprises || [];
+        document.getElementById('orgCount').textContent = list.length;
+        if (!list.length) {
+          body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Организаций пока нет</td></tr>';
+          return;
+        }
+        body.innerHTML = list.map(o => `<tr>
+          <td><strong>${esc(o.name)}</strong></td>
+          <td><span class="badge">${esc(BT[o.business_type] || o.business_type || '—')}</span></td>
+          <td>${esc(o.tax_id || '—')}</td>
+          <td>${esc(o.subscription_plan || '—')}</td>
+          <td>${o.created_at ? new Date(o.created_at).toLocaleDateString('ru-RU') : '—'}</td>
+        </tr>`).join('');
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-danger,#B23A20);">Ошибка: ' + esc(e.message) + '</td></tr>';
+      }
+    }
+
+    async function createOrg() {
+      const btn = document.getElementById('createBtn');
+      const name = document.getElementById('orgName').value.trim();
+      const firstName = document.getElementById('ownFirst').value.trim();
+      const email = document.getElementById('ownEmail').value.trim();
+      const password = document.getElementById('ownPass').value;
+      if (!name) return showAlert('Укажите название организации', false);
+      if (!firstName) return showAlert('Укажите имя владельца', false);
+      if (!email) return showAlert('Укажите email владельца', false);
+      if (password.length < 8) return showAlert('Пароль владельца — минимум 8 символов', false);
+
+      const payload = {
+        name,
+        business_type: document.getElementById('orgType').value,
+        tax_id: document.getElementById('orgTax').value.trim(),
+        owner: { email, password, firstName, lastName: document.getElementById('ownLast').value.trim() }
+      };
+
+      btn.disabled = true; btn.textContent = 'Создание…';
+      try {
+        const res = await AUTH.fetch('/api/enterprises', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || ('HTTP ' + res.status));
+        showAlert('✅ Организация «' + esc(name) + '» создана. Доступ владельца:<div class="creds">' +
+          esc(email) + ' / ' + esc(password) + '</div>', true);
+        ['orgName','orgTax','ownFirst','ownLast','ownEmail','ownPass'].forEach(id => document.getElementById(id).value = '');
+        loadOrgs();
+      } catch (e) {
+        showAlert('Ошибка: ' + esc(e.message), false);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Создать организацию';
+      }
+    }
+  </script>
+</body>
+</html>

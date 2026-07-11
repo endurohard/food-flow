@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import Joi from 'joi';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { EnterpriseService } from '../services/enterprise.service';
@@ -6,9 +7,27 @@ import {
   authenticateUser,
   enterpriseContext,
   requireEnterpriseRole,
-  requirePermission
+  requirePermission,
+  requireSuperAdmin
 } from '../middleware/enterprise.middleware';
 import { config } from '../config';
+
+const createEnterpriseSchema = Joi.object({
+  name: Joi.string().min(1).max(200).required(),
+  legal_name: Joi.string().max(200).allow('', null),
+  tax_id: Joi.string().max(50).allow('', null),
+  phone: Joi.string().max(20).allow('', null),
+  email: Joi.string().email().allow('', null),
+  website: Joi.string().max(200).allow('', null),
+  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'production').default('restaurant'),
+  owner: Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().min(8).max(100).required(),
+    firstName: Joi.string().min(1).max(100).required(),
+    lastName: Joi.string().max(100).allow('', null),
+    phone: Joi.string().max(20).allow('', null)
+  }).required()
+});
 
 const router = Router();
 const enterpriseService = new EnterpriseService(config.database.url);
@@ -46,23 +65,51 @@ const pool = new Pool({ connectionString: config.database.url });
  *       201:
  *         description: Enterprise created successfully
  */
-router.post('/', authenticateUser, async (req, res) => {
+router.post('/', authenticateUser, requireSuperAdmin, async (req, res) => {
   try {
-    const enterprise = await enterpriseService.createEnterprise(
-      req.body,
-      req.userId
-    );
+    const { error, value } = createEnterpriseSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: error.message });
+    }
+    const { owner, ...enterpriseData } = value;
+    const result = await enterpriseService.createEnterpriseWithOwner(enterpriseData, owner);
 
     return res.status(201).json({
       success: true,
-      enterprise
+      enterprise: result.enterprise,
+      owner: result.owner
     });
   } catch (error: any) {
-    console.error('Failed to create enterprise:', error);
-    return res.status(500).json({
-      error: 'Failed to create enterprise',
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to create enterprise:', error);
+    return res.status(status).json({
+      error: status >= 500 ? 'Failed to create enterprise' : error.message,
       message: error.message
     });
+  }
+});
+
+/**
+ * @swagger
+ * /api/enterprises:
+ *   get:
+ *     summary: List all enterprises (super-admin only)
+ *     tags: [Enterprises]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All enterprises retrieved successfully
+ */
+router.get('/', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const result = await enterpriseService.getAllEnterprises(limit, offset);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('Failed to list enterprises:', error);
+    return res.status(500).json({ error: 'Failed to list enterprises', message: error.message });
   }
 });
 

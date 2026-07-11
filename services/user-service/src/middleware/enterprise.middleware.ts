@@ -101,6 +101,21 @@ export const enterpriseContext = (enterpriseService: EnterpriseService) => {
 };
 
 /**
+ * Middleware to require the platform-level super_admin global role.
+ * Super-admins are not tied to any enterprise — they create and oversee them.
+ * req.userRole is the global JWT role (set by authenticateUser).
+ */
+export const requireSuperAdmin = (req: Request, res: Response, next: NextFunction): any => {
+  if (req.userRole !== 'super_admin') {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Требуется супер-администратор'
+    });
+  }
+  next();
+};
+
+/**
  * Middleware to require specific roles for enterprise access
  */
 export const requireEnterpriseRole = (...allowedRoles: string[]) => {

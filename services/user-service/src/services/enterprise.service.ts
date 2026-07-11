@@ -1,5 +1,15 @@
 import pkg from 'pg';
 const { Pool } = pkg;
+import bcrypt from 'bcryptjs';
+import { config } from '../config';
+
+export interface CreateOwnerInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName?: string;
+  phone?: string;
+}
 
 export interface Enterprise {
   id: string;
@@ -126,6 +136,78 @@ export class EnterpriseService {
 
       await client.query('COMMIT');
       return enterprise;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Create an enterprise together with its owner user in one transaction.
+   * Used by super-admins: the caller is NOT the owner, so a fresh owner
+   * account is provisioned and linked as the enterprise owner.
+   */
+  async createEnterpriseWithOwner(
+    enterpriseData: CreateEnterpriseInput,
+    ownerData: CreateOwnerInput
+  ): Promise<{ enterprise: Enterprise; owner: any }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const dup = await client.query('SELECT id FROM users WHERE email = $1', [ownerData.email]);
+      if (dup.rows.length > 0) {
+        throw Object.assign(new Error('Пользователь с таким email уже существует'), { statusCode: 409 });
+      }
+
+      const entResult = await client.query(
+        `INSERT INTO enterprises (
+          name, legal_name, tax_id, phone, email, website,
+          subscription_plan, currency, timezone, language, business_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        [
+          enterpriseData.name,
+          enterpriseData.legal_name || null,
+          enterpriseData.tax_id || null,
+          enterpriseData.phone || null,
+          enterpriseData.email || null,
+          enterpriseData.website || null,
+          enterpriseData.subscription_plan || 'basic',
+          enterpriseData.currency || 'RUB',
+          enterpriseData.timezone || 'Europe/Moscow',
+          enterpriseData.language || 'ru',
+          enterpriseData.business_type || 'restaurant'
+        ]
+      );
+      const enterprise = entResult.rows[0];
+
+      const passwordHash = await bcrypt.hash(ownerData.password, config.bcrypt.saltRounds);
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin)
+         VALUES ($1, $2, $3, $4, $5, 'restaurant_owner', $6, true)
+         RETURNING id, email, first_name, last_name, phone, role`,
+        [
+          ownerData.email,
+          passwordHash,
+          ownerData.firstName,
+          ownerData.lastName || null,
+          ownerData.phone || null,
+          enterprise.id
+        ]
+      );
+      const owner = userResult.rows[0];
+
+      await client.query(
+        `INSERT INTO enterprise_users (enterprise_id, user_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [enterprise.id, owner.id]
+      );
+
+      await client.query('COMMIT');
+      return { enterprise, owner };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

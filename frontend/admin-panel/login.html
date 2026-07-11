@@ -447,9 +447,16 @@
     <script>
         let currentTab = 'login';
 
+        // Супер-админ платформы не привязан к предприятию — ведём его в свою панель
+        function destFor() {
+            return AUTH.getRole() === 'super_admin'
+                ? '/admin-panel/super-admin.html'
+                : '/admin-panel/dashboard.html';
+        }
+
         // If already logged in with a valid ff_token, skip the login page
         if (AUTH.isLoggedIn()) {
-            window.location.href = '/admin-panel/dashboard.html';
+            window.location.href = destFor();
         }
 
         // Tab switching
@@ -527,7 +534,7 @@
             }
 
             saveAuth(data);
-            window.location.href = '/admin-panel/dashboard.html';
+            window.location.href = destFor();
         }
 
         async function doRegister() {
@@ -550,7 +557,7 @@
             }
 
             saveAuth(data);
-            window.location.href = '/admin-panel/dashboard.html';
+            window.location.href = destFor();
         }
 
         function saveAuth(data) {
