@@ -157,7 +157,10 @@ export class EnterpriseService {
     try {
       await client.query('BEGIN');
 
-      const dup = await client.query('SELECT id FROM users WHERE email = $1', [ownerData.email]);
+      // login ищет по email.toLowerCase() — нормализуем при создании,
+      // иначе владелец с заглавными буквами в email не сможет войти
+      const ownerEmail = ownerData.email.toLowerCase();
+      const dup = await client.query('SELECT id FROM users WHERE email = $1', [ownerEmail]);
       if (dup.rows.length > 0) {
         throw Object.assign(new Error('Пользователь с таким email уже существует'), { statusCode: 409 });
       }
@@ -190,10 +193,10 @@ export class EnterpriseService {
          VALUES ($1, $2, $3, $4, $5, 'restaurant_owner', $6, true)
          RETURNING id, email, first_name, last_name, phone, role`,
         [
-          ownerData.email,
+          ownerEmail,
           passwordHash,
           ownerData.firstName,
-          ownerData.lastName || null,
+          ownerData.lastName || '',
           ownerData.phone || null,
           enterprise.id
         ]
