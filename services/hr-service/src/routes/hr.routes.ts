@@ -10,8 +10,10 @@ const hrService = new HRService(config.database.url);
 // ========== STAFF ==========
 router.get('/staff', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const staff = await hrService.listStaff({
-      enterpriseId: req.enterpriseId, position: req.query.position as string,
+      enterpriseId: isSuper ? undefined : req.enterpriseId, position: req.query.position as string,
       isActive: req.query.isActive !== 'false'
     });
     return res.json({ staff });
@@ -20,7 +22,9 @@ router.get('/staff', authenticateUser, requireRole('admin', 'owner', 'manager'),
 
 router.get('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await hrService.getStaffProfile(req.params.userId, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const profile = await hrService.getStaffProfile(req.params.userId, isSuper ? undefined : req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Staff profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Get staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -43,7 +47,9 @@ router.post('/staff', authenticateUser, requireRole('admin', 'owner', 'manager')
 
 router.put('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const profile = await hrService.updateStaffProfile(req.params.userId, req.body, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const profile = await hrService.updateStaffProfile(req.params.userId, req.body, isSuper ? undefined : req.enterpriseId);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
     return res.json({ profile });
   } catch (error) { console.error('Update staff error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -52,7 +58,10 @@ router.put('/staff/:userId', authenticateUser, requireRole('admin', 'owner', 'ma
 // ========== SCHEDULES ==========
 router.get('/schedules', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const schedules = await hrService.getSchedules({
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       userId: req.query.userId as string, restaurantId: req.query.restaurantId as string,
       dateFrom: req.query.dateFrom as string, dateTo: req.query.dateTo as string
     });
@@ -70,6 +79,12 @@ router.post('/schedules', authenticateUser, requireRole('admin', 'owner', 'manag
     });
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    if (!isSuper) {
+      const member = await hrService.getStaffProfile(value.userId, req.enterpriseId);
+      if (!member) return res.status(403).json({ error: 'Forbidden', message: 'Сотрудник не принадлежит предприятию' });
+    }
     const schedule = await hrService.createSchedule(value, req.enterpriseId);
     return res.status(201).json({ schedule });
   } catch (error) { console.error('Create schedule error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -77,7 +92,9 @@ router.post('/schedules', authenticateUser, requireRole('admin', 'owner', 'manag
 
 router.put('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const schedule = await hrService.updateSchedule(req.params.id, req.body, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const schedule = await hrService.updateSchedule(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!schedule) return res.status(404).json({ error: 'Schedule not found' });
     return res.json({ schedule });
   } catch (error) { console.error('Update schedule error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -85,7 +102,9 @@ router.put('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 'ma
 
 router.delete('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const deleted = await hrService.deleteSchedule(req.params.id, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const deleted = await hrService.deleteSchedule(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Schedule not found' });
     return res.json({ message: 'Schedule deleted' });
   } catch (error) { console.error('Delete schedule error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -94,6 +113,8 @@ router.delete('/schedules/:id', authenticateUser, requireRole('admin', 'owner', 
 // ========== TIME CLOCK ==========
 router.post('/clock-in', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'chef', 'waiter', 'employee'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const entry = await hrService.clockIn(req.userId!, req.body.restaurantId, req.enterpriseId);
     return res.status(201).json({ entry });
   } catch (error: any) {
@@ -112,7 +133,10 @@ router.post('/clock-out', authenticateUser, requireRole('admin', 'owner', 'manag
 
 router.get('/time-entries', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const entries = await hrService.getTimeEntries({
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
       userId: req.query.userId as string || req.userId,
       dateFrom: req.query.dateFrom as string, dateTo: req.query.dateTo as string
     });
@@ -125,7 +149,9 @@ router.post('/payroll/calculate', authenticateUser, requireRole('admin', 'owner'
   try {
     const { userId, periodStart, periodEnd } = req.body;
     if (!userId || !periodStart || !periodEnd) return res.status(400).json({ error: 'userId, periodStart, periodEnd are required' });
-    const payroll = await hrService.calculatePayroll(userId, periodStart, periodEnd, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const payroll = await hrService.calculatePayroll(userId, periodStart, periodEnd, isSuper ? undefined : req.enterpriseId);
     return res.status(201).json({ payroll });
   } catch (error: any) {
     if (error.message === 'Staff profile not found') return res.status(404).json({ error: error.message });
@@ -135,8 +161,10 @@ router.post('/payroll/calculate', authenticateUser, requireRole('admin', 'owner'
 
 router.get('/payroll', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     const payroll = await hrService.getPayroll({
-      userId: req.query.userId as string, enterpriseId: req.enterpriseId,
+      userId: req.query.userId as string, enterpriseId: isSuper ? undefined : req.enterpriseId,
       status: req.query.status as string
     });
     return res.json({ payroll });
@@ -145,7 +173,9 @@ router.get('/payroll', authenticateUser, requireRole('admin', 'owner', 'manager'
 
 router.put('/payroll/:id/approve', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const payroll = await hrService.approvePayroll(req.params.id, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const payroll = await hrService.approvePayroll(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!payroll) return res.status(404).json({ error: 'Payroll not found' });
     return res.json({ payroll });
   } catch (error) { console.error('Approve payroll error:', error); return res.status(500).json({ error: 'Internal server error' }); }
@@ -153,7 +183,9 @@ router.put('/payroll/:id/approve', authenticateUser, requireRole('admin', 'owner
 
 router.put('/payroll/:id/pay', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const payroll = await hrService.markPayrollPaid(req.params.id, req.enterpriseId);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const payroll = await hrService.markPayrollPaid(req.params.id, isSuper ? undefined : req.enterpriseId);
     if (!payroll) return res.status(404).json({ error: 'Payroll not found' });
     return res.json({ payroll });
   } catch (error) { console.error('Pay payroll error:', error); return res.status(500).json({ error: 'Internal server error' }); }

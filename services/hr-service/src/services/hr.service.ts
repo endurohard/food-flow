@@ -81,8 +81,9 @@ export class HRService {
 
   // ========== WORK SCHEDULES ==========
 
-  async getSchedules(filters: { userId?: string; restaurantId?: string; dateFrom?: string; dateTo?: string }): Promise<any[]> {
+  async getSchedules(filters: { enterpriseId?: string; userId?: string; restaurantId?: string; dateFrom?: string; dateTo?: string }): Promise<any[]> {
     const conds: string[] = []; const vals: any[] = []; let p = 1;
+    if (filters.enterpriseId) { conds.push(`ws.enterprise_id = $${p++}`); vals.push(filters.enterpriseId); }
     if (filters.userId) { conds.push(`ws.user_id = $${p++}`); vals.push(filters.userId); }
     if (filters.restaurantId) { conds.push(`ws.restaurant_id = $${p++}`); vals.push(filters.restaurantId); }
     if (filters.dateFrom) { conds.push(`ws.shift_date >= $${p++}`); vals.push(filters.dateFrom); }
@@ -174,8 +175,9 @@ export class HRService {
     return result.rows[0] || null;
   }
 
-  async getTimeEntries(filters: { userId?: string; dateFrom?: string; dateTo?: string }): Promise<any[]> {
+  async getTimeEntries(filters: { enterpriseId?: string; userId?: string; dateFrom?: string; dateTo?: string }): Promise<any[]> {
     const conds: string[] = []; const vals: any[] = []; let p = 1;
+    if (filters.enterpriseId) { conds.push(`te.enterprise_id = $${p++}`); vals.push(filters.enterpriseId); }
     if (filters.userId) { conds.push(`te.user_id = $${p++}`); vals.push(filters.userId); }
     if (filters.dateFrom) { conds.push(`te.clock_in >= $${p++}`); vals.push(filters.dateFrom); }
     if (filters.dateTo) { conds.push(`te.clock_in <= $${p++}`); vals.push(filters.dateTo); }
@@ -192,8 +194,8 @@ export class HRService {
   // ========== PAYROLL ==========
 
   async calculatePayroll(userId: string, periodStart: string, periodEnd: string, enterpriseId?: string): Promise<any> {
-    // Get staff profile
-    const profile = await this.getStaffProfile(userId);
+    // Get staff profile (scoped to enterprise to prevent cross-tenant payroll)
+    const profile = await this.getStaffProfile(userId, enterpriseId);
     if (!profile) throw new Error('Staff profile not found');
 
     // Get time entries for period
