@@ -14,8 +14,12 @@ export function reportRoutes(pool: InstanceType<typeof Pool>): Router {
   const handler = (fn: (filters: any) => Promise<any>, key?: string) =>
     async (req: Request, res: Response) => {
       try {
+        const isSuper = req.userRole === 'super_admin';
+        if (!isSuper && !req.enterpriseId) {
+          return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+        }
         const result = await fn({
-          enterpriseId: req.enterpriseId,
+          enterpriseId: isSuper ? undefined : req.enterpriseId,
           from: req.query.from as string | undefined,
           to: req.query.to as string | undefined
         });

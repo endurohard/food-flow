@@ -117,7 +117,7 @@ export class WholesaleOrderService {
       );
       const order = orderResult.rows[0];
 
-      const total = await this.insertItems(client, order.id, data.items, counterparty.price_type);
+      const total = await this.insertItems(client, order.id, data.items, counterparty.price_type, counterparty.enterprise_id);
       const updated = await client.query(
         'UPDATE wholesale_orders SET total_amount = $1 WHERE id = $2 RETURNING *', [total, order.id]
       );
@@ -132,11 +132,14 @@ export class WholesaleOrderService {
     }
   }
 
-  private async insertItems(client: any, orderId: string, items: any[], priceType: string): Promise<number> {
+  private async insertItems(client: any, orderId: string, items: any[], priceType: string, enterpriseId?: string): Promise<number> {
     let total = 0;
     for (const item of items) {
+      const invConds = ['id = $1', 'is_active = true'];
+      const invVals: any[] = [item.inventoryItemId];
+      if (enterpriseId) { invConds.push('enterprise_id = $2'); invVals.push(enterpriseId); }
       const itemResult = await client.query(
-        'SELECT * FROM inventory_items WHERE id = $1 AND is_active = true', [item.inventoryItemId]
+        `SELECT * FROM inventory_items WHERE ${invConds.join(' AND ')}`, invVals
       );
       const invItem = itemResult.rows[0];
       if (!invItem) throw new Error(`Inventory item ${item.inventoryItemId} not found`);
@@ -191,7 +194,7 @@ export class WholesaleOrderService {
       if (data.items) {
         await client.query('DELETE FROM wholesale_order_items WHERE order_id = $1', [id]);
         const cp = await client.query('SELECT price_type FROM counterparties WHERE id = $1', [order.counterparty_id]);
-        const total = await this.insertItems(client, id, data.items, cp.rows[0]?.price_type || 'wholesale');
+        const total = await this.insertItems(client, id, data.items, cp.rows[0]?.price_type || 'wholesale', order.enterprise_id);
         await client.query('UPDATE wholesale_orders SET total_amount = $1, updated_at = NOW() WHERE id = $2', [total, id]);
       }
 

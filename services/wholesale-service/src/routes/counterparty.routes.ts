@@ -75,11 +75,15 @@ export function counterpartyRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/counterparties', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = createSchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
       // Менеджером по умолчанию становится создатель
       if (!value.managerId && req.userId) value.managerId = req.userId;
-      const cp = await service.create(value, req.enterpriseId);
+      const cp = await service.create(value, isSuper ? undefined : req.enterpriseId);
       res.status(201).json({ counterparty: cp });
     } catch (err) {
       logger.error('create counterparty failed', err);
@@ -89,9 +93,13 @@ export function counterpartyRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.put('/counterparties/:id', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = updateSchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const cp = await service.update(req.params.id, value, req.enterpriseId);
+      const cp = await service.update(req.params.id, value, isSuper ? undefined : req.enterpriseId);
       if (!cp) return res.status(404).json({ error: 'Counterparty not found or nothing to update' });
       res.json({ counterparty: cp });
     } catch (err) {
@@ -102,7 +110,11 @@ export function counterpartyRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.delete('/counterparties/:id', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
-      const ok = await service.deactivate(req.params.id, req.enterpriseId);
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
+      const ok = await service.deactivate(req.params.id, isSuper ? undefined : req.enterpriseId);
       if (!ok) return res.status(404).json({ error: 'Counterparty not found' });
       res.json({ success: true });
     } catch (err) {

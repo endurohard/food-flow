@@ -47,8 +47,12 @@ export function returnRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.get('/reports/returns', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const report = await service.getReturnsReport({
-        enterpriseId: req.enterpriseId,
+        enterpriseId: isSuper ? undefined : req.enterpriseId,
         from: req.query.from as string | undefined,
         to: req.query.to as string | undefined
       });
@@ -72,9 +76,13 @@ export function returnRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/orders/:orderId/returns', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = createSchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const ret = await service.create(req.params.orderId, value, req.userId, req.enterpriseId);
+      const ret = await service.create(req.params.orderId, value, req.userId, isSuper ? undefined : req.enterpriseId);
       res.status(201).json({ return: ret });
     } catch (err: any) {
       if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });
@@ -85,7 +93,11 @@ export function returnRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/returns/:id/confirm', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
-      const ret = await service.confirm(req.params.id, req.userId, req.enterpriseId);
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
+      const ret = await service.confirm(req.params.id, req.userId, isSuper ? undefined : req.enterpriseId);
       res.json({ return: ret });
     } catch (err: any) {
       if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });
@@ -96,7 +108,11 @@ export function returnRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/returns/:id/cancel', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
-      const ret = await service.cancel(req.params.id, req.enterpriseId);
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
+      const ret = await service.cancel(req.params.id, isSuper ? undefined : req.enterpriseId);
       res.json({ return: ret });
     } catch (err: any) {
       if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });

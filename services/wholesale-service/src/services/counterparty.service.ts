@@ -106,20 +106,26 @@ export class CounterpartyService {
     const cp = await this.getById(id, enterpriseId);
     if (!cp) return null;
 
+    const ordersConds = ['counterparty_id = $1', "status NOT IN ('draft', 'cancelled')"];
+    const ordersVals: any[] = [id];
+    if (enterpriseId) { ordersConds.push('enterprise_id = $2'); ordersVals.push(enterpriseId); }
     const orders = await this.pool.query(
       `SELECT COUNT(*) AS orders_count,
               COALESCE(SUM(total_amount), 0) AS total_ordered,
               COALESCE(SUM(paid_amount), 0) AS total_paid
        FROM wholesale_orders
-       WHERE counterparty_id = $1 AND status NOT IN ('draft', 'cancelled')`,
-      [id]
+       WHERE ${ordersConds.join(' AND ')}`,
+      ordersVals
     );
+    const payConds = ['counterparty_id = $1'];
+    const payVals: any[] = [id];
+    if (enterpriseId) { payConds.push('enterprise_id = $2'); payVals.push(enterpriseId); }
     const payments = await this.pool.query(
       `SELECT payment_type, method, COALESCE(SUM(amount), 0) AS total
        FROM counterparty_payments
-       WHERE counterparty_id = $1
+       WHERE ${payConds.join(' AND ')}
        GROUP BY payment_type, method`,
-      [id]
+      payVals
     );
     return {
       counterpartyId: id,

@@ -83,9 +83,13 @@ export function orderRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/orders', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = createSchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const order = await service.create(value, req.userId, req.enterpriseId);
+      const order = await service.create(value, req.userId, isSuper ? undefined : req.enterpriseId);
       res.status(201).json({ order });
     } catch (err: any) {
       if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });
@@ -96,9 +100,13 @@ export function orderRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.put('/orders/:id', authenticateUser, requireRole(...MANAGE_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = updateSchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const order = await service.update(req.params.id, value, req.enterpriseId);
+      const order = await service.update(req.params.id, value, isSuper ? undefined : req.enterpriseId);
       if (!order) return res.status(404).json({ error: 'Order not found' });
       res.json({ order });
     } catch (err: any) {
@@ -111,7 +119,11 @@ export function orderRoutes(pool: InstanceType<typeof Pool>): Router {
   const transition = (fn: (id: string, enterpriseId?: string) => Promise<any>) =>
     async (req: Request, res: Response) => {
       try {
-        const order = await fn(req.params.id, req.enterpriseId);
+        const isSuper = req.userRole === 'super_admin';
+        if (!isSuper && !req.enterpriseId) {
+          return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+        }
+        const order = await fn(req.params.id, isSuper ? undefined : req.enterpriseId);
         res.json({ order });
       } catch (err: any) {
         if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });
@@ -128,10 +140,14 @@ export function orderRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/orders/:id/ship', authenticateUser, requireRole(...SHIP_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const schema = Joi.object({ driverId: Joi.string().uuid().allow(null) });
       const { error, value } = schema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const order = await service.ship(req.params.id, value, req.userId, req.enterpriseId);
+      const order = await service.ship(req.params.id, value, req.userId, isSuper ? undefined : req.enterpriseId);
       res.json({ order });
     } catch (err: any) {
       if (err.message && isClientError(err.message)) return res.status(400).json({ error: err.message });
@@ -142,9 +158,13 @@ export function orderRoutes(pool: InstanceType<typeof Pool>): Router {
 
   router.post('/orders/:id/pay', authenticateUser, requireRole(...SHIP_ROLES), async (req: Request, res: Response) => {
     try {
+      const isSuper = req.userRole === 'super_admin';
+      if (!isSuper && !req.enterpriseId) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+      }
       const { error, value } = paySchema.validate(req.body);
       if (error) return res.status(400).json({ error: 'ValidationError', message: error.message });
-      const result = await service.pay(req.params.id, value, req.userId, req.enterpriseId);
+      const result = await service.pay(req.params.id, value, req.userId, isSuper ? undefined : req.enterpriseId);
 
       // Наличные проводим через кассу в finance-service (не фатально при сбое)
       if (value.method === 'cash' && value.registerId) {
