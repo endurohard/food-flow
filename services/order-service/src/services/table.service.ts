@@ -19,14 +19,20 @@ export class TableService {
     this.pool = new Pool({ connectionString });
   }
 
-  async list(restaurantId: string): Promise<any[]> {
+  async list(restaurantId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['t.restaurant_id = $1', 't.is_active = true'];
+    const values: any[] = [restaurantId];
+    if (enterpriseId) {
+      conds.push(`t.enterprise_id = $${values.length + 1}`);
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
       `SELECT t.*, o.order_number, o.status as order_status, o.total as order_total
        FROM restaurant_tables t
        LEFT JOIN orders o ON t.current_order_id = o.id
-       WHERE t.restaurant_id = $1 AND t.is_active = true
+       WHERE ${conds.join(' AND ')}
        ORDER BY t.section ASC, t.table_number ASC`,
-      [restaurantId]
+      values
     );
     return result.rows;
   }
@@ -53,7 +59,7 @@ export class TableService {
     return result.rows[0];
   }
 
-  async update(tableId: string, data: Partial<CreateTableInput> & { status?: string }): Promise<any> {
+  async update(tableId: string, data: Partial<CreateTableInput> & { status?: string }, enterpriseId?: string): Promise<any> {
     const fieldMap: Record<string, string> = {
       tableNumber: 'table_number', section: 'section', seats: 'seats',
       posX: 'pos_x', posY: 'pos_y', width: 'width', height: 'height',
@@ -73,18 +79,29 @@ export class TableService {
 
     if (fields.length === 0) return null;
 
+    const conds = [`id = $${p++}`];
     values.push(tableId);
+    if (enterpriseId) {
+      conds.push(`enterprise_id = $${p++}`);
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
-      `UPDATE restaurant_tables SET ${fields.join(', ')} WHERE id = $${p} RETURNING *`,
+      `UPDATE restaurant_tables SET ${fields.join(', ')} WHERE ${conds.join(' AND ')} RETURNING *`,
       values
     );
     return result.rows[0] || null;
   }
 
-  async delete(tableId: string): Promise<boolean> {
+  async delete(tableId: string, enterpriseId?: string): Promise<boolean> {
+    const conds = ['id = $1'];
+    const values: any[] = [tableId];
+    if (enterpriseId) {
+      conds.push('enterprise_id = $2');
+      values.push(enterpriseId);
+    }
     const result = await this.pool.query(
-      'UPDATE restaurant_tables SET is_active = false WHERE id = $1',
-      [tableId]
+      `UPDATE restaurant_tables SET is_active = false WHERE ${conds.join(' AND ')}`,
+      values
     );
     return (result.rowCount ?? 0) > 0;
   }

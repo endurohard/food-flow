@@ -79,6 +79,11 @@ router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), asy
  */
 router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const { error, value } = updateDiscountSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ success: false, error: error.details[0].message });
@@ -102,6 +107,11 @@ router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), a
  */
 router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const deactivated = await discountService.deactivateDiscount(req.params.id, req.enterpriseId);
     if (!deactivated) {
       return res.status(404).json({ success: false, error: 'Discount not found or already inactive' });

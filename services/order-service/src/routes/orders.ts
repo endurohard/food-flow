@@ -113,6 +113,11 @@ router.post('/', optionalAuth, idempotencyCheck, async (req: Request, res: Respo
  */
 router.put('/:id/status', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const { status } = req.body;
     if (!status) {
       return res.status(400).json({ success: false, error: 'Status is required' });
@@ -138,6 +143,11 @@ router.put('/:id/status', authenticateUser, async (req: Request, res: Response) 
  */
 router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const { status } = req.body;
     if (status) {
       const order = await orderService.updateStatus(req.params.id, status, req.enterpriseId);
@@ -162,12 +172,17 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
  */
 router.post('/:id/split', authenticateUser, async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const { itemGroups } = req.body;
     if (!itemGroups || !Array.isArray(itemGroups)) {
       return res.status(400).json({ success: false, error: 'itemGroups array is required' });
     }
 
-    const childOrders = await orderService.splitOrder(req.params.id, itemGroups);
+    const childOrders = await orderService.splitOrder(req.params.id, itemGroups, req.enterpriseId);
 
     return res.json({ success: true, data: childOrders });
   } catch (error) {
@@ -184,7 +199,12 @@ router.post('/:id/split', authenticateUser, async (req: Request, res: Response) 
  */
 router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const order = await orderService.updateStatus(req.params.id, 'cancelled');
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
+    const order = await orderService.updateStatus(req.params.id, 'cancelled', req.enterpriseId);
     if (!order) {
       return res.status(404).json({ success: false, error: 'Order not found' });
     }

@@ -428,16 +428,23 @@ export class OrderService {
     return order;
   }
 
-  async splitOrder(orderId: string, itemGroups: Array<{ itemIds: string[] }>): Promise<any[]> {
+  async splitOrder(orderId: string, itemGroups: Array<{ itemIds: string[] }>, enterpriseId?: string): Promise<any[]> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
 
       // Read parent WITHIN the transaction with row lock to prevent
       // concurrent updates between read and child order inserts (H5 fix).
+      // Tenant isolation: scope parent by enterprise_id when provided.
+      const parentConds = ['o.id = $1'];
+      const parentVals: any[] = [orderId];
+      if (enterpriseId) {
+        parentConds.push('o.enterprise_id = $2');
+        parentVals.push(enterpriseId);
+      }
       const parentResult = await client.query(
-        `SELECT o.* FROM orders o WHERE o.id = $1 FOR UPDATE`,
-        [orderId]
+        `SELECT o.* FROM orders o WHERE ${parentConds.join(' AND ')} FOR UPDATE`,
+        parentVals
       );
       if (parentResult.rows.length === 0) {
         throw new OrderError('Order not found', 404);

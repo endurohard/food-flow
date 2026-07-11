@@ -23,12 +23,17 @@ const createTableSchema = Joi.object({
  */
 router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
     const restaurantId = req.query.restaurantId as string;
     if (!restaurantId) {
       return res.status(400).json({ error: 'restaurantId query parameter is required' });
     }
 
-    const tables = await tableService.list(restaurantId);
+    const tables = await tableService.list(restaurantId, req.enterpriseId);
     return res.json({ tables });
   } catch (error) {
     console.error('Failed to get tables:', error);
@@ -64,7 +69,12 @@ router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), asy
  */
 router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
   try {
-    const table = await tableService.update(req.params.id, req.body);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
+    const table = await tableService.update(req.params.id, req.body, req.enterpriseId);
     if (!table) {
       return res.status(404).json({ error: 'Table not found' });
     }
@@ -80,7 +90,12 @@ router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'o
  */
 router.delete('/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const deleted = await tableService.delete(req.params.id);
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
+    const deleted = await tableService.delete(req.params.id, req.enterpriseId);
     if (!deleted) {
       return res.status(404).json({ error: 'Table not found' });
     }
