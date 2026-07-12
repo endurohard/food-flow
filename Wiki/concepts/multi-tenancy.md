@@ -1,14 +1,36 @@
 ---
 type: concept
-status: broken
-last_verified: 2026-04-11
+status: enforced (application-level)
+last_verified: 2026-07-11
 sources:
   - database/migrations/006_add_enterprises_multi_tenant.sql
-  - database/migrations/015_chain_management.sql
-  - docs/MULTI_TENANT_GUIDE.md
-  - docs/MULTI_TENANT_QUICK_START.md
+  - database/migrations/025_enterprise_id_not_null.sql
+  - database/migrations/026_printer_stations_tenant.sql
   - services/user-service/src/middleware/enterprise.middleware.ts
   - services/user-service/src/services/enterprise.service.ts
+---
+
+## ✅ Phase B (2026-07-11): изоляция доведена до строгой и задеплоена
+
+Незакрытый со времён аудита Phase 1 закрыт полностью. См. [[../log]] запись 2026-07-11.
+
+- **Подход: application-level (не RLS)**. Причина — доступ к БД per-query через пул: session-переменную для RLS не привязать к запросу без переписывания всех сервисов на `connect()+BEGIN+SET LOCAL+COMMIT`. RLS из 006 остаётся косметикой (5/75 таблиц, без FORCE, session-var никто не ставит) — по сути мёртвый слой.
+- **Единый паттерн во всех 10 сервисах**: scope ТОЛЬКО из `req.enterpriseId` (никогда из query/body клиента), `super_admin` — сквозной, 403 без enterprise-контекста, дочерние таблицы без `enterprise_id` скоупятся через родителя по join.
+- **Сервисы**: user, restaurant, order, delivery, kitchen, inventory, finance, crm, wholesale, hr — все read/mutate по данным предприятия скоупятся. Закрыты MISSING/CLIENT (утечки с валидным токеном): `GET /api/users` все юзеры всех орг, PBX/SIP-креды, отмена/split чужих заказов, открытие чужой кассы, баллы чужих клиентов, payroll чужого сотрудника и т.д.
+- **DB-level (миграция 025)**: `enterprise_id` NOT NULL на 35 tenant-таблицах.
+- **Socket.IO kitchen**: JWT-верификация, enterpriseId из проверенного токена (не payload).
+- **Принтеры (миграция 026)**: `printer_stations`/`printer_settings` в БД (были process-global in-memory).
+- **Cross-tenant роль**: да — `super_admin` (см. [[../log]] и `enterprise.routes.ts` `requireSuperAdmin`).
+- **Как фиксили**: не shared-пакет, а один и тот же паттерн, скопированный в каждый сервис (у каждого свой `auth.middleware.ts`).
+- **Проверено на живом проде**: два предприятия не видят данные друг друга.
+
+---
+**Ниже — исторический контекст (апрель 2026, до Phase B):**
+
+---
+type-historical: concept
+status: broken
+last_verified: 2026-04-11
 ---
 
 # Multi-tenancy

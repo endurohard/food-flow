@@ -449,3 +449,28 @@ STAFF         = admin | owner | manager | operator | chef | waiter | employee
 - **user-service**: `business_type` в интерфейсах Enterprise/Create/UpdateEnterpriseInput + INSERT при создании. `updateEnterprise` — **whitelist колонок**: ключи `req.body` уходили прямо в SQL (`${key} = $N`) без проверки → закрыта SQL-инъекция через произвольные ключи.
 - **Frontend (`admin-panel/js/auth.js`)**: `MODULE_ACCESS` прячет пункты сайдбара под тип (кофейня без столов/зала/KDS; производство — только склад/производство/опт). `setBusinessType` сохраняет тип на предприятии + кэш в `ff_enterprise`; `hydrateEnterprise` подтягивает серверный тип при входе без локального override; `logout` чистит `ff_business_type`/`ff_enterprise`. UI выбора — карточки во вкладке «Функционал» settings.html.
 - Приоритет источника типа: локальный `ff_business_type` > `ff_enterprise.business_type` > null (показываем всё).
+
+## [2026-07-11] feat | Супер-админ — создание организаций и владельцев (commits bf67901, 388c763, 80776a9)
+Платформенная роль над предприятиями. Раньше `POST /api/enterprises` мог вызвать любой залогиненный юзер, делая себя владельцем.
+
+- **Роль `super_admin`** — глобальная (`users.role` это enum `user_role`, не VARCHAR → миграция 024 `ALTER TYPE ... ADD VALUE 'super_admin'`). Не привязана к предприятию, через публичный `/register` недоступна. Сид: `services/user-service/scripts/create-superadmin.js` (env `SA_EMAIL`/`SA_PASSWORD`, идемпотентно).
+- **`requireSuperAdmin`** middleware (глобальная роль из JWT). `POST /api/enterprises` → только super_admin, принимает `owner{email,password,firstName,...}` и создаёт организацию **вместе с владельцем** в транзакции (`createEnterpriseWithOwner`: enterprise + user role=restaurant_owner + enterprise_users owner). Новый `GET /api/enterprises` (список всех) — super_admin. Ранее роут отсутствовал, хотя фронт его звал.
+- **Frontend `admin-panel/super-admin.html`** — панель: список всех орг + форма создания с владельцем, гейт по роли. `login.html` ведёт super_admin на эту панель (у него нет предприятия).
+- **Баги (найдены при тесте, commit 80776a9)**: email писался как есть, а login ищет по `email.toLowerCase()` → владелец с заглавными не входил; `last_name` NULL нарушал NOT NULL. Фикс: lowercase + `lastName || ''`.
+- Задеплоено на прод, проверено: создание орг+владельца, вход владельца, негатив (обычный юзер → 403).
+
+## [2026-07-11] fix | Строгая multi-tenant изоляция — Phase B (commits 4b632ff…14ecaf1, 026)
+Закрыт незакрытый со времён аудита 2026-04-11 Phase 1. Аудит (3 агента) → карта дыр по 13 сервисам: доминировал **SOFT** (`if (enterpriseId)` — токен без enterpriseId видел всё) + точечные **MISSING/CLIENT** (утечки даже с валидным токеном).
+
+**Выбор подхода**: application-level, НЕ RLS. Причины — доступ к БД per-query через пул (session-переменную не привязать к запросу без крупного рефакторинга), RLS-заготовка миграции 006 покрывала 5 из ~75 таблиц. См. [[concepts/multi-tenancy]].
+
+**Единый паттерн**: scope ТОЛЬКО из `req.enterpriseId` (не из query/body клиента), `super_admin` — сквозной, 403 без контекста, дочерние таблицы без `enterprise_id` (order_items, deliveries, inventory_stock, техкарты…) скоупятся через родителя по join.
+
+- **10 сервисов** с tenant-scope: user (GET /api/users возвращал всех юзеров всех орг; PBX-креды; menu-templates), restaurant (PBX/SIP-креды + мутации меню), order (cancel/split чужого заказа, столы, скидки), delivery (доставка по чужому заказу, трекинг, водители, зоны), kitchen (station-мутации, авто-complete чужих заказов), inventory (склады/остатки/движения, накладные+confirm, техкарты), finance (открытие/закрытие чужой кассы, чеки), crm (POST /customers принимал enterpriseId из body, баллы/транзакции чужих клиентов), wholesale (подстановка чужого товара в опт), hr (чужие графики/смены, payroll по чужому сотруднику).
+- **Схема (миграция 025)**: `enterprise_id` NOT NULL на 35 tenant-таблицах (DB-level защита). Демо seed-данные (restaurants/menu без enterprise_id, т.к. колонка добавляется 006 после 02-seed) привязаны к демо-предприятию `00000000-…-0001`.
+- **Socket.IO kitchen (commit 11d52d2)**: `authenticate` доверял enterpriseId из payload → теперь `jwt.verify`, enterpriseId только из проверенного токена, `updateOrderStatus` скоупится.
+- **Принтеры (миграция 026, commit 14ecaf1)**: `printer.routes` хранил станции/настройки в process-global in-memory (демо-3 для всех) → таблицы `printer_stations`/`printer_settings` с enterprise_id, весь CRUD со scope.
+
+**Проверено на живом проде**: два предприятия не видят данные друг друга (пользователи, контрагенты, принтеры → 404/пустые списки), super_admin — сквозной.
+
+**Осталось незакрытым**: RabbitMQ kitchen-consumer формально обрабатывает все события, но broadcast идёт в enterprise-scoped room + orders.enterprise_id NOT NULL → на практике изолировано. Реализация — application-level, не DB-enforced RLS.
