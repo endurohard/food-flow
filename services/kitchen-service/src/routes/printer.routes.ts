@@ -1,64 +1,43 @@
 import { Router, Request, Response } from 'express';
+import pkg from 'pg';
+const { Pool } = pkg;
 import { PrinterService } from '../services/printer.service';
-import { PrinterStation, PrinterSettings } from '../models/printer-station.model';
 import { authenticateUser, requireRole } from '../middleware/auth.middleware';
+import { config } from '../config';
 import { logger } from '../utils/logger';
 
 const router = Router();
 router.use(authenticateUser);
 router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
+// Принтерные станции/настройки — данные предприятия. Требуем enterprise-контекст
+// (роли выше — enterprise-роли, enterpriseId в токене есть).
+router.use((req: Request, res: Response, next) => {
+  if (!req.enterpriseId) {
+    return res.status(403).json({ success: false, error: 'Требуется контекст предприятия' });
+  }
+  next();
+});
 const printerService = new PrinterService();
+const db = new Pool({ connectionString: config.database.url });
 
-// TODO: multi-tenant — printer stations/settings below are process-global in-memory state
-// shared across ALL enterprises (cross-tenant leak). Needs per-enterprise tenant scoping,
-// which requires moving this to PostgreSQL keyed by enterprise_id (separate task).
-// In-memory storage (in production, use PostgreSQL)
-let printerStations: PrinterStation[] = [
-  {
-    id: 1,
-    name: 'Мучной цех',
-    type: 'network',
-    address: '192.168.31.87:9100',
-    categories: ['pizza', 'burger'],
-    copies: 1,
-    enabled: true,
-    status: 'online',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: 2,
-    name: 'Горячий цех',
-    type: 'network',
-    address: '192.168.31.88:9100',
-    categories: ['hot'],
-    copies: 2,
-    enabled: true,
-    status: 'online',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: 3,
-    name: 'Бар',
-    type: 'network',
-    address: '192.168.31.89:9100',
-    categories: ['drinks', 'dessert'],
-    copies: 1,
-    enabled: true,
-    status: 'offline',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
-let globalSettings: PrinterSettings = {
-  autoPrint: true,
-  defaultCopies: 1,
-  fontSize: 12,
-  paperWidth: 80,
-  encoding: 'SLOVENIA',
-  printLogo: true,
+// БД (snake_case) → API-форма (camelCase), как раньше отдавал in-memory слой
+function mapStation(r: any) {
+  return {
+    id: r.id, name: r.name, type: r.type, address: r.address || undefined,
+    device: r.device || undefined, bluetooth: r.bluetooth || undefined,
+    categories: r.categories || [], copies: r.copies, enabled: r.enabled,
+    status: r.status, createdAt: r.created_at, updatedAt: r.updated_at,
+  };
+}
+function mapSettings(r: any) {
+  return {
+    autoPrint: r.auto_print, defaultCopies: r.default_copies, fontSize: r.font_size,
+    paperWidth: r.paper_width, encoding: r.encoding, printLogo: r.print_logo,
+  };
+}
+const DEFAULT_SETTINGS = {
+  autoPrint: true, defaultCopies: 1, fontSize: 12, paperWidth: 80,
+  encoding: 'SLOVENIA', printLogo: true,
 };
 
 /**
@@ -210,10 +189,11 @@ router.post('/print/kitchen', async (req: Request, res: Response) => {
  */
 router.get('/stations', async (req: Request, res: Response) => {
   try {
-    res.json({
-      success: true,
-      data: printerStations,
-    });
+    const r = await db.query(
+      'SELECT * FROM printer_stations WHERE enterprise_id = $1 ORDER BY id',
+      [req.enterpriseId]
+    );
+    res.json({ success: true, data: r.rows.map(mapStation) });
   } catch (error) {
     logger.error('Failed to get printer stations:', error);
     res.status(500).json({
@@ -230,9 +210,12 @@ router.get('/stations', async (req: Request, res: Response) => {
 router.get('/stations/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const station = printerStations.find((s) => s.id === id);
+    const r = await db.query(
+      'SELECT * FROM printer_stations WHERE id = $1 AND enterprise_id = $2',
+      [id, req.enterpriseId]
+    );
 
-    if (!station) {
+    if (r.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Printer station not found',
@@ -241,7 +224,7 @@ router.get('/stations/:id', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: station,
+      data: mapStation(r.rows[0]),
     });
   } catch (error) {
     logger.error('Failed to get printer station:', error);
@@ -267,28 +250,22 @@ router.post('/stations', async (req: Request, res: Response) => {
       });
     }
 
-    const newStation: PrinterStation = {
-      id: Math.max(...printerStations.map((s) => s.id), 0) + 1,
-      name,
-      type,
-      address,
-      device,
-      bluetooth,
-      categories,
-      copies: copies || 1,
-      enabled: enabled !== undefined ? enabled : true,
-      status: 'offline',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    printerStations.push(newStation);
+    const r = await db.query(
+      `INSERT INTO printer_stations
+         (enterprise_id, name, type, address, device, bluetooth, categories, copies, enabled, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, 'offline')
+       RETURNING *`,
+      [
+        req.enterpriseId, name, type, address || null, device || null, bluetooth || null,
+        JSON.stringify(categories), copies || 1, enabled !== undefined ? enabled : true,
+      ]
+    );
 
     logger.info(`Printer station created: ${name}`);
 
     res.status(201).json({
       success: true,
-      data: newStation,
+      data: mapStation(r.rows[0]),
     });
   } catch (error) {
     logger.error('Failed to create printer station:', error);
@@ -306,35 +283,38 @@ router.post('/stations', async (req: Request, res: Response) => {
 router.put('/stations/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const index = printerStations.findIndex((s) => s.id === id);
+    const { name, type, address, device, bluetooth, categories, copies, enabled } = req.body;
 
-    if (index === -1) {
+    const r = await db.query(
+      `UPDATE printer_stations SET
+         name = COALESCE($3, name),
+         type = COALESCE($4, type),
+         address = $5, device = $6, bluetooth = $7,
+         categories = COALESCE($8::jsonb, categories),
+         copies = COALESCE($9, copies),
+         enabled = COALESCE($10, enabled),
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND enterprise_id = $2
+       RETURNING *`,
+      [
+        id, req.enterpriseId, name ?? null, type ?? null, address ?? null, device ?? null,
+        bluetooth ?? null, categories ? JSON.stringify(categories) : null,
+        copies ?? null, enabled ?? null,
+      ]
+    );
+
+    if (r.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Printer station not found',
       });
     }
 
-    const { name, type, address, device, bluetooth, categories, copies, enabled } = req.body;
-
-    printerStations[index] = {
-      ...printerStations[index],
-      name: name || printerStations[index].name,
-      type: type || printerStations[index].type,
-      address,
-      device,
-      bluetooth,
-      categories: categories || printerStations[index].categories,
-      copies: copies !== undefined ? copies : printerStations[index].copies,
-      enabled: enabled !== undefined ? enabled : printerStations[index].enabled,
-      updatedAt: new Date(),
-    };
-
-    logger.info(`Printer station updated: ${printerStations[index].name}`);
+    logger.info(`Printer station updated: ${r.rows[0].name}`);
 
     res.json({
       success: true,
-      data: printerStations[index],
+      data: mapStation(r.rows[0]),
     });
   } catch (error) {
     logger.error('Failed to update printer station:', error);
@@ -352,22 +332,23 @@ router.put('/stations/:id', async (req: Request, res: Response) => {
 router.delete('/stations/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const index = printerStations.findIndex((s) => s.id === id);
+    const r = await db.query(
+      'DELETE FROM printer_stations WHERE id = $1 AND enterprise_id = $2 RETURNING *',
+      [id, req.enterpriseId]
+    );
 
-    if (index === -1) {
+    if (r.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Printer station not found',
       });
     }
 
-    const deleted = printerStations.splice(index, 1)[0];
-
-    logger.info(`Printer station deleted: ${deleted.name}`);
+    logger.info(`Printer station deleted: ${r.rows[0].name}`);
 
     res.json({
       success: true,
-      data: deleted,
+      data: mapStation(r.rows[0]),
     });
   } catch (error) {
     logger.error('Failed to delete printer station:', error);
@@ -541,9 +522,13 @@ router.post('/test-station', async (req: Request, res: Response) => {
  */
 router.get('/settings', async (req: Request, res: Response) => {
   try {
+    const r = await db.query(
+      'SELECT * FROM printer_settings WHERE enterprise_id = $1',
+      [req.enterpriseId]
+    );
     res.json({
       success: true,
-      data: globalSettings,
+      data: r.rows.length ? mapSettings(r.rows[0]) : DEFAULT_SETTINGS,
     });
   } catch (error) {
     logger.error('Failed to get printer settings:', error);
@@ -562,20 +547,32 @@ router.put('/settings', async (req: Request, res: Response) => {
   try {
     const { autoPrint, defaultCopies, fontSize, paperWidth, encoding, printLogo } = req.body;
 
-    globalSettings = {
-      autoPrint: autoPrint !== undefined ? autoPrint : globalSettings.autoPrint,
-      defaultCopies: defaultCopies || globalSettings.defaultCopies,
-      fontSize: fontSize || globalSettings.fontSize,
-      paperWidth: paperWidth || globalSettings.paperWidth,
-      encoding: encoding || globalSettings.encoding,
-      printLogo: printLogo !== undefined ? printLogo : globalSettings.printLogo,
-    };
+    // upsert по предприятию; COALESCE сохраняет незаданные поля
+    const r = await db.query(
+      `INSERT INTO printer_settings
+         (enterprise_id, auto_print, default_copies, font_size, paper_width, encoding, print_logo)
+       VALUES ($1, COALESCE($2, true), COALESCE($3, 1), COALESCE($4, 12), COALESCE($5, 80), COALESCE($6, 'SLOVENIA'), COALESCE($7, true))
+       ON CONFLICT (enterprise_id) DO UPDATE SET
+         auto_print     = COALESCE($2, printer_settings.auto_print),
+         default_copies = COALESCE($3, printer_settings.default_copies),
+         font_size      = COALESCE($4, printer_settings.font_size),
+         paper_width    = COALESCE($5, printer_settings.paper_width),
+         encoding       = COALESCE($6, printer_settings.encoding),
+         print_logo     = COALESCE($7, printer_settings.print_logo),
+         updated_at     = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        req.enterpriseId,
+        autoPrint ?? null, defaultCopies ?? null, fontSize ?? null,
+        paperWidth ?? null, encoding ?? null, printLogo ?? null,
+      ]
+    );
 
-    logger.info('Global printer settings updated');
+    logger.info('Printer settings updated');
 
     res.json({
       success: true,
-      data: globalSettings,
+      data: mapSettings(r.rows[0]),
     });
   } catch (error) {
     logger.error('Failed to update printer settings:', error);
@@ -592,12 +589,23 @@ router.put('/settings', async (req: Request, res: Response) => {
  */
 router.get('/stats', async (req: Request, res: Response) => {
   try {
+    const r = await db.query(
+      `SELECT
+         count(*)                                        AS "totalStations",
+         count(*) FILTER (WHERE status = 'online')       AS "onlineStations",
+         count(*) FILTER (WHERE status = 'offline')      AS "offlineStations",
+         count(*) FILTER (WHERE enabled)                 AS "enabledStations",
+         count(*) FILTER (WHERE NOT enabled)             AS "disabledStations"
+       FROM printer_stations WHERE enterprise_id = $1`,
+      [req.enterpriseId]
+    );
+    const row = r.rows[0];
     const stats = {
-      totalStations: printerStations.length,
-      onlineStations: printerStations.filter((s) => s.status === 'online').length,
-      offlineStations: printerStations.filter((s) => s.status === 'offline').length,
-      enabledStations: printerStations.filter((s) => s.enabled).length,
-      disabledStations: printerStations.filter((s) => !s.enabled).length,
+      totalStations: Number(row.totalStations),
+      onlineStations: Number(row.onlineStations),
+      offlineStations: Number(row.offlineStations),
+      enabledStations: Number(row.enabledStations),
+      disabledStations: Number(row.disabledStations),
     };
 
     res.json({
