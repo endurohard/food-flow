@@ -16,13 +16,19 @@
     }
     .topbar {
       background: var(--color-primary); color: #fff;
-      padding: 16px 28px; display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
     }
-    .topbar h1 { font-size: 18px; margin: 0; font-weight: 700; }
-    .topbar .who { margin-left: auto; font-size: 13px; opacity: .9; }
+    .topbar h1 { font-size: 17px; margin: 0; font-weight: 700; flex: 1 1 auto; min-width: 0; }
+    .topbar .who { margin-left: auto; font-size: 13px; opacity: .9; white-space: nowrap; }
     .topbar button {
-      background: rgba(255,255,255,.15); color: #fff; border: 0;
-      padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      flex-shrink: 0;
+      background: rgba(255,255,255,.22); color: #fff; border: 1px solid rgba(255,255,255,.5);
+      padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+    }
+    .topbar button:hover { background: rgba(255,255,255,.35); }
+    @media (max-width: 560px) {
+      .topbar h1 { font-size: 15px; flex-basis: 100%; }
+      .topbar .who { margin-left: 0; }
     }
     .wrap { max-width: 1100px; margin: 24px auto; padding: 0 20px; display: grid; gap: 24px; }
     .card {
