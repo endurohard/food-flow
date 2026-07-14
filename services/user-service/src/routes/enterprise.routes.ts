@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import Joi from 'joi';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { EnterpriseService } from '../services/enterprise.service';
@@ -110,6 +112,115 @@ router.get('/', authenticateUser, requireSuperAdmin, async (req, res) => {
   } catch (error: any) {
     console.error('Failed to list enterprises:', error);
     return res.status(500).json({ error: 'Failed to list enterprises', message: error.message });
+  }
+});
+
+// ═══════════════════ Super-admin management ═══════════════════
+// Все ниже — только super_admin (requireSuperAdmin), без enterpriseContext.
+
+function genPassword(): string {
+  return crypto.randomBytes(9).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) + '1a';
+}
+
+// Этап 1: сброс пароля владельцу организации
+router.post('/:id/reset-owner-password', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const owner = await enterpriseService.getEnterpriseOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'У организации нет владельца' });
+    const provided = (req.body?.newPassword || '').trim();
+    if (provided && provided.length < 8) return res.status(400).json({ error: 'Пароль минимум 8 символов' });
+    const newPassword = provided || genPassword();
+    await enterpriseService.resetMemberPassword(req.params.id, owner.userId, newPassword);
+    return res.json({ success: true, ownerEmail: owner.email, newPassword });
+  } catch (error: any) {
+    console.error('reset-owner-password:', error);
+    return res.status(500).json({ error: 'Не удалось сбросить пароль' });
+  }
+});
+
+// Этап 2: редактирование организации супер-админом
+router.patch('/:id', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const enterprise = await enterpriseService.updateEnterprise(req.params.id, req.body);
+    return res.json({ success: true, enterprise });
+  } catch (error: any) {
+    if (error.message === 'Enterprise not found') return res.status(404).json({ error: error.message });
+    console.error('super-admin patch enterprise:', error);
+    return res.status(500).json({ error: 'Не удалось обновить организацию' });
+  }
+});
+
+// Этап 3: пользователи организации + сброс пароля любому + деактивация
+router.get('/:id/members', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const members = await enterpriseService.listEnterpriseMembers(req.params.id);
+    return res.json({ success: true, members });
+  } catch (error: any) {
+    console.error('list members:', error);
+    return res.status(500).json({ error: 'Не удалось получить пользователей' });
+  }
+});
+
+router.post('/:id/members/:userId/reset-password', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const provided = (req.body?.newPassword || '').trim();
+    if (provided && provided.length < 8) return res.status(400).json({ error: 'Пароль минимум 8 символов' });
+    const newPassword = provided || genPassword();
+    const ok = await enterpriseService.resetMemberPassword(req.params.id, req.params.userId, newPassword);
+    if (!ok) return res.status(404).json({ error: 'Пользователь не найден в этой организации' });
+    return res.json({ success: true, newPassword });
+  } catch (error: any) {
+    console.error('reset member password:', error);
+    return res.status(500).json({ error: 'Не удалось сбросить пароль' });
+  }
+});
+
+router.patch('/:id/members/:userId', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    if (typeof req.body?.isActive !== 'boolean') return res.status(400).json({ error: 'isActive (boolean) обязателен' });
+    const ok = await enterpriseService.setMemberActive(req.params.id, req.params.userId, req.body.isActive);
+    if (!ok) return res.status(404).json({ error: 'Пользователь не найден в этой организации' });
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('set member active:', error);
+    return res.status(500).json({ error: 'Не удалось обновить пользователя' });
+  }
+});
+
+// Этап 4: «Войти в организацию» — impersonation-токен (супер-админ действует
+// как владелец: role=restaurant_owner + enterpriseId → работает tenant-scope)
+router.post('/:id/impersonate', authenticateUser, requireSuperAdmin, async (req, res) => {
+  try {
+    const enterprise = await enterpriseService.getEnterpriseById(req.params.id);
+    if (!enterprise) return res.status(404).json({ error: 'Организация не найдена' });
+    const owner = await enterpriseService.getEnterpriseOwner(req.params.id);
+    const impUserId = owner ? owner.userId : req.userId!;
+    const impEmail = owner ? owner.email : 'superadmin';
+    const accessToken = jwt.sign(
+      {
+        userId: impUserId,
+        email: impEmail,
+        role: 'restaurant_owner',
+        enterpriseId: req.params.id,
+        enterpriseRole: 'owner',
+        impersonatedBy: req.userId
+      },
+      config.jwt.secret,
+      { expiresIn: config.jwt.accessExpiresIn } as jwt.SignOptions
+    );
+    return res.json({
+      success: true,
+      accessToken,
+      user: {
+        userId: impUserId, email: impEmail, role: 'restaurant_owner',
+        enterpriseId: req.params.id, enterpriseRole: 'owner',
+        first_name: enterprise.name, enterpriseName: enterprise.name
+      },
+      enterprise
+    });
+  } catch (error: any) {
+    console.error('impersonate:', error);
+    return res.status(500).json({ error: 'Не удалось войти в организацию' });
   }
 });
 

@@ -448,6 +448,58 @@ export class EnterpriseService {
     return stats.rows[0];
   }
 
+  // ── Super-admin management ────────────────────────────────────────────────
+
+  /** Владелец предприятия (для сброса пароля / impersonation). */
+  async getEnterpriseOwner(enterpriseId: string): Promise<{ userId: string; email: string; firstName: string } | null> {
+    const r = await this.pool.query(
+      `SELECT u.id, u.email, u.first_name
+       FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
+       WHERE eu.enterprise_id = $1 AND eu.role = 'owner'
+       ORDER BY eu.joined_at ASC LIMIT 1`,
+      [enterpriseId]
+    );
+    if (r.rows.length === 0) return null;
+    return { userId: r.rows[0].id, email: r.rows[0].email, firstName: r.rows[0].first_name };
+  }
+
+  /** Пользователи предприятия (для панели супер-админа). */
+  async listEnterpriseMembers(enterpriseId: string): Promise<any[]> {
+    const r = await this.pool.query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, eu.role AS enterprise_role
+       FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
+       WHERE eu.enterprise_id = $1
+       ORDER BY (eu.role = 'owner') DESC, u.email ASC`,
+      [enterpriseId]
+    );
+    return r.rows;
+  }
+
+  /** Сброс пароля пользователю. Проверяет принадлежность предприятию. */
+  async resetMemberPassword(enterpriseId: string, userId: string, newPassword: string): Promise<boolean> {
+    const belongs = await this.pool.query(
+      'SELECT 1 FROM enterprise_users WHERE enterprise_id = $1 AND user_id = $2',
+      [enterpriseId, userId]
+    );
+    if (belongs.rows.length === 0) return false;
+    const hash = await bcrypt.hash(newPassword, config.bcrypt.saltRounds);
+    await this.pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [hash, userId]
+    );
+    return true;
+  }
+
+  /** Активация/деактивация пользователя предприятия. */
+  async setMemberActive(enterpriseId: string, userId: string, isActive: boolean): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE users SET is_active = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND EXISTS (SELECT 1 FROM enterprise_users WHERE enterprise_id = $1 AND user_id = $2)`,
+      [enterpriseId, userId, isActive]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
   async close(): Promise<void> {
     await this.pool.end();
   }
