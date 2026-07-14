@@ -1143,8 +1143,8 @@ AUTH.requireAuth();
     </div>
 
     <script>
-        // API Configuration
-        const API_BASE_URL = 'http://localhost/api/printers';
+        // API Configuration — тот же origin (kong), через AUTH.fetch (токен + tenant-scope)
+        const API_BASE_URL = AUTH.API_BASE + '/api/printers';
 
         // State
         let stations = [];
@@ -1169,7 +1169,7 @@ AUTH.requireAuth();
         // Load data from API
         async function loadStations() {
             try {
-                const response = await fetch(`${API_BASE_URL}/stations`);
+                const response = await AUTH.fetch(`${API_BASE_URL}/stations`);
                 const data = await response.json();
                 if (data.success) {
                     stations = data.data;
@@ -1177,50 +1177,15 @@ AUTH.requireAuth();
                 }
             } catch (error) {
                 console.error('Failed to load stations:', error);
-                alert('❌ Ошибка загрузки станций. Используются тестовые данные.');
-                // Fallback to mock data
-                stations = [
-                    {
-                        id: 1,
-                        name: 'Мучной цех',
-                        type: 'network',
-                        address: '192.168.31.87:9100',
-                        categories: ['pizza', 'burger'],
-                        copies: 1,
-                        enabled: true,
-                        status: 'online',
-                        lastPrint: new Date(Date.now() - 5 * 60000)
-                    },
-                    {
-                        id: 2,
-                        name: 'Горячий цех',
-                        type: 'network',
-                        address: '192.168.31.88:9100',
-                        categories: ['hot'],
-                        copies: 2,
-                        enabled: true,
-                        status: 'online',
-                        lastPrint: new Date(Date.now() - 2 * 60000)
-                    },
-                    {
-                        id: 3,
-                        name: 'Бар',
-                        type: 'network',
-                        address: '192.168.31.89:9100',
-                        categories: ['drinks', 'dessert'],
-                        copies: 1,
-                        enabled: true,
-                        status: 'offline',
-                        lastPrint: new Date(Date.now() - 30 * 60000)
-                    }
-                ];
+                // Без mock: показываем реальный (пустой) список своего предприятия
+                stations = [];
                 renderStations();
             }
         }
 
         async function loadSettings() {
             try {
-                const response = await fetch(`${API_BASE_URL}/settings`);
+                const response = await AUTH.fetch(`${API_BASE_URL}/settings`);
                 const data = await response.json();
                 if (data.success) {
                     globalSettings = data.data;
@@ -1362,7 +1327,7 @@ AUTH.requireAuth();
             }
 
             try {
-                const response = await fetch(`${API_BASE_URL}/stations/${id}`, {
+                const response = await AUTH.fetch(`${API_BASE_URL}/stations/${id}`, {
                     method: 'DELETE'
                 });
                 const data = await response.json();
@@ -1426,13 +1391,13 @@ AUTH.requireAuth();
             try {
                 let response;
                 if (editingStationId) {
-                    response = await fetch(`${API_BASE_URL}/stations/${editingStationId}`, {
+                    response = await AUTH.fetch(`${API_BASE_URL}/stations/${editingStationId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(stationData)
                     });
                 } else {
-                    response = await fetch(`${API_BASE_URL}/stations`, {
+                    response = await AUTH.fetch(`${API_BASE_URL}/stations`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(stationData)
@@ -1477,7 +1442,7 @@ AUTH.requireAuth();
             }
 
             try {
-                const response = await fetch(`${API_BASE_URL}/test-station`, {
+                const response = await AUTH.fetch(`${API_BASE_URL}/test-station`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type, address })
@@ -1505,7 +1470,7 @@ AUTH.requireAuth();
             renderStations();
 
             try {
-                const response = await fetch(`${API_BASE_URL}/test-station`, {
+                const response = await AUTH.fetch(`${API_BASE_URL}/test-station`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1542,7 +1507,7 @@ AUTH.requireAuth();
             };
 
             try {
-                const response = await fetch(`${API_BASE_URL}/settings`, {
+                const response = await AUTH.fetch(`${API_BASE_URL}/settings`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
