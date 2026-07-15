@@ -663,10 +663,16 @@
   <div class="header">
     <div class="header-content">
       <div class="logo"><img src="../assets/logo.png" alt="FoodFlow"></div>
-      <button class="cart-button" onclick="openCart()">
-        🛒 Корзина
-        <span class="cart-badge" id="cartBadge">0</span>
-      </button>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <a href="/admin-panel/login.html"
+           style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:10px;background:var(--color-primary,#2E7D4F);color:#fff;text-decoration:none;font-weight:600;font-size:14px;white-space:nowrap;">
+          🔐 Вход в панель
+        </a>
+        <button class="cart-button" onclick="openCart()">
+          🛒 Корзина
+          <span class="cart-badge" id="cartBadge">0</span>
+        </button>
+      </div>
     </div>
   </div>
 

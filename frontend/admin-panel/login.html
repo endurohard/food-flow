@@ -570,7 +570,10 @@
             localStorage.setItem('ff_refresh_token', refreshToken);
             localStorage.setItem('ff_user', JSON.stringify({
                 ...user,
-                enterpriseRole: user.enterprise_role || user.enterpriseRole
+                // API отдаёт snake_case; фронт (auth.js) читает camelCase —
+                // нормализуем, иначе тип заведения/скоуп не подхватываются
+                enterpriseId: user.enterpriseId || user.enterprise_id || null,
+                enterpriseRole: user.enterpriseRole || user.enterprise_role || null
             }));
         }
     </script>
