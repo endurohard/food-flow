@@ -171,6 +171,7 @@ const BUSINESS_TYPES = {
 };
 
 const MODULE_ACCESS = {
+  'pos.html':           ['restaurant', 'cafe', 'coffee_shop'],
   'orders.html':        ['restaurant', 'cafe', 'coffee_shop'],
   'tables.html':        ['restaurant', 'cafe'],
   'hall-designer.html': ['restaurant'],

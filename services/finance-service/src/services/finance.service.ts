@@ -238,17 +238,19 @@ export class FinanceService {
     paymentMethod: string;
     paymentGateway?: string;
     externalId?: string;
+    status?: string;
     metadata?: Record<string, any>;
   }): Promise<any> {
     const result = await this.pool.query(
       `INSERT INTO payments
-         (order_id, enterprise_id, amount, payment_method, payment_gateway, external_id, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (order_id, enterprise_id, amount, payment_method, payment_gateway, external_id, status, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'pending'), $8)
        RETURNING *`,
       [
         data.orderId, data.enterpriseId || null, data.amount,
         data.paymentMethod, data.paymentGateway || null,
         data.externalId || null,
+        data.status || null,
         FinanceService.sanitizePaymentMetadata(data.metadata)
       ]
     );

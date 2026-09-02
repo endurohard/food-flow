@@ -12,7 +12,7 @@ const exportService = new ExportService(config.database.url);
 
 // ========== КАССЫ ==========
 
-router.get('/registers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+router.get('/registers', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
@@ -74,7 +74,7 @@ router.get('/registers/:id/operations', authenticateUser, requireRole('admin', '
   } catch (error) { console.error('Get operations error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/registers/:id/operations', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
+router.post('/registers/:id/operations', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       operationType: Joi.string().valid('sale', 'refund', 'cash_in', 'cash_out', 'encashment').required(),
@@ -121,7 +121,7 @@ router.get('/payments', authenticateUser, requireRole('admin', 'owner', 'manager
   } catch (error) { console.error('Get payments error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/payments', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), idempotencyCheck, async (req: Request, res: Response) => {
+router.post('/payments', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), idempotencyCheck, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       orderId: Joi.string().uuid().required(),
@@ -129,6 +129,9 @@ router.post('/payments', authenticateUser, requireRole('admin', 'owner', 'manage
       paymentMethod: Joi.string().max(50).required(),
       paymentGateway: Joi.string().max(100).optional(),
       externalId: Joi.string().max(255).optional(),
+      // Касса пробивает уже полученные деньги — платёж создаётся сразу завершённым.
+      // Онлайн-оплаты остаются pending до вебхука шлюза.
+      status: Joi.string().valid('pending', 'completed').optional(),
       metadata: Joi.object().optional()
     });
     const { error, value } = schema.validate(req.body);

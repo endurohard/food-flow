@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Касса — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <script src="js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-family) !important;
+      background: var(--admin-content-bg) !important;
+      color: var(--color-text-primary) !important;
+      min-height: 100vh;
+      display: flex !important;
+      overflow-x: hidden;
+    }
+
+    .sidebar {
+      width: 250px !important;
+      flex-shrink: 0 !important;
+      background: var(--admin-sidebar-bg) !important;
+      height: 100vh !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: 300 !important;
+      box-shadow: 2px 0 8px rgba(0,0,0,.06) !important;
+      transition: transform .2s ease !important;
+    }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+    .sidebar-brand img { height: 40px; width: auto; display: block; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex !important;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-primary) !important;
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent !important;
+      border-left: none !important;
+    }
+    .nav-item:hover { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px; top: 50%;
+      transform: translateY(-50%);
+      width: 8px; height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 20px 20px 0;
+    }
+    .nav-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+    .nav-item span { flex: 1; }
+    .nav-badge {
+      font-size: 11px; font-weight: 600;
+      background: var(--color-danger); color: #fff;
+      border-radius: 20px; padding: 2px 7px;
+      min-width: 20px; text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar {
+      color: var(--color-primary);
+      width: 36px; height: 36px;
+      background: var(--color-primary-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 12px; color: var(--color-grey-5); }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299;
+    }
+    .sidebar-overlay.open { display: block; }
+
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex !important;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .topbar-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: var(--color-text-primary); padding: 4px; border-radius: 4px;
+    }
+    .topbar-search { flex: 1; max-width: 360px; position: relative; }
+    .topbar-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-placeholder); width: 18px; height: 18px; }
+    .topbar-search input {
+      width: 100%; height: 42px; background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border); border-radius: 8px;
+      padding: 0 16px 0 42px; font-family: var(--font-family); font-size: 14px;
+      color: var(--color-text-primary); outline: none;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .notif-group { display: flex; align-items: center; gap: 8px; }
+    .notif-btn {
+      position: relative; width: 40px; height: 40px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .notif-btn svg { width: 20px; height: 20px; }
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-btn.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .notif-btn.yellow { background: var(--color-warning-light); color: #c9a200;              }
+    .notif-count {
+      position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px;
+      border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #fff;
+    }
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .notif-count.red    { background: var(--color-danger);  }
+    .notif-count.yellow { background: var(--color-warning); }
+    .topbar-user {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px;
+      border-radius: 50px; cursor: pointer; transition: background .15s; text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+    .topbar-avatar {
+      color: var(--color-primary);
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-user-text { display: flex; flex-direction: column; }
+    .topbar-user-greeting { font-size: 11px; color: var(--color-grey-5); line-height: 1; }
+    .topbar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.3; }
+
+    .content { flex: 1; padding: 30px; }
+
+    .page-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-text-dark);
+    }
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--color-grey-5);
+      margin-top: 4px;
+    }
+
+    /* ── Касса ── */
+    .pos-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    }
+    .pos-status.open   { background: var(--color-success-light); color: var(--color-primary); }
+    .pos-status.closed { background: var(--color-warning-light); color: #c9a200; }
+
+    .pos-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 20px; align-items: start; }
+
+    .pos-panel {
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.08));
+      border-radius: 12px; padding: 16px;
+    }
+
+    .pos-search { width: 100%; padding: 10px 14px; margin-bottom: 12px;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12)); border-radius: 8px;
+      font-family: inherit; font-size: 14px; background: var(--admin-content-bg); }
+
+    .pos-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .pos-cat {
+      padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12));
+      background: transparent; color: var(--color-text-secondary, #6b7280); font-family: inherit;
+    }
+    .pos-cat.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+    .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .pos-item {
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.10)); border-radius: 10px;
+      padding: 12px; cursor: pointer; background: var(--admin-content-bg);
+      display: flex; flex-direction: column; gap: 6px; min-height: 92px;
+      text-align: left; font-family: inherit; transition: border-color .15s, transform .05s;
+    }
+    .pos-item:hover:not(:disabled) { border-color: var(--color-primary); }
+    .pos-item:active:not(:disabled) { transform: scale(0.98); }
+    .pos-item:disabled { opacity: .45; cursor: not-allowed; }
+    .pos-item-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.25; }
+    .pos-item-price { margin-top: auto; font-size: 15px; font-weight: 700; color: var(--color-primary); }
+    .pos-item-stop { font-size: 11px; font-weight: 600; color: var(--color-danger); }
+    .pos-item-mods { font-size: 11px; color: var(--color-grey-5); }
+
+    .cart { position: sticky; top: 20px; display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+    .cart-type { display: flex; gap: 6px; margin-bottom: 14px; }
+    .cart-type button {
+      flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12)); background: transparent;
+      color: var(--color-text-secondary, #6b7280); font-family: inherit;
+    }
+    .cart-type button.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+    .cart-lines { flex: 1; overflow-y: auto; min-height: 120px; margin: 0 -4px; padding: 0 4px; }
+    .cart-empty { color: var(--color-grey-5); font-size: 14px; text-align: center; padding: 32px 0; }
+    .cart-line { padding: 10px 0; border-bottom: 1px dashed var(--admin-sidebar-border, rgba(0,0,0,0.10)); }
+    .cart-line-top { display: flex; align-items: flex-start; gap: 8px; }
+    .cart-line-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--color-text-dark); }
+    .cart-line-sum { font-size: 14px; font-weight: 700; white-space: nowrap; }
+    .cart-line-mods { font-size: 12px; color: var(--color-grey-5); margin-top: 2px; }
+    .cart-line-ctl { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .qty-btn {
+      width: 26px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 15px; line-height: 1;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.14)); background: transparent;
+      color: var(--color-text-dark); font-family: inherit;
+    }
+    .qty-val { min-width: 24px; text-align: center; font-size: 14px; font-weight: 600; }
+    .line-del { margin-left: auto; background: none; border: none; cursor: pointer; color: var(--color-danger); font-size: 13px; font-family: inherit; }
+
+    .cart-total { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0; }
+    .cart-total-label { font-size: 14px; color: var(--color-grey-5); }
+    .cart-total-value { font-size: 26px; font-weight: 700; color: var(--color-text-dark); }
+
+    .pay-row { display: flex; gap: 8px; }
+    .pay-btn {
+      flex: 1; padding: 14px; border-radius: 10px; cursor: pointer; font-size: 15px; font-weight: 700;
+      border: none; color: #fff; font-family: inherit;
+    }
+    .pay-btn.cash { background: var(--color-primary); }
+    .pay-btn.card { background: var(--color-text-dark); }
+    .pay-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .cart-clear { width: 100%; margin-top: 8px; padding: 9px; border-radius: 8px; cursor: pointer;
+      background: transparent; border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12));
+      color: var(--color-text-secondary, #6b7280); font-size: 13px; font-family: inherit; }
+
+    /* ── Модалки ── */
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 200; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--admin-card-bg); border-radius: 14px; padding: 22px;
+      width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+    }
+    .modal h3 { font-size: 18px; font-weight: 700; color: var(--color-text-dark); margin-bottom: 4px; }
+    .modal-sub { font-size: 13px; color: var(--color-grey-5); margin-bottom: 16px; }
+    .mod-group { margin-bottom: 16px; }
+    .mod-group-title { font-size: 13px; font-weight: 700; color: var(--color-grey-5); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 8px; }
+    .mod-opt { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .mod-opt:hover { background: var(--admin-content-bg); }
+    .mod-opt input { width: 17px; height: 17px; accent-color: var(--color-primary); }
+    .mod-opt-price { margin-left: auto; font-size: 13px; color: var(--color-grey-5); }
+    .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+    .btn-primary { flex: 1; padding: 12px; border-radius: 9px; border: none; background: var(--color-primary); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit; }
+    .btn-ghost { padding: 12px 18px; border-radius: 9px; cursor: pointer; background: transparent; font-family: inherit; font-size: 14px;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12)); color: var(--color-text-secondary, #6b7280); }
+    .cash-input { width: 100%; padding: 12px; font-size: 20px; font-weight: 700; text-align: right; font-family: inherit;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.14)); border-radius: 9px; background: var(--admin-content-bg); color: var(--color-text-dark); }
+    .cash-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .cash-quick button { padding: 8px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 13px;
+      border: 1px solid var(--admin-sidebar-border, rgba(0,0,0,0.12)); background: transparent; color: var(--color-text-dark); }
+    .cash-change { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; margin-top: 8px; }
+    .cash-change.negative { color: var(--color-danger); }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--color-text-dark); color: var(--color-text-inverse); padding: 12px 20px;
+      border-radius: 10px; font-size: 14px; z-index: 400; display: none; max-width: 90vw;
+    }
+    .toast.show { display: block; }
+
+    /* ── Чек для печати ── */
+    #receipt { display: none; }
+    @media print {
+      body > *:not(#receipt) { display: none !important; }
+      #receipt { display: block !important; width: 72mm; margin: 0 auto; font-family: monospace; font-size: 12px; color: #000; }
+      #receipt .r-center { text-align: center; }
+      #receipt .r-line { display: flex; justify-content: space-between; gap: 8px; }
+      #receipt hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+    }
+
+    @media (max-width: 1100px) {
+      .pos-layout { grid-template-columns: 1fr; }
+      .cart { position: static; max-height: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/pos.html" class="nav-item active">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M2 9h16"/><path d="M6 13h3"/></svg>
+      <span>Касса</span>
+    </a>
+
+
+    <a href="/admin-panel/dashboard.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/><path d="M10 9v9"/><path d="M4 2v16"/><path d="M4 8h4"/></svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M2 13h16M7 8v9"/></svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
+      <span>Склад</span>
+    </a>
+    <a href="/admin-panel/wholesale.html" class="nav-item">
+      <!-- Truck / wholesale icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4h11v9H1z"/>
+        <path d="M12 7h4l3 3v3h-7"/>
+        <circle cx="5" cy="15.5" r="1.5"/>
+        <circle cx="15" cy="15.5" r="1.5"/>
+      </svg>
+      <span>Опт</span>
+    </a>
+
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+      <span>Персонал</span>
+    </a>
+
+    <a href="/admin-panel/kds.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6M10 14v3"/></svg>
+      <span>KDS</span>
+    </a>
+
+    <a href="/admin-panel/calls.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4l2 5-2.5 1.5a11 11 0 005 5L13 12l5 2v4a1 1 0 01-1 1C7 19 1 13 1 4a1 1 0 011-1z"/></svg>
+      <span>Звонки</span>
+    </a>
+
+    <a href="/admin-panel/hall-designer.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="18" rx="2"/><path d="M1 7h18M1 13h18M7 1v18"/></svg>
+      <span>Дизайнер зала</span>
+    </a>
+
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+AUTH.requireAuth();
+
+(function applyRoleUI() {
+  var role = AUTH.getRole();
+  if (role === 'cashier') {
+    // Кассир видит только кассу — ничего кроме оформления продаж
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('pos')) el.style.display = 'none';
+    });
+  } else if (role === 'chef') {
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('kds')) el.style.display = 'none';
+    });
+  } else if (role === 'waiter') {
+    var allowed = ['pos', 'orders', 'tables', 'kds'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'viewer') {
+    var allowed = ['dashboard', 'analytics'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'operator') {
+    var allowed = ['pos', 'orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  }
+
+  var footer = document.querySelector('.sidebar-footer');
+  if (footer && !footer.querySelector('.ff-logout-btn')) {
+    var user = AUTH.getUser();
+    var displayName = (user && (user.first_name || user.email)) || '';
+    var logoutDiv = document.createElement('div');
+    logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
+    logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
+      '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,#6b7280);cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
+      ' onmouseout="this.style.background=\'transparent\'">' +
+      'Выйти из системы</button>';
+    footer.appendChild(logoutDiv);
+  }
+})();
+</script>
+
+<div class="main-wrapper">
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebarMobile()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l3 3"/></svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+    <div class="topbar-right">
+      <div class="notif-group">
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+          <span class="notif-count green">0</span>
+        </button>
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/></svg>
+          <span class="notif-count blue">3</span>
+        </button>
+      </div>
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+  <main class="content">
+    <div class="page-heading">
+      <div>
+        <div class="page-title">Касса</div>
+        <div class="page-subtitle" id="posSubtitle">Загрузка меню…</div>
+      </div>
+      <span class="pos-status closed" id="shiftStatus">смена не найдена</span>
+    </div>
+
+    <div class="pos-layout">
+      <section class="pos-panel">
+        <input type="text" class="pos-search" id="posSearch" placeholder="Поиск по меню…" autocomplete="off">
+        <div class="pos-cats" id="posCats"></div>
+        <div class="pos-grid" id="posGrid"></div>
+      </section>
+
+      <aside class="pos-panel cart">
+        <div class="cart-type">
+          <button type="button" class="active" data-type="pickup">С собой</button>
+          <button type="button" data-type="dine_in">В зале</button>
+        </div>
+        <div class="cart-lines" id="cartLines">
+          <div class="cart-empty">Чек пуст — выберите позиции</div>
+        </div>
+        <div class="cart-total">
+          <span class="cart-total-label">Итого</span>
+          <span class="cart-total-value" id="cartTotal">0 ₽</span>
+        </div>
+        <div class="pay-row">
+          <button type="button" class="pay-btn cash" id="payCash" disabled>Наличные</button>
+          <button type="button" class="pay-btn card" id="payCard" disabled>Карта</button>
+        </div>
+        <button type="button" class="cart-clear" id="cartClear">Очистить чек</button>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- Модификаторы -->
+<div class="modal-backdrop" id="modModal">
+  <div class="modal">
+    <h3 id="modTitle">Модификаторы</h3>
+    <div class="modal-sub" id="modSub"></div>
+    <div id="modGroups"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" onclick="POS.closeMods()">Отмена</button>
+      <button type="button" class="btn-primary" id="modAdd">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Оплата наличными -->
+<div class="modal-backdrop" id="cashModal">
+  <div class="modal" style="max-width: 380px">
+    <h3>Оплата наличными</h3>
+    <div class="modal-sub">К оплате <b id="cashDue">0 ₽</b></div>
+    <input type="number" inputmode="decimal" class="cash-input" id="cashGot" placeholder="0" min="0" step="1">
+    <div class="cash-quick" id="cashQuick"></div>
+    <div class="cash-change" id="cashChange"><span>Сдача</span><span>0 ₽</span></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" onclick="POS.closeCash()">Отмена</button>
+      <button type="button" class="btn-primary" id="cashConfirm">Пробить чек</button>
+    </div>
+  </div>
+</div>
+
+<!-- Успех -->
+<div class="modal-backdrop" id="doneModal">
+  <div class="modal" style="max-width: 380px; text-align: center">
+    <h3 id="doneTitle">Оплачено</h3>
+    <div class="modal-sub" id="doneSub"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="donePrint">Печать чека</button>
+      <button type="button" class="btn-primary" id="doneNew">Новый заказ</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Чек (виден только при печати) -->
+<div id="receipt"></div>
+
+<script>
+const POS = {
+  restaurantId: null,
+  restaurantName: '',
+  categories: [],
+  items: [],
+  modsCache: {},
+  cart: [],
+  category: 'all',
+  search: '',
+  orderType: 'pickup',
+  registerId: null,
+  pending: null,     // { key, method } — чтобы повтор шёл с тем же idempotency-key
+  lastOrder: null,
+
+  // ── утилиты ────────────────────────────────────────────────────────────────
+  money(n) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(Math.round(n * 100) / 100) + ' ₽'; },
+  toast(msg, ms) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => el.classList.remove('show'), ms || 3500);
+  },
+  uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  },
+  isStopped(it) {
+    if (it.is_available === false) return true;
+    if (!it.stopped_at) return false;
+    if (it.stop_until && new Date(it.stop_until) < new Date()) return false;
+    return true;
+  },
+
+  // ── инициализация ──────────────────────────────────────────────────────────
+  async init() {
+    try {
+      const res = await AUTH.fetch('/api/restaurants');
+      const data = await res.json();
+      const list = data.restaurants || data.data || [];
+      if (!list.length) {
+        document.getElementById('posSubtitle').textContent = 'У предприятия нет заведения — создайте его в разделе «Организации»';
+        return;
+      }
+      this.restaurantId = list[0].id;
+      this.restaurantName = list[0].name || '';
+    } catch (e) {
+      document.getElementById('posSubtitle').textContent = 'Не удалось загрузить заведение';
+      return;
+    }
+
+    await Promise.all([this.loadCategories(), this.loadItems()]);
+    this.loadRegister();          // без await — касса не блокирует продажу
+    this.bind();
+    this.renderCats();
+    this.renderGrid();
+    this.renderCart();
+  },
+
+  async loadCategories() {
+    try {
+      const res = await AUTH.fetch('/api/restaurants/' + this.restaurantId + '/menu-categories');
+      const data = await res.json();
+      this.categories = data.categories || data.data || [];
+    } catch (e) { this.categories = []; }
+  },
+
+  async loadItems() {
+    try {
+      const res = await AUTH.fetch('/api/restaurants/' + this.restaurantId + '/menu-items');
+      const data = await res.json();
+      this.items = data.items || data.data || [];
+      const active = this.items.filter(i => !this.isStopped(i)).length;
+      document.getElementById('posSubtitle').textContent =
+        (this.restaurantName ? this.restaurantName + ' · ' : '') + 'позиций в меню: ' + active;
+    } catch (e) {
+      this.items = [];
+      document.getElementById('posSubtitle').textContent = 'Не удалось загрузить меню';
+    }
+  },
+
+  // Открытая смена нужна, чтобы наличные попадали в кассу.
+  // Официанту/оператору список касс может быть закрыт (403) — тогда просто работаем без привязки.
+  async loadRegister() {
+    const el = document.getElementById('shiftStatus');
+    try {
+      const res = await AUTH.fetch('/api/finance/registers?status=open');
+      if (!res.ok) { el.textContent = 'смена: нет доступа'; return; }
+      const data = await res.json();
+      const open = (data.registers || []).filter(r => r.status === 'open');
+      if (open.length) {
+        this.registerId = open[0].id;
+        el.textContent = 'смена открыта';
+        el.className = 'pos-status open';
+      } else {
+        el.textContent = 'смена закрыта — наличные не попадут в кассу';
+      }
+    } catch (e) { el.textContent = 'смена: неизвестно'; }
+  },
+
+  bind() {
+    document.getElementById('posSearch').addEventListener('input', e => {
+      this.search = e.target.value.trim().toLowerCase();
+      this.renderGrid();
+    });
+    document.querySelectorAll('.cart-type button').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.cart-type button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        this.orderType = b.dataset.type;
+      });
+    });
+    document.getElementById('cartClear').addEventListener('click', () => {
+      if (this.cart.length && confirm('Очистить чек?')) { this.cart = []; this.renderCart(); }
+    });
+    document.getElementById('payCash').addEventListener('click', () => this.openCash());
+    document.getElementById('payCard').addEventListener('click', () => this.pay('card'));
+    document.getElementById('cashConfirm').addEventListener('click', () => {
+      const got = parseFloat(document.getElementById('cashGot').value || '0');
+      if (got < this.total() - 0.001) { this.toast('Получено меньше суммы чека'); return; }
+      this.closeCash();
+      this.pay('cash', got);
+    });
+    document.getElementById('cashGot').addEventListener('input', () => this.renderChange());
+    document.getElementById('doneNew').addEventListener('click', () => this.closeDone());
+    document.getElementById('donePrint').addEventListener('click', () => window.print());
+  },
+
+  // ── меню ───────────────────────────────────────────────────────────────────
+  renderCats() {
+    const cats = [{ id: 'all', name: 'Все' }].concat(this.categories);
+    document.getElementById('posCats').innerHTML = cats.map(c =>
+      '<button type="button" class="pos-cat' + (this.category === c.id ? ' active' : '') +
+      '" data-id="' + c.id + '">' + this.esc(c.name) + '</button>'
+    ).join('');
+    document.querySelectorAll('.pos-cat').forEach(b => b.addEventListener('click', () => {
+      this.category = b.dataset.id;
+      this.renderCats(); this.renderGrid();
+    }));
+  },
+
+  renderGrid() {
+    const list = this.items.filter(i =>
+      (this.category === 'all' || i.category_id === this.category) &&
+      (!this.search || (i.name || '').toLowerCase().includes(this.search))
+    );
+    const grid = document.getElementById('posGrid');
+    if (!list.length) { grid.innerHTML = '<div class="cart-empty">Ничего не найдено</div>'; return; }
+    grid.innerHTML = list.map(i => {
+      const stopped = this.isStopped(i);
+      return '<button type="button" class="pos-item" data-id="' + i.id + '"' + (stopped ? ' disabled' : '') + '>' +
+        '<span class="pos-item-name">' + this.esc(i.name) + '</span>' +
+        (stopped ? '<span class="pos-item-stop">стоп-лист</span>' : '') +
+        '<span class="pos-item-price">' + this.money(Number(i.price) || 0) + '</span>' +
+      '</button>';
+    }).join('');
+    grid.querySelectorAll('.pos-item:not(:disabled)').forEach(b =>
+      b.addEventListener('click', () => this.pick(b.dataset.id)));
+  },
+
+  // ── добавление позиции ─────────────────────────────────────────────────────
+  async pick(itemId) {
+    const item = this.items.find(i => i.id === itemId);
+    if (!item) return;
+    let mods = this.modsCache[itemId];
+    if (!mods) {
+      try {
+        const res = await AUTH.fetch('/api/restaurants/menu-items/' + itemId + '/modifiers');
+        const data = res.ok ? await res.json() : {};
+        mods = (data.modifiers || data.data || []).filter(m => m.is_available !== false);
+      } catch (e) { mods = []; }
+      this.modsCache[itemId] = mods;
+    }
+    if (!mods.length) { this.addLine(item, []); return; }
+    this.openMods(item, mods);
+  },
+
+  openMods(item, mods) {
+    const groups = {};
+    mods.forEach(m => {
+      const g = m.modifier_group || 'Дополнительно';
+      (groups[g] = groups[g] || []).push(m);
+    });
+    document.getElementById('modTitle').textContent = item.name;
+    document.getElementById('modSub').textContent = this.money(Number(item.price) || 0);
+    document.getElementById('modGroups').innerHTML = Object.keys(groups).map(g =>
+      '<div class="mod-group"><div class="mod-group-title">' + this.esc(g) + '</div>' +
+      groups[g].map(m =>
+        '<label class="mod-opt"><input type="checkbox" value="' + m.id + '"' + (m.is_default ? ' checked' : '') + '>' +
+        '<span>' + this.esc(m.name) + '</span>' +
+        '<span class="mod-opt-price">' + (Number(m.price_adjustment) ? (Number(m.price_adjustment) > 0 ? '+' : '') + this.money(Number(m.price_adjustment)) : '—') + '</span>' +
+        '</label>'
+      ).join('') + '</div>'
+    ).join('');
+    const add = document.getElementById('modAdd');
+    add.onclick = () => {
+      const chosen = Array.from(document.querySelectorAll('#modGroups input:checked')).map(cb => {
+        const m = mods.find(x => x.id === cb.value);
+        return { modifierId: m.id, name: m.name, priceAdjustment: Number(m.price_adjustment) || 0 };
+      });
+      this.closeMods();
+      this.addLine(item, chosen);
+    };
+    document.getElementById('modModal').classList.add('open');
+  },
+  closeMods() { document.getElementById('modModal').classList.remove('open'); },
+
+  addLine(item, modifiers) {
+    const key = item.id + '|' + modifiers.map(m => m.modifierId).sort().join(',');
+    const exist = this.cart.find(l => l.key === key);
+    if (exist) { exist.qty += 1; }
+    else {
+      const base = Number(item.price) || 0;
+      const extra = modifiers.reduce((s, m) => s + (Number(m.priceAdjustment) || 0), 0);
+      this.cart.push({ key, menuItemId: item.id, name: item.name, unitPrice: base + extra, modifiers, qty: 1 });
+    }
+    this.renderCart();
+  },
+
+  changeQty(key, delta) {
+    const line = this.cart.find(l => l.key === key);
+    if (!line) return;
+    line.qty += delta;
+    if (line.qty <= 0) this.cart = this.cart.filter(l => l.key !== key);
+    this.renderCart();
+  },
+  removeLine(key) { this.cart = this.cart.filter(l => l.key !== key); this.renderCart(); },
+  total() { return this.cart.reduce((s, l) => s + l.unitPrice * l.qty, 0); },
+
+  renderCart() {
+    const box = document.getElementById('cartLines');
+    if (!this.cart.length) {
+      box.innerHTML = '<div class="cart-empty">Чек пуст — выберите позиции</div>';
+    } else {
+      box.innerHTML = this.cart.map(l =>
+        '<div class="cart-line">' +
+          '<div class="cart-line-top">' +
+            '<span class="cart-line-name">' + this.esc(l.name) + '</span>' +
+            '<span class="cart-line-sum">' + this.money(l.unitPrice * l.qty) + '</span>' +
+          '</div>' +
+          (l.modifiers.length ? '<div class="cart-line-mods">' + l.modifiers.map(m => this.esc(m.name)).join(', ') + '</div>' : '') +
+          '<div class="cart-line-ctl">' +
+            '<button type="button" class="qty-btn" data-act="minus" data-key="' + l.key + '">−</button>' +
+            '<span class="qty-val">' + l.qty + '</span>' +
+            '<button type="button" class="qty-btn" data-act="plus" data-key="' + l.key + '">+</button>' +
+            '<button type="button" class="line-del" data-act="del" data-key="' + l.key + '">удалить</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+      box.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+        const k = b.dataset.key;
+        if (b.dataset.act === 'plus') this.changeQty(k, 1);
+        else if (b.dataset.act === 'minus') this.changeQty(k, -1);
+        else this.removeLine(k);
+      }));
+    }
+    document.getElementById('cartTotal').textContent = this.money(this.total());
+    const empty = this.cart.length === 0;
+    document.getElementById('payCash').disabled = empty;
+    document.getElementById('payCard').disabled = empty;
+  },
+
+  // ── оплата ─────────────────────────────────────────────────────────────────
+  openCash() {
+    const due = this.total();
+    document.getElementById('cashDue').textContent = this.money(due);
+    const got = document.getElementById('cashGot');
+    got.value = '';
+    const steps = [due, Math.ceil(due / 100) * 100, Math.ceil(due / 500) * 500, Math.ceil(due / 1000) * 1000];
+    const uniq = steps.filter((v, i) => v > 0 && steps.indexOf(v) === i);
+    document.getElementById('cashQuick').innerHTML = uniq.map(v =>
+      '<button type="button" data-v="' + v + '">' + this.money(v) + '</button>').join('');
+    document.querySelectorAll('#cashQuick button').forEach(b => b.addEventListener('click', () => {
+      got.value = b.dataset.v; this.renderChange();
+    }));
+    this.renderChange();
+    document.getElementById('cashModal').classList.add('open');
+    setTimeout(() => got.focus(), 50);
+  },
+  closeCash() { document.getElementById('cashModal').classList.remove('open'); },
+  renderChange() {
+    const got = parseFloat(document.getElementById('cashGot').value || '0');
+    const change = got - this.total();
+    const el = document.getElementById('cashChange');
+    el.className = 'cash-change' + (change < 0 ? ' negative' : '');
+    el.innerHTML = '<span>Сдача</span><span>' + this.money(Math.max(change, 0)) + '</span>';
+  },
+
+  setPayBusy(busy) {
+    document.getElementById('payCash').disabled = busy || !this.cart.length;
+    document.getElementById('payCard').disabled = busy || !this.cart.length;
+  },
+
+  async pay(method, cashGot) {
+    if (!this.cart.length || !this.restaurantId) return;
+    this.setPayBusy(true);
+    const total = this.total();
+    // Один idempotency-key на попытку оплаты: повтор после сетевой ошибки не создаст второй заказ
+    if (!this.pending) this.pending = { key: this.uuid(), payKey: this.uuid() };
+
+    try {
+      const orderRes = await AUTH.fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'idempotency-key': this.pending.key },
+        body: JSON.stringify({
+          restaurantId: this.restaurantId,
+          orderType: this.orderType,
+          paymentMethod: method,
+          items: this.cart.map(l => ({
+            menuItemId: l.menuItemId,
+            quantity: l.qty,
+            modifiers: l.modifiers
+          }))
+        })
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.error || orderData.message || 'Не удалось создать заказ');
+      const order = orderData.data || orderData.order || orderData;
+
+      // Заказ уходит в работу (KDS / печать на станции). Не критично для оплаты.
+      AUTH.fetch('/api/orders/' + order.id + '/status', {
+        method: 'PUT', body: JSON.stringify({ status: 'confirmed' })
+      }).catch(() => {});
+
+      const amount = Number(order.total_amount || order.totalAmount || total);
+      await this.registerPayment(order.id, amount, method);
+
+      this.lastOrder = {
+        number: order.order_number || order.orderNumber || order.id.slice(0, 8),
+        total: amount, method, cashGot: cashGot, lines: this.cart.slice(),
+        at: new Date()
+      };
+      this.buildReceipt();
+      this.pending = null;
+      this.cart = [];
+      this.renderCart();
+      this.showDone();
+    } catch (e) {
+      // Сетевой сбой (TypeError) — заказ мог создаться, повторяем с тем же ключом.
+      // Ошибка от сервера — ключи сбрасываем, иначе кэш вернёт её же на повтор.
+      if (!(e instanceof TypeError)) this.pending = null;
+      this.toast(e.message || 'Ошибка оплаты — повторите');
+    } finally {
+      this.setPayBusy(false);
+    }
+  },
+
+  // Платёж + касса. Оплата на кассе — деньги уже получены, поэтому статус completed.
+  async registerPayment(orderId, amount, method) {
+    const body = { orderId, amount, paymentMethod: method, status: 'completed' };
+    let res = await AUTH.fetch('/api/finance/payments', {
+      method: 'POST', headers: { 'idempotency-key': this.pending.payKey }, body: JSON.stringify(body)
+    });
+    if (res.status === 400) {
+      // Бэкенд без поддержки status на создании — создаём и доводим статус отдельно
+      delete body.status;
+      // idempotency-кэш хранит и неуспешные ответы, поэтому повтор идёт с новым ключом
+      res = await AUTH.fetch('/api/finance/payments', {
+        method: 'POST', headers: { 'idempotency-key': this.pending.payKey + '-r' }, body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const p = (await res.clone().json()).payment;
+        if (p && p.id) {
+          const up = await AUTH.fetch('/api/finance/payments/' + p.id + '/status', {
+            method: 'PUT', body: JSON.stringify({ status: 'completed' })
+          });
+          if (!up.ok) this.toast('Платёж записан как «ожидает» — нет прав завершить его');
+        }
+      }
+    }
+    if (!res.ok) this.toast('Заказ создан, но платёж не записан — проверьте в разделе «Финансы»');
+
+    if (method === 'cash' && this.registerId) {
+      const op = await AUTH.fetch('/api/finance/registers/' + this.registerId + '/operations', {
+        method: 'POST',
+        body: JSON.stringify({ operationType: 'sale', amount, paymentMethod: 'cash', orderId })
+      });
+      if (!op.ok) this.toast('Наличные не проведены по кассе — проверьте смену');
+    }
+  },
+
+  showDone() {
+    const o = this.lastOrder;
+    const change = o.method === 'cash' && o.cashGot ? o.cashGot - o.total : 0;
+    document.getElementById('doneTitle').textContent = 'Заказ №' + o.number + ' оплачен';
+    document.getElementById('doneSub').innerHTML = this.money(o.total) +
+      (change > 0 ? '<br>Сдача: <b>' + this.money(change) + '</b>' : '');
+    document.getElementById('doneModal').classList.add('open');
+  },
+  closeDone() { document.getElementById('doneModal').classList.remove('open'); },
+
+  buildReceipt() {
+    const o = this.lastOrder;
+    const methodRu = o.method === 'cash' ? 'Наличные' : 'Карта';
+    const change = o.method === 'cash' && o.cashGot ? o.cashGot - o.total : 0;
+    document.getElementById('receipt').innerHTML =
+      '<div class="r-center"><b>' + this.esc(this.restaurantName || 'FoodFlow') + '</b></div>' +
+      '<div class="r-center">Заказ №' + this.esc(String(o.number)) + '</div>' +
+      '<div class="r-center">' + o.at.toLocaleString('ru-RU') + '</div><hr>' +
+      o.lines.map(l =>
+        '<div class="r-line"><span>' + this.esc(l.name) + ' × ' + l.qty + '</span><span>' + this.money(l.unitPrice * l.qty) + '</span></div>' +
+        (l.modifiers.length ? '<div style="padding-left:8px">+ ' + l.modifiers.map(m => this.esc(m.name)).join(', ') + '</div>' : '')
+      ).join('') +
+      '<hr><div class="r-line"><b>ИТОГО</b><b>' + this.money(o.total) + '</b></div>' +
+      '<div class="r-line"><span>' + methodRu + '</span><span>' + this.money(o.cashGot || o.total) + '</span></div>' +
+      (change > 0 ? '<div class="r-line"><span>Сдача</span><span>' + this.money(change) + '</span></div>' : '') +
+      '<hr><div class="r-center">Спасибо за заказ!</div>';
+  },
+
+  esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+};
+
+function toggleSidebarMobile() {
+  document.getElementById('sidebar').classList.toggle('mobile-open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+function closeSidebarMobile() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
+
+(function () {
+  const user = AUTH.getUser();
+  const name = (user && (user.first_name || user.email)) || 'Кассир';
+  const el = document.getElementById('topbarUserName'); if (el) el.textContent = name;
+  const sn = document.getElementById('sidebarUserName'); if (sn) sn.textContent = name;
+})();
+
+POS.init();
+</script>
+
+</body>
+</html>

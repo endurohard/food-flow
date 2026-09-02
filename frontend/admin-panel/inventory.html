@@ -1167,7 +1167,7 @@ AUTH.requireAuth();
     });
   } else if (role === 'waiter') {
     // waiter sees orders, tables, KDS
-    var allowed = ['orders', 'tables', 'kds'];
+    var allowed = ['pos', 'orders', 'tables', 'kds'];
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
@@ -1181,7 +1181,7 @@ AUTH.requireAuth();
     });
   } else if (role === 'operator') {
     // operator sees orders, tables, KDS, inventory, calls, dashboard
-    var allowed = ['orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
+    var allowed = ['pos', 'orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
