@@ -37,3 +37,7 @@ coverage/
 *.sqlite
 *.db
 Wiki/.obsidian/
+
+# Дизайн: выгрузки канваса и черновики концептов — в репозиторий не идут
+*.zip
+frontend/design-concepts/
