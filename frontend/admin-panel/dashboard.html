@@ -6,7 +6,7 @@
   <title>Панель — FoodFlow</title>
   <link rel="stylesheet" href="/css/tokens.css">
     <script src="js/auth.js"></script>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect width='32' height='32' rx='8' fill='%2300B074'/><path d='M9 10h14M9 16h10M9 22h12' stroke='white' stroke-width='2.5' stroke-linecap='round'/></svg>">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <style>
     *, *::before, *::after {
       margin: 0;
@@ -152,6 +152,7 @@
     }
 
     .sidebar-user-avatar {
+      color: var(--color-primary);
       width: 36px;
       height: 36px;
       background: var(--color-primary-light);
@@ -341,6 +342,7 @@
     .topbar-user:hover { background: var(--admin-content-bg); }
 
     .topbar-avatar {
+      color: var(--color-primary);
       width: 38px;
       height: 38px;
       border-radius: var(--radius-full);
@@ -836,6 +838,12 @@
   <nav class="sidebar-nav">
     <div class="nav-section-label">Главное</div>
 
+    <a href="/admin-panel/pos.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M2 9h16"/><path d="M6 13h3"/></svg>
+      <span>Касса</span>
+    </a>
+
+
     <a href="/admin-panel/dashboard.html" class="nav-item active">
       <!-- Grid / Dashboard icon -->
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -969,7 +977,7 @@
   <div class="sidebar-footer">
     <div class="sidebar-user">
       <div class="sidebar-user-avatar">
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="10" cy="6" r="4"/>
           <path d="M2 18v-1a7 7 0 0114 0v1"/>
         </svg>
@@ -1103,7 +1111,7 @@ AUTH.requireAuth();
       <!-- User -->
       <a href="/admin-panel/user-profile.html" class="topbar-user">
         <div class="topbar-avatar">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#00B074" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="10" cy="6" r="4"/>
             <path d="M2 18v-1a7 7 0 0114 0v1"/>
           </svg>
@@ -1248,17 +1256,17 @@ AUTH.requireAuth();
         </div>
         <div class="pie-legend" id="pieLegend">
           <div class="pie-legend-item">
-            <div class="pie-dot" style="background:#00B074"></div>
+            <div class="pie-dot" style="background:var(--color-primary)"></div>
             <span class="pie-legend-label">Доставка</span>
             <span class="pie-legend-pct" id="piePctDelivery">—</span>
           </div>
           <div class="pie-legend-item">
-            <div class="pie-dot" style="background:#2D9CDB"></div>
+            <div class="pie-dot" style="background:var(--color-danger)"></div>
             <span class="pie-legend-label">Зал</span>
             <span class="pie-legend-pct" id="piePctDineIn">—</span>
           </div>
           <div class="pie-legend-item">
-            <div class="pie-dot" style="background:#F7C604"></div>
+            <div class="pie-dot" style="background:var(--color-warning)"></div>
             <span class="pie-legend-label">Самовывоз</span>
             <span class="pie-legend-pct" id="piePctPickup">—</span>
           </div>
@@ -1499,6 +1507,19 @@ AUTH.requireAuth();
   /* ════════════════════════════════════
      PIE CHART — Категории заказов
   ════════════════════════════════════ */
+  // Цвета графиков — из токенов дизайн-системы (tokens.css), чтобы смена
+  // палитры не требовала правки JS
+  const THEME = (function () {
+    const css = getComputedStyle(document.documentElement);
+    const t = (name, fallback) => (css.getPropertyValue(name) || '').trim() || fallback;
+    return {
+    primary: t('--color-primary', '#2E7D4F'),
+    danger:  t('--color-danger',  '#D94F30'),
+    warning: t('--color-warning', '#F0C93B'),
+    surface: t('--admin-card-bg', '#FFFDF7')
+    };
+  })();
+
   async function loadPieChart() {
     const data = await apiFetch('/api/orders?limit=100');
     const wrap = document.getElementById('pieWrap');
@@ -1533,7 +1554,7 @@ AUTH.requireAuth();
         labels: ['Доставка', 'Зал', 'Самовывоз'],
         datasets: [{
           data: [counts.delivery, counts.dine_in, counts.pickup],
-          backgroundColor: ['#00B074', '#2D9CDB', '#F7C604'],
+          backgroundColor: [THEME.primary, THEME.danger, THEME.warning],
           borderWidth: 0,
           hoverOffset: 6,
         }],
@@ -1603,11 +1624,11 @@ AUTH.requireAuth();
         datasets: [{
           label: 'Заказы',
           data: values,
-          borderColor: '#00B074',
-          backgroundColor: 'rgba(0,176,116,0.10)',
+          borderColor: THEME.primary,
+          backgroundColor: 'rgba(46,125,79,0.10)',
           borderWidth: 2.5,
-          pointBackgroundColor: '#00B074',
-          pointBorderColor: '#fff',
+          pointBackgroundColor: THEME.primary,
+          pointBorderColor: THEME.surface,
           pointBorderWidth: 2,
           pointRadius: 5,
           fill: true,

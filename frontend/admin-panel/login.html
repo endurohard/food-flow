@@ -6,7 +6,7 @@
     <title>Вход — FoodFlow</title>
     <link rel="stylesheet" href="/css/tokens.css">
     <script src="../js/auth.js"></script>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect width='32' height='32' rx='8' fill='%2300B074'/><path d='M9 10h14M9 16h10M9 22h12' stroke='white' stroke-width='2.5' stroke-linecap='round'/></svg>">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <style>
         *, *::before, *::after {
             margin: 0;
@@ -26,7 +26,7 @@
         .brand-panel {
             width: 420px;
             flex-shrink: 0;
-            background: linear-gradient(160deg, #00C484 0%, #00B074 45%, #008F5D 100%);
+            background: linear-gradient(160deg, #3E9A63 0%, #2E7D4F 45%, #1F5E3A 100%);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -180,9 +180,9 @@
         }
 
         .tab.active {
-            background: #00B074;
-            color: #FFFFFF;
-            box-shadow: 0 2px 8px rgba(0, 176, 116, 0.30);
+            background: var(--color-primary);
+            color: var(--color-text-inverse);
+            box-shadow: 0 2px 8px rgba(46, 125, 79, 0.30);
         }
 
         /* ── Error Message ── */
@@ -234,12 +234,12 @@
         }
 
         .form-input:focus {
-            border-color: #00B074;
-            box-shadow: 0 0 0 3px rgba(0, 176, 116, 0.12);
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.12);
         }
 
         .form-input:hover:not(:focus) {
-            border-color: #D0D6DE;
+            border-color: var(--admin-border);
         }
 
         .register-fields {
@@ -264,8 +264,8 @@
             width: 100%;
             padding: 12px var(--space-4);
             margin-top: var(--space-2);
-            background: #00B074;
-            color: #FFFFFF;
+            background: var(--color-primary);
+            color: var(--color-text-inverse);
             border: none;
             border-radius: var(--radius-md);
             font-size: var(--font-size-base);
@@ -277,8 +277,8 @@
         }
 
         .btn-login:hover:not(:disabled) {
-            background: #009060;
-            box-shadow: 0 4px 14px rgba(0, 176, 116, 0.35);
+            background: var(--color-primary-hover);
+            box-shadow: 0 4px 14px rgba(46, 125, 79, 0.35);
         }
 
         .btn-login:active:not(:disabled) {
