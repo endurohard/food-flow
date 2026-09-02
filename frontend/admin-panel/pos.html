@@ -968,7 +968,8 @@ const POS = {
         method: 'PUT', body: JSON.stringify({ status: 'confirmed' })
       }).catch(() => {});
 
-      const amount = Number(order.total_amount || order.totalAmount || total);
+      // order-service отдаёт сумму в поле total (проверено на проде); остальные ключи — на всякий случай
+      const amount = Number(order.total ?? order.total_amount ?? order.totalAmount ?? total);
       await this.registerPayment(order.id, amount, method);
 
       this.lastOrder = {

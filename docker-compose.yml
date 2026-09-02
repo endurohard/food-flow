@@ -250,6 +250,8 @@ services:
       NODE_ENV: production
       PORT: 3011
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      # Нужен idempotency-мидлваре: без него ключ идемпотентности вешал запрос
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
     expose:
       - "3011"
@@ -270,6 +272,8 @@ services:
       NODE_ENV: production
       PORT: 3012
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
+      # Нужен idempotency-мидлваре: без него ключ идемпотентности вешал запрос
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     expose:
