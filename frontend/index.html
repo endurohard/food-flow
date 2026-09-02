@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>FoodFlow</title>
+    <script src="/js/auth.js"></script>
+    <script>
+        // Точка входа: залогиненного ведём сразу в админ-панель,
+        // остальных — на приветствие и вход в организацию.
+        (function () {
+            var dest = '/admin-panel/login.html';
+            try {
+                if (AUTH.isLoggedIn()) {
+                    var role = AUTH.getRole();
+                    dest = role === 'super_admin' ? '/admin-panel/super-admin.html'
+                         : role === 'cashier'     ? '/admin-panel/pos.html'
+                         : '/admin-panel/dashboard.html';
+                }
+            } catch (e) { /* нет/битая сессия — на вход */ }
+            window.location.replace(dest);
+        })();
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=/admin-panel/login.html"></noscript>
+</head>
+<body>
+    <p>Переход в <a href="/admin-panel/login.html">FoodFlow</a>…</p>
+</body>
+</html>

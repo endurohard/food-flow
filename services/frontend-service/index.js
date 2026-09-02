@@ -12,9 +12,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'frontend-service' });
 });
 
-// Redirect root to customer app
+// Redirect root to organization login (public storefront removed)
 app.get('/', (req, res) => {
-  res.redirect('/customer-app/index.html');
+  res.redirect('/admin-panel/login.html');
 });
 
 app.listen(PORT, '0.0.0.0', () => {
