@@ -19,7 +19,7 @@ declare global {
 /**
  * Canonical role names used across the platform.
  * Enterprise roles stored in enterprise_users.role:
- *   owner | admin | manager | operator | chef | waiter | employee | viewer
+ *   owner | admin | manager | operator | chef | waiter | cashier | employee | viewer
  */
 export const ROLES = {
   ADMIN: 'admin',
@@ -28,6 +28,7 @@ export const ROLES = {
   OPERATOR: 'operator',
   CHEF: 'chef',
   WAITER: 'waiter',
+  CASHIER: 'cashier',
   EMPLOYEE: 'employee',
   VIEWER: 'viewer'
 } as const;

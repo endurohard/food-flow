@@ -11,7 +11,7 @@
  *   { userId, email, role, enterpriseId, enterpriseRole, first_name?, last_name? }
  *
  * role          — global role: customer | restaurant_owner | delivery_driver | admin
- * enterpriseRole — enterprise role: owner | admin | manager | operator | chef | waiter | employee | viewer
+ * enterpriseRole — enterprise role: owner | admin | manager | operator | chef | waiter | cashier | employee | viewer
  */
 
 const AUTH = {

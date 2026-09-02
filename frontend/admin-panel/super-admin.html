@@ -170,6 +170,26 @@
           <tbody id="membersBody"></tbody>
         </table>
       </div>
+      <!-- Создание сотрудника с логином прямо в организацию -->
+      <details style="margin-top:16px;">
+        <summary style="cursor:pointer;font-size:14px;font-weight:600;">+ Создать сотрудника</summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+          <input id="stEmail" type="email" placeholder="email (логин)">
+          <input id="stPass" type="text" placeholder="пароль, мин. 8">
+          <input id="stFirst" type="text" placeholder="имя">
+          <input id="stLast" type="text" placeholder="фамилия (необяз.)">
+          <select id="stRole">
+            <option value="cashier" selected>cashier — только касса</option>
+            <option value="waiter">waiter</option>
+            <option value="operator">operator</option>
+            <option value="chef">chef</option>
+            <option value="manager">manager</option>
+            <option value="admin">admin</option>
+            <option value="viewer">viewer</option>
+          </select>
+          <button class="btn" onclick="createStaff()">Создать</button>
+        </div>
+      </details>
       <div class="modal-actions">
         <button class="btn sec" onclick="closeMembers()">Закрыть</button>
       </div>
@@ -316,6 +336,29 @@
       } catch (e) { document.getElementById('membersBody').innerHTML = '<tr><td colspan="4" style="padding:16px;color:#B23A20;">Ошибка: ' + esc(e.message) + '</td></tr>'; }
     }
     function closeMembers() { document.getElementById('membersModal').style.display = 'none'; }
+
+    // Создаёт пользователя с логином и сразу привязывает к организации с выбранной ролью
+    async function createStaff() {
+      const body = {
+        email: document.getElementById('stEmail').value.trim(),
+        password: document.getElementById('stPass').value,
+        firstName: document.getElementById('stFirst').value.trim(),
+        lastName: document.getElementById('stLast').value.trim(),
+        role: document.getElementById('stRole').value
+      };
+      if (!body.lastName) delete body.lastName;
+      if (!body.email || !body.password || !body.firstName) { alert('Нужны email, пароль и имя'); return; }
+      if (body.password.length < 8) { alert('Пароль минимум 8 символов'); return; }
+      try {
+        const res = await AUTH.fetch('/api/enterprises/' + membersId + '/staff', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.message || d.error || 'HTTP ' + res.status);
+        ['stEmail','stPass','stFirst','stLast'].forEach(id => document.getElementById(id).value = '');
+        openMembers(membersId);
+      } catch (e) { alert('Ошибка: ' + e.message); }
+    }
     async function resetMemberPw(userId) {
       const np = prompt('Новый пароль пользователя (пусто = сгенерировать, мин. 8):', '');
       if (np === null) return;

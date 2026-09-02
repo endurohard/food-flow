@@ -31,6 +31,17 @@ const createEnterpriseSchema = Joi.object({
   }).required()
 });
 
+const ENTERPRISE_ROLES = ['owner', 'admin', 'manager', 'operator', 'chef', 'waiter', 'cashier', 'employee', 'viewer'];
+
+const createStaffSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).max(100).required(),
+  firstName: Joi.string().min(1).max(100).required(),
+  lastName: Joi.string().max(100).allow('', null),
+  phone: Joi.string().max(20).allow('', null),
+  role: Joi.string().valid(...ENTERPRISE_ROLES).required()
+});
+
 const router = Router();
 const enterpriseService = new EnterpriseService(config.database.url);
 const pool = new Pool({ connectionString: config.database.url });
@@ -116,6 +127,48 @@ router.get('/', authenticateUser, requireSuperAdmin, async (req, res) => {
 });
 
 // ═══════════════════ Super-admin management ═══════════════════
+/**
+ * @swagger
+ * /api/enterprises/{id}/staff:
+ *   post:
+ *     summary: Создать сотрудника предприятия вместе с логином (владелец/админ организации или супер-админ)
+ *     tags: [Enterprises]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Сотрудник создан
+ */
+router.post('/:id/staff', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = createStaffSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: error.message });
+    }
+
+    // Права: супер-админ — сквозной; иначе владелец/админ ИМЕННО этой организации
+    // (сравниваем с членством, а не берём :id на веру — иначе владелец одной
+    //  организации мог бы завести сотрудника в чужую)
+    if (req.userRole !== 'super_admin') {
+      const memberships = await enterpriseService.getUserEnterprises(req.userId!);
+      const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
+      if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Создавать сотрудников может владелец или админ организации'
+        });
+      }
+    }
+
+    const staff = await enterpriseService.createStaffUser(req.params.id, value);
+    return res.status(201).json({ success: true, staff });
+  } catch (error: any) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to create staff user:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Не удалось создать сотрудника' : error.message, message: error.message });
+  }
+});
+
 // Все ниже — только super_admin (requireSuperAdmin), без enterpriseContext.
 
 function genPassword(): string {

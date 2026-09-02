@@ -491,13 +491,19 @@ AUTH.requireAuth();
 
 (function applyRoleUI() {
   var role = AUTH.getRole();
-  if (role === 'chef') {
+  if (role === 'cashier') {
+    // Кассир видит только кассу — ничего кроме оформления продаж
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('pos')) el.style.display = 'none';
+    });
+  } else if (role === 'chef') {
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!href.includes('kds')) el.style.display = 'none';
     });
   } else if (role === 'waiter') {
-    var allowed = ['orders', 'tables', 'kds'];
+    var allowed = ['pos', 'orders', 'tables', 'kds'];
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';

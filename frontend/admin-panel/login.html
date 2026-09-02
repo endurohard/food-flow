@@ -449,9 +449,10 @@
 
         // Супер-админ платформы не привязан к предприятию — ведём его в свою панель
         function destFor() {
-            return AUTH.getRole() === 'super_admin'
-                ? '/admin-panel/super-admin.html'
-                : '/admin-panel/dashboard.html';
+            const role = AUTH.getRole();
+            if (role === 'super_admin') return '/admin-panel/super-admin.html';
+            if (role === 'cashier') return '/admin-panel/pos.html';   // кассиру — сразу касса
+            return '/admin-panel/dashboard.html';
         }
 
         // If already logged in with a valid ff_token, skip the login page

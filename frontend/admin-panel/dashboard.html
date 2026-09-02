@@ -990,7 +990,13 @@ AUTH.requireAuth();
   var role = AUTH.getRole();
 
   // Role-based sidebar visibility using .nav-item links
-  if (role === 'chef') {
+  if (role === 'cashier') {
+    // Кассир видит только кассу — ничего кроме оформления продаж
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('pos')) el.style.display = 'none';
+    });
+  } else if (role === 'chef') {
     // chef sees only KDS
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';

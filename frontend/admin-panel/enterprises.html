@@ -490,13 +490,19 @@ AUTH.requireAuth();
 
 (function applyRoleUI() {
   var role = AUTH.getRole();
-  if (role === 'chef') {
+  if (role === 'cashier') {
+    // Кассир видит только кассу — ничего кроме оформления продаж
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('pos')) el.style.display = 'none';
+    });
+  } else if (role === 'chef') {
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!href.includes('kds')) el.style.display = 'none';
     });
   } else if (role === 'waiter') {
-    var allowed = ['orders', 'tables', 'kds'];
+    var allowed = ['pos', 'orders', 'tables', 'kds'];
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
       var href = el.getAttribute('href') || '';
       if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
@@ -598,7 +604,8 @@ AUTH.requireAuth();
       <select class="form-control" id="usersEntSelect" style="width:260px;" onchange="loadEnterpriseUsers()">
         <option value="">— Выберите предприятие —</option>
       </select>
-      <button class="btn btn-sm btn-primary" onclick="openAddUserModal()">+ Добавить пользователя</button>
+      <button class="btn btn-sm btn-primary" onclick="openCreateStaffModal()">+ Создать сотрудника</button>
+      <button class="btn btn-sm btn-secondary" onclick="openAddUserModal()">Привязать по ID</button>
     </div>
 
     <div id="usersSection" style="display:none;">
@@ -650,6 +657,55 @@ AUTH.requireAuth();
   </main>
 </div>
 
+<!-- Modal: Create Staff (логин + роль сразу) -->
+<div class="modal" id="createStaffModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Создать сотрудника</span>
+      <button class="modal-close" onclick="closeModal('createStaffModal')">&times;</button>
+    </div>
+    <div id="createStaffAlert" style="display:none;" class="alert"></div>
+    <form id="createStaffForm" onsubmit="submitCreateStaff(event)">
+      <div class="form-group">
+        <label class="form-label">Email (логин)</label>
+        <input type="email" class="form-control" id="staffEmail" placeholder="barista@jezva.ru" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="text" class="form-control" id="staffPassword" placeholder="минимум 8 символов" minlength="8" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Имя</label>
+        <input type="text" class="form-control" id="staffFirstName" placeholder="Имя" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Фамилия</label>
+        <input type="text" class="form-control" id="staffLastName" placeholder="необязательно">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Телефон</label>
+        <input type="text" class="form-control" id="staffPhone" placeholder="необязательно">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Роль</label>
+        <select class="form-control" id="staffRole" required>
+          <option value="cashier" selected>cashier — только касса</option>
+          <option value="waiter">waiter</option>
+          <option value="operator">operator</option>
+          <option value="chef">chef</option>
+          <option value="manager">manager</option>
+          <option value="admin">admin</option>
+          <option value="viewer">viewer</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">Создать</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal('createStaffModal')">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal: Add User -->
 <div class="modal" id="addUserModal">
   <div class="modal-box">
@@ -671,6 +727,7 @@ AUTH.requireAuth();
           <option value="admin">admin</option>
           <option value="operator" selected>operator</option>
           <option value="waiter">waiter</option>
+          <option value="cashier">cashier — только касса</option>
           <option value="chef">chef</option>
           <option value="viewer">viewer</option>
         </select>
@@ -704,6 +761,7 @@ AUTH.requireAuth();
         <option value="admin">admin</option>
         <option value="operator">operator</option>
         <option value="waiter">waiter</option>
+        <option value="cashier">cashier — только касса</option>
         <option value="chef">chef</option>
         <option value="viewer">viewer</option>
       </select>
@@ -951,6 +1009,54 @@ AUTH.requireAuth();
       }
       closeModal('addUserModal');
       showUsersAlert('Пользователь добавлен', 'success');
+      await loadEnterpriseUsers();
+    } catch (e) {
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Ошибка: ' + e.message;
+      alertEl.style.display = '';
+    }
+  }
+
+  function openCreateStaffModal() {
+    if (!selectedUsersEntId) {
+      showUsersAlert('Сначала выберите предприятие', 'error');
+      return;
+    }
+    document.getElementById('createStaffForm').reset();
+    document.getElementById('staffRole').value = 'cashier';
+    document.getElementById('createStaffAlert').style.display = 'none';
+    document.getElementById('createStaffModal').classList.add('open');
+  }
+
+  // Создаёт логин сотрудника и сразу привязывает его к предприятию с выбранной ролью
+  async function submitCreateStaff(e) {
+    e.preventDefault();
+    const alertEl = document.getElementById('createStaffAlert');
+    alertEl.style.display = 'none';
+
+    const body = {
+      email: document.getElementById('staffEmail').value.trim(),
+      password: document.getElementById('staffPassword').value,
+      firstName: document.getElementById('staffFirstName').value.trim(),
+      lastName: document.getElementById('staffLastName').value.trim(),
+      phone: document.getElementById('staffPhone').value.trim(),
+      role: document.getElementById('staffRole').value
+    };
+    if (!body.lastName) delete body.lastName;
+    if (!body.phone) delete body.phone;
+
+    try {
+      const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.error || 'HTTP ' + res.status);
+      }
+      closeModal('createStaffModal');
+      showUsersAlert('Сотрудник создан: ' + body.email + ' (' + body.role + ')', 'success');
       await loadEnterpriseUsers();
     } catch (e) {
       alertEl.className = 'alert alert-error';

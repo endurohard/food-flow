@@ -220,6 +220,59 @@ export class EnterpriseService {
   }
 
   /**
+   * Создать сотрудника предприятия (кассир, официант, повар и т.д.) вместе с логином.
+   * Раньше добавить человека можно было только зная UUID уже зарегистрированного
+   * пользователя — для заведения это нерабочий сценарий.
+   *
+   * Глобальная роль — 'customer' (обычный аккаунт платформы); все права
+   * определяются ролью внутри предприятия (enterprise_users.role).
+   */
+  async createStaffUser(
+    enterpriseId: string,
+    data: { email: string; password: string; firstName: string; lastName?: string; phone?: string; role: string }
+  ): Promise<any> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // login ищет по email.toLowerCase() — нормализуем, иначе сотрудник не войдёт
+      const email = data.email.toLowerCase();
+      const dup = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (dup.rows.length > 0) {
+        throw Object.assign(new Error('Пользователь с таким email уже существует'), { statusCode: 409 });
+      }
+
+      const ent = await client.query('SELECT id FROM enterprises WHERE id = $1', [enterpriseId]);
+      if (ent.rows.length === 0) {
+        throw Object.assign(new Error('Организация не найдена'), { statusCode: 404 });
+      }
+
+      const passwordHash = await bcrypt.hash(data.password, config.bcrypt.saltRounds);
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin)
+         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false)
+         RETURNING id, email, first_name, last_name, phone`,
+        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId]
+      );
+      const user = userResult.rows[0];
+
+      await client.query(
+        `INSERT INTO enterprise_users (enterprise_id, user_id, role)
+         VALUES ($1, $2, $3)`,
+        [enterpriseId, user.id, data.role]
+      );
+
+      await client.query('COMMIT');
+      return { ...user, enterpriseRole: data.role };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Get enterprise by ID
    */
   async getEnterpriseById(enterpriseId: string): Promise<Enterprise | null> {
