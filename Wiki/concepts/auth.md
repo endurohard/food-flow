@@ -16,7 +16,9 @@ JWT + refresh токены, RBAC.
 ## Модель
 - **Access token**: JWT, короткоживущий. Secret и TTL — в `services/user-service/src/config/index.ts`.
 - **Refresh token**: добавлен миграцией `007_add_refresh_tokens.sql` — хранится в БД, позволяет rotate access-токенов без повторного логина.
-- **Роли**: `customer`, `restaurant_owner`, `driver`, `admin` (из `ARCHITECTURE.md`; возможно расширены под HR/POS).
+- **Роли глобальные** (`users.role`, enum `user_role`): `customer`, `restaurant_owner`, `delivery_driver`, `admin`, `super_admin` (миграция 024).
+- **Роли в предприятии** (`enterprise_users.role`, CHECK): `owner`, `admin`, `manager`, `operator`, `chef`, `waiter`, `cashier`, `employee`, `viewer` (миграции 019 и 027). Для UI-решений приоритетна enterprise-роль — `AUTH.getRole()` в `frontend/admin-panel/js/auth.js`.
+- **`cashier`** (с 2026-09-02) — только касса: в сайдбаре виден один пункт, после логина попадает сразу в `pos.html`.
 
 ## Endpoints (user-service)
 - `POST /api/auth/register`

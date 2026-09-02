@@ -62,5 +62,8 @@ last_verified: 2026-04-16
 - `kong/kong.yml` — маршруты API Gateway → нужен ingest в отдельную страницу `concepts/api-gateway`
 - `services/*/package.json` — описания и зависимости
 - `frontend/css/tokens.css` — design system токены (с 2026-04-16) → [[services/frontend-service]]
-- `frontend/customer-app/` — B2C витрина → [[services/frontend-service]]
+- `frontend/customer-app/` — B2C витрина, **отключена 2026-09-01** (редирект на вход) → [[services/frontend-service]]
+- `frontend/index.html` — точка входа, маршрутизация по роли → [[services/frontend-service]]
+- `frontend/admin-panel/pos.html` — кассовый экран (единственное место создания розничного заказа) → [[services/frontend-service]], [[services/finance-service]], [[services/order-service]]
+- `database/migrations/027_add_cashier_role.sql` — роль `cashier` → [[concepts/auth]]
 - `database/init/03-run-migrations.sh` — auto-миграции на первом запуске контейнера (Phase A.1). Для миграций после старта — ручной `psql` или rebuild.

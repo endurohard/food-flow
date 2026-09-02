@@ -27,6 +27,8 @@ sources:
 - `auth.routes.ts` — register, login, refresh, logout
 - `user.routes.ts` — profile, addresses
 - `enterprise.routes.ts` — tenant registration/management
+  - `POST /:id/staff` (с 2026-09-02) — создание сотрудника с логином и ролью в одной транзакции (`enterprise.service.ts` `createStaffUser`). Права: `super_admin` сквозной, иначе owner/admin именно этой организации — сверка по членству. Email нормализуется в lowercase, иначе сотрудник не войдёт (login ищет по нормализованному адресу).
+  - ⚠️ Соседний `POST /:id/users` (привязка существующего пользователя по UUID) такой сверки не делает — `:id` берётся из URL без сравнения с `req.enterpriseId`.
 
 ## Ключевые файлы
 - `src/middleware/enterprise.middleware.ts` — инжектирует `enterprise_id` в запросы
