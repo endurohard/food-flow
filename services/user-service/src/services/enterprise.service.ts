@@ -26,6 +26,7 @@ export interface Enterprise {
   timezone: string;
   language: string;
   business_type: string;
+  subdomain?: string | null;
   features: any;
   is_active: boolean;
   is_demo: boolean;
@@ -56,6 +57,7 @@ export interface CreateEnterpriseInput {
   timezone?: string;
   language?: string;
   business_type?: string;
+  subdomain?: string | null;
 }
 
 export interface UpdateEnterpriseInput {
@@ -71,6 +73,7 @@ export interface UpdateEnterpriseInput {
   timezone?: string;
   language?: string;
   business_type?: string;
+  subdomain?: string | null;
   features?: any;
   metadata?: any;
 }
@@ -98,8 +101,8 @@ export class EnterpriseService {
       const enterpriseResult = await client.query(
         `INSERT INTO enterprises (
           name, legal_name, tax_id, phone, email, website,
-          subscription_plan, currency, timezone, language, business_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          subscription_plan, currency, timezone, language, business_type, subdomain
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           data.name,
@@ -112,7 +115,8 @@ export class EnterpriseService {
           data.currency || 'RUB',
           data.timezone || 'Europe/Moscow',
           data.language || 'ru',
-          data.business_type || 'restaurant'
+          data.business_type || 'restaurant',
+          data.subdomain ? data.subdomain.toLowerCase() : null
         ]
       );
 
@@ -168,8 +172,8 @@ export class EnterpriseService {
       const entResult = await client.query(
         `INSERT INTO enterprises (
           name, legal_name, tax_id, phone, email, website,
-          subscription_plan, currency, timezone, language, business_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          subscription_plan, currency, timezone, language, business_type, subdomain
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           enterpriseData.name,
@@ -182,7 +186,8 @@ export class EnterpriseService {
           enterpriseData.currency || 'RUB',
           enterpriseData.timezone || 'Europe/Moscow',
           enterpriseData.language || 'ru',
-          enterpriseData.business_type || 'restaurant'
+          enterpriseData.business_type || 'restaurant',
+          enterpriseData.subdomain ? enterpriseData.subdomain.toLowerCase() : null
         ]
       );
       const enterprise = entResult.rows[0];
@@ -273,6 +278,28 @@ export class EnterpriseService {
   }
 
   /**
+   * Организация по адресу: из host берём первую метку (jezva.food-flow.ru → jezva)
+   * и ищем по ней. Голый домен, www и IP поддоменами не считаем.
+   */
+  async getEnterpriseByHost(host: string): Promise<Enterprise | null> {
+    if (!host) return null;
+    const hostname = host.split(',')[0].trim().toLowerCase().split(':')[0];
+    if (!hostname || /^[0-9.]+$/.test(hostname)) return null;
+
+    const labels = hostname.split('.');
+    // нужен хотя бы <label>.<domain>.<tld>
+    if (labels.length < 3) return null;
+    const label = labels[0];
+    if (!label || label === 'www') return null;
+
+    const result = await this.pool.query(
+      'SELECT * FROM enterprises WHERE subdomain = $1 AND is_active = true',
+      [label]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
    * Get enterprise by ID
    */
   async getEnterpriseById(enterpriseId: string): Promise<Enterprise | null> {
@@ -320,14 +347,18 @@ export class EnterpriseService {
     const ALLOWED_COLUMNS = [
       'name', 'legal_name', 'tax_id', 'phone', 'email', 'website', 'logo_url',
       'subscription_plan', 'currency', 'timezone', 'language', 'business_type',
-      'features', 'metadata'
+      'subdomain', 'features', 'metadata'
     ];
 
     const fields: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
 
-    Object.entries(data).forEach(([key, value]) => {
+    Object.entries(data).forEach(([key, rawValue]) => {
+      // Поддомен — DNS-метка: нормализуем регистр, пустую строку считаем «снять адрес»
+      const value = key === 'subdomain' && typeof rawValue === 'string'
+        ? (rawValue.trim().toLowerCase() || null)
+        : rawValue;
       if (value !== undefined && ALLOWED_COLUMNS.includes(key)) {
         fields.push(`${key} = $${paramCount}`);
         values.push(value);

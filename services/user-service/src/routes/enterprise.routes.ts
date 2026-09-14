@@ -22,6 +22,10 @@ const createEnterpriseSchema = Joi.object({
   email: Joi.string().email().allow('', null),
   website: Joi.string().max(200).allow('', null),
   business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'production').default('restaurant'),
+  // DNS-метка организации: <subdomain>.food-flow.ru. Формат тот же, что в CHECK миграции 029
+  subdomain: Joi.string().lowercase().min(2).max(63)
+    .pattern(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])$/)
+    .allow('', null),
   owner: Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(8).max(100).required(),
@@ -41,6 +45,26 @@ const createStaffSchema = Joi.object({
   phone: Joi.string().max(20).allow('', null),
   role: Joi.string().valid(...ENTERPRISE_ROLES).required()
 });
+
+const subdomainRule = Joi.string().lowercase().min(2).max(63)
+  .pattern(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])$/)
+  .messages({ 'string.pattern.base': 'Поддомен: строчные латинские буквы, цифры и дефис, не по краям' });
+
+const updateEnterpriseSchema = Joi.object({
+  name: Joi.string().min(1).max(200),
+  legal_name: Joi.string().max(200).allow('', null),
+  tax_id: Joi.string().max(50).allow('', null),
+  phone: Joi.string().max(20).allow('', null),
+  email: Joi.string().email().allow('', null),
+  website: Joi.string().max(200).allow('', null),
+  logo_url: Joi.string().max(500).allow('', null),
+  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'production'),
+  subdomain: subdomainRule.allow('', null),
+  subscription_plan: Joi.string().max(50),
+  currency: Joi.string().max(10),
+  timezone: Joi.string().max(60),
+  language: Joi.string().max(10)
+}).min(1);
 
 const router = Router();
 const enterpriseService = new EnterpriseService(config.database.url);
@@ -93,6 +117,9 @@ router.post('/', authenticateUser, requireSuperAdmin, async (req, res) => {
       owner: result.owner
     });
   } catch (error: any) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Conflict', message: 'Такой поддомен уже занят' });
+    }
     const status = error.statusCode || 500;
     if (status >= 500) console.error('Failed to create enterprise:', error);
     return res.status(status).json({
@@ -139,6 +166,46 @@ router.get('/', authenticateUser, requireSuperAdmin, async (req, res) => {
  *       201:
  *         description: Сотрудник создан
  */
+/**
+ * @swagger
+ * /api/enterprises/by-host:
+ *   get:
+ *     summary: Организация по адресу (поддомену). Публичный — нужен экрану входа до авторизации
+ *     tags: [Enterprises]
+ *     parameters:
+ *       - in: query
+ *         name: host
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Организация найдена
+ *       404:
+ *         description: Поддомен не привязан
+ */
+router.get('/by-host', async (req, res) => {
+  try {
+    // Хост берём из query (её шлёт фронт) либо из заголовка самого запроса
+    const raw = (req.query.host as string) || req.headers['x-forwarded-host'] as string || req.headers.host || '';
+    const enterprise = await enterpriseService.getEnterpriseByHost(raw);
+    if (!enterprise) {
+      return res.status(404).json({ error: 'Not Found', message: 'Поддомен не привязан к организации' });
+    }
+    // Отдаём только то, что нужно экрану входа — это публичный роут
+    return res.json({
+      enterprise: {
+        id: enterprise.id,
+        name: enterprise.name,
+        subdomain: enterprise.subdomain,
+        business_type: enterprise.business_type,
+        logo_url: enterprise.logo_url || null
+      }
+    });
+  } catch (error) {
+    console.error('by-host lookup:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/:id/staff', authenticateUser, async (req, res) => {
   try {
     const { error, value } = createStaffSchema.validate(req.body);
@@ -194,10 +261,22 @@ router.post('/:id/reset-owner-password', authenticateUser, requireSuperAdmin, as
 // Этап 2: редактирование организации супер-админом
 router.patch('/:id', authenticateUser, requireSuperAdmin, async (req, res) => {
   try {
-    const enterprise = await enterpriseService.updateEnterprise(req.params.id, req.body);
+    const { error: vErr, value } = updateEnterpriseSchema.validate(req.body, { stripUnknown: true });
+    if (vErr) {
+      return res.status(400).json({ error: 'Validation error', message: vErr.details[0].message });
+    }
+    const enterprise = await enterpriseService.updateEnterprise(req.params.id, value);
     return res.json({ success: true, enterprise });
   } catch (error: any) {
     if (error.message === 'Enterprise not found') return res.status(404).json({ error: error.message });
+    // 23505 — уникальный индекс по subdomain: адрес уже занят другой организацией
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Conflict', message: 'Такой поддомен уже занят' });
+    }
+    // 23514 — CHECK на формат поддомена (страховка, если запрос прошёл мимо схемы)
+    if (error.code === '23514') {
+      return res.status(400).json({ error: 'Validation error', message: 'Недопустимый формат поддомена' });
+    }
     console.error('super-admin patch enterprise:', error);
     return res.status(500).json({ error: 'Не удалось обновить организацию' });
   }

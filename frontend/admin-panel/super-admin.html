@@ -96,6 +96,8 @@
             <input id="orgTax" placeholder="необязательно">
           </div>
         </div>
+        <label>Поддомен <span style="color:var(--color-text-secondary);font-weight:400;">— адрес вида <b id="subPreview">jezva</b>.food-flow.ru</span></label>
+        <input id="orgSubdomain" placeholder="jezva — строчные латиница, цифры, дефис" pattern="[a-z0-9-]+">
 
         <h2 style="margin:22px 0 4px; font-size:14px;">Владелец организации</h2>
         <div class="grid2">
@@ -122,10 +124,10 @@
         <div style="overflow-x:auto;">
           <table>
             <thead>
-              <tr><th>Название</th><th>Тип</th><th>ИНН</th><th>Создана</th><th style="text-align:right;">Действия</th></tr>
+              <tr><th>Название</th><th>Тип</th><th>Адрес</th><th>ИНН</th><th>Создана</th><th style="text-align:right;">Действия</th></tr>
             </thead>
             <tbody id="orgsBody">
-              <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Загрузка…</td></tr>
+              <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Загрузка…</td></tr>
             </tbody>
           </table>
         </div>
@@ -154,6 +156,8 @@
           <input id="editTax">
         </div>
       </div>
+      <label>Поддомен (пусто — без своего адреса)</label>
+      <input id="editSubdomain" placeholder="jezva">
       <div class="modal-actions">
         <button class="btn" onclick="saveEdit()">Сохранить</button>
         <button class="btn sec" onclick="closeEdit()">Отмена</button>
@@ -238,12 +242,13 @@
         list.forEach(o => { orgsCache[o.id] = o; });
         document.getElementById('orgCount').textContent = list.length;
         if (!list.length) {
-          body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Организаций пока нет</td></tr>';
+          body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--color-text-secondary);">Организаций пока нет</td></tr>';
           return;
         }
         body.innerHTML = list.map(o => `<tr>
           <td><strong>${esc(o.name)}</strong></td>
           <td><span class="badge">${esc(BT[o.business_type] || o.business_type || '—')}</span></td>
+          <td>${o.subdomain ? '<a href="https://' + esc(o.subdomain) + '.food-flow.ru" target="_blank" rel="noopener">' + esc(o.subdomain) + '.food-flow.ru</a>' : '—'}</td>
           <td>${esc(o.tax_id || '—')}</td>
           <td>${o.created_at ? new Date(o.created_at).toLocaleDateString('ru-RU') : '—'}</td>
           <td style="text-align:right;white-space:nowrap;">
@@ -254,7 +259,7 @@
           </td>
         </tr>`).join('');
       } catch (e) {
-        body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--color-danger,#B23A20);">Ошибка: ' + esc(e.message) + '</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--color-danger,#B23A20);">Ошибка: ' + esc(e.message) + '</td></tr>';
       }
     }
 
@@ -298,6 +303,7 @@
       document.getElementById('editName').value = o.name || '';
       document.getElementById('editType').value = o.business_type || 'restaurant';
       document.getElementById('editTax').value = o.tax_id || '';
+      document.getElementById('editSubdomain').value = o.subdomain || '';
       document.getElementById('editModal').style.display = 'flex';
     }
     function closeEdit() { document.getElementById('editModal').style.display = 'none'; }
@@ -307,7 +313,13 @@
       try {
         const res = await AUTH.fetch('/api/enterprises/' + editId, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, business_type: document.getElementById('editType').value, tax_id: document.getElementById('editTax').value.trim() })
+          body: JSON.stringify({
+            name,
+            business_type: document.getElementById('editType').value,
+            tax_id: document.getElementById('editTax').value.trim(),
+            // пустая строка = снять поддомен; в БД уникальность только среди заполненных
+            subdomain: document.getElementById('editSubdomain').value.trim().toLowerCase() || null
+          })
         });
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
@@ -380,6 +392,15 @@
       } catch (e) { alert('Ошибка: ' + e.message); }
     }
 
+    // Предпросмотр адреса под полем поддомена
+    (function () {
+      const inp = document.getElementById('orgSubdomain');
+      const prev = document.getElementById('subPreview');
+      if (inp && prev) inp.addEventListener('input', () => {
+        prev.textContent = inp.value.trim().toLowerCase() || 'jezva';
+      });
+    })();
+
     async function createOrg() {
       const btn = document.getElementById('createBtn');
       const name = document.getElementById('orgName').value.trim();
@@ -395,6 +416,7 @@
         name,
         business_type: document.getElementById('orgType').value,
         tax_id: document.getElementById('orgTax').value.trim(),
+        subdomain: document.getElementById('orgSubdomain').value.trim().toLowerCase(),
         owner: { email, password, firstName, lastName: document.getElementById('ownLast').value.trim() }
       };
 

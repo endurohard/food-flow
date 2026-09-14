@@ -73,6 +73,17 @@
             display: block;
         }
 
+        .brand-org {
+            display: inline-block;
+            margin-bottom: var(--space-3);
+            padding: 5px 12px;
+            border-radius: var(--radius-full);
+            background: rgba(255, 255, 255, 0.18);
+            color: #FFFFFF;
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-semibold);
+        }
+
         .brand-tagline {
             font-size: 26px;
             font-weight: var(--font-weight-bold);
@@ -367,7 +378,8 @@
                 <img src="../assets/logo.png" alt="FoodFlow">
             </div>
 
-            <div class="brand-tagline">Управление рестораном<br>на новом уровне</div>
+            <div class="brand-org" id="brandOrg" hidden></div>
+            <div class="brand-tagline" id="brandTagline">Управление рестораном<br>на новом уровне</div>
             <div class="brand-description">Единая платформа для заказов, кухни, персонала и аналитики вашего заведения.</div>
 
             <div class="brand-features">
@@ -446,6 +458,24 @@
 
     <script>
         let currentTab = 'login';
+
+        // Вход с поддомена организации (jezva.food-flow.ru) — показываем, куда человек попал.
+        // Роут публичный: до логина токена ещё нет.
+        (async function showOrgByHost() {
+            const host = window.location.hostname;
+            if (host.split('.').length < 3) return;   // голый домен или localhost — нечего искать
+            try {
+                const res = await fetch(AUTH.API_BASE + '/api/enterprises/by-host?host=' + encodeURIComponent(host));
+                if (!res.ok) return;
+                const org = (await res.json()).enterprise;
+                if (!org || !org.name) return;
+                const badge = document.getElementById('brandOrg');
+                badge.textContent = org.name;
+                badge.hidden = false;
+                document.getElementById('brandTagline').innerHTML = 'Вход в<br>' + org.name;
+                localStorage.setItem('ff_host_enterprise', JSON.stringify(org));
+            } catch (e) { /* поддомен не привязан — обычный экран входа */ }
+        })();
 
         // Супер-админ платформы не привязан к предприятию — ведём его в свою панель
         function destFor() {
