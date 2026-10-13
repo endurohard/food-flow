@@ -29,7 +29,7 @@ sources:
 
 Предыдущая Sedap-тема (`840546d`, зелёный `#00B074`, Barlow) полностью вычищена коммитом `82b1d32`: фавикон вынесен в `frontend/assets/favicon.svg`, иконки аватара используют `currentColor` + `--color-primary`, цвета графиков дашборда читаются из токенов через `getComputedStyle`.
 
-**Не переведено на дизайн-систему**: `frontend/delivery-dashboard/index.html` (системный шрифт, `#2196F3`, `tokens.css` не подключён) и KDS — канвас направления 1b предполагал для него тёмную тему с тач-кнопками от 56px, реализован светлый на общем шелле.
+**Тема на всех экранах** (2026-10-13): `delivery-dashboard` переведён на `tokens.css`; KDS (`admin-panel/kds.html`) — тёмная кухонная тема через `<html data-theme="kitchen">`, токены в блоке `:root[data-theme="kitchen"]` файла `tokens.css`, кнопки от 56px. Без `tokens.css` остались только страницы-редиректы (`kds/`, `order-management/`, `customer-app/index.html`, корневой `index.html`).
 
 - **Бренд**: `frontend/assets/logo.png` — единый лого на всех страницах.
 - **Моб. адаптив**: sidebar collapse на всех страницах.
@@ -69,3 +69,15 @@ sources:
 
 ## Customer-app
 - `frontend/customer-app/index.html` — single-page B2C витрина. Меню + корзина + checkout. Использует реальный restaurant UUID, идёт в `restaurant-service` и `order-service`.
+
+## Доставка на прод
+
+CI фронт не деплоит (`ci.yml` проверяет только бэкенд). `./frontend` примонтирован в `frontend-service` томом `:ro`, поэтому достаточно обновить файлы на боксе — без пересборки и рестарта:
+
+```bash
+# на боксе, в каталоге проекта
+git pull                       # или scp нужных файлов из frontend/
+docker exec frontend-service ls /app/public/css/tokens.css   # том видит новые файлы
+```
+
+После выкладки — обновить страницу с очисткой кэша (Ctrl+Shift+R / Cmd+Shift+R): `tokens.css` браузер держит в кэше.

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Управление Доставками - Food Flow</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tokens.css">
   <style>
     * {
       margin: 0;
@@ -12,9 +14,9 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f5f5f5;
-      color: #333;
+      font-family: var(--font-family);
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
       overflow: hidden;
     }
 
@@ -26,8 +28,8 @@
     /* Левая панель - Список доставок */
     .deliveries-list {
       width: 420px;
-      background: white;
-      border-right: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -35,11 +37,12 @@
 
     .header {
       padding: 16px 20px;
-      background: #2196F3;
-      color: white;
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
     }
 
     .header h1 {
+      font-family: var(--font-family-heading);
       font-size: 18px;
       font-weight: 600;
       margin-bottom: 4px;
@@ -52,8 +55,8 @@
 
     .filters {
       padding: 12px;
-      background: #fafafa;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--admin-content-bg);
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .filter-tabs {
@@ -65,8 +68,8 @@
     .filter-tab {
       flex: 1;
       padding: 7px 10px;
-      background: white;
-      border: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
       border-radius: 4px;
       cursor: pointer;
       text-align: center;
@@ -75,19 +78,19 @@
     }
 
     .filter-tab.active {
-      background: #2196F3;
-      color: white;
-      border-color: #2196F3;
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
+      border-color: var(--color-primary);
     }
 
     .filter-tab:hover:not(.active) {
-      background: #f0f0f0;
+      background: var(--admin-content-bg);
     }
 
     .search-box {
       width: 100%;
       padding: 8px 10px;
-      border: 1px solid #e0e0e0;
+      border: 1px solid var(--admin-border);
       border-radius: 4px;
       font-size: 13px;
     }
@@ -99,8 +102,8 @@
     }
 
     .delivery-card {
-      background: white;
-      border: 2px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border: 2px solid var(--admin-border);
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 8px;
@@ -109,33 +112,33 @@
     }
 
     .delivery-card:hover {
-      border-color: #2196F3;
-      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
+      border-color: var(--color-primary);
+      box-shadow: 0 2px 8px rgba(46, 125, 79, 0.2);
     }
 
     .delivery-card.selected {
-      border-color: #2196F3;
-      background: #e3f2fd;
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
     }
 
     .delivery-card.new {
-      border-left: 4px solid #FF9800;
+      border-left: 4px solid var(--color-warning);
     }
 
     .delivery-card.assigned {
-      border-left: 4px solid #2196F3;
+      border-left: 4px solid var(--color-primary);
     }
 
     .delivery-card.in_transit {
-      border-left: 4px solid #9C27B0;
+      border-left: 4px solid var(--color-text-primary);
     }
 
     .delivery-card.delivered {
-      border-left: 4px solid #4CAF50;
+      border-left: 4px solid var(--color-success);
     }
 
     .delivery-card.cancelled {
-      border-left: 4px solid #F44336;
+      border-left: 4px solid var(--color-danger);
       opacity: 0.6;
     }
 
@@ -149,12 +152,12 @@
     .delivery-id {
       font-weight: 600;
       font-size: 14px;
-      color: #2196F3;
+      color: var(--color-primary);
     }
 
     .delivery-time {
       font-size: 11px;
-      color: #666;
+      color: var(--color-text-secondary);
     }
 
     .delivery-status {
@@ -167,15 +170,15 @@
       margin-bottom: 6px;
     }
 
-    .status-new { background: #FFE0B2; color: #E65100; }
-    .status-assigned { background: #BBDEFB; color: #0D47A1; }
-    .status-in_transit { background: #E1BEE7; color: #4A148C; }
-    .status-delivered { background: #C8E6C9; color: #1B5E20; }
-    .status-cancelled { background: #FFCDD2; color: #B71C1C; }
+    .status-new { background: var(--color-warning-light); color: #6B5410; }
+    .status-assigned { background: var(--color-primary-light); color: #1F5A38; }
+    .status-in_transit { background: var(--admin-sidebar-border); color: var(--color-text-primary); }
+    .status-delivered { background: var(--color-success-light); color: #1F5A38; }
+    .status-cancelled { background: var(--color-danger-light); color: #9A3520; }
 
     .delivery-address {
       font-size: 12px;
-      color: #333;
+      color: var(--color-text-primary);
       margin-bottom: 4px;
       display: flex;
       align-items: flex-start;
@@ -185,7 +188,7 @@
 
     .delivery-customer {
       font-size: 12px;
-      color: #666;
+      color: var(--color-text-secondary);
     }
 
     /* Правая панель - Детали доставки */
@@ -198,23 +201,23 @@
 
     .details-header {
       padding: 16px 20px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .details-title {
       font-size: 20px;
       font-weight: 600;
       margin-bottom: 8px;
-      color: #333;
+      color: var(--color-text-primary);
     }
 
     .status-timeline {
       display: flex;
       gap: 15px;
       padding: 16px 20px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .timeline-step {
@@ -230,7 +233,7 @@
       left: 50%;
       width: 100%;
       height: 2px;
-      background: #e0e0e0;
+      background: var(--admin-border);
       z-index: 0;
     }
 
@@ -242,7 +245,7 @@
       width: 28px;
       height: 28px;
       border-radius: 50%;
-      background: #e0e0e0;
+      background: var(--admin-border);
       margin: 0 auto 6px;
       display: flex;
       align-items: center;
@@ -253,25 +256,25 @@
     }
 
     .timeline-step.completed .timeline-icon {
-      background: #4CAF50;
-      color: white;
+      background: var(--color-success);
+      color: var(--color-text-inverse);
     }
 
     .timeline-step.active .timeline-icon {
-      background: #2196F3;
-      color: white;
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
       animation: pulse 2s infinite;
     }
 
     .timeline-label {
       font-size: 11px;
-      color: #666;
+      color: var(--color-text-secondary);
       font-weight: 500;
     }
 
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7); }
-      50% { box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
+      0%, 100% { box-shadow: 0 0 0 0 rgba(46, 125, 79, 0.7); }
+      50% { box-shadow: 0 0 0 10px rgba(46, 125, 79, 0); }
     }
 
     .details-content {
@@ -281,7 +284,7 @@
     }
 
     .section {
-      background: white;
+      background: var(--admin-card-bg);
       border-radius: 6px;
       padding: 16px;
       margin-bottom: 12px;
@@ -291,7 +294,7 @@
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 12px;
-      color: #333;
+      color: var(--color-text-primary);
       display: flex;
       align-items: center;
       gap: 6px;
@@ -301,7 +304,7 @@
       display: flex;
       justify-content: space-between;
       padding: 8px 0;
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid var(--admin-content-bg);
       gap: 12px;
     }
 
@@ -311,12 +314,12 @@
 
     .info-label {
       font-size: 13px;
-      color: #666;
+      color: var(--color-text-secondary);
     }
 
     .info-value {
       font-size: 13px;
-      color: #333;
+      color: var(--color-text-primary);
       font-weight: 500;
       text-align: right;
     }
@@ -329,7 +332,7 @@
       display: flex;
       justify-content: space-between;
       padding: 8px 10px;
-      background: #f9f9f9;
+      background: var(--admin-content-bg);
       border-radius: 4px;
       margin-bottom: 6px;
       align-items: center;
@@ -337,24 +340,24 @@
 
     .item-name {
       font-size: 13px;
-      color: #333;
+      color: var(--color-text-primary);
     }
 
     .item-quantity {
       font-size: 12px;
-      color: #666;
+      color: var(--color-text-secondary);
     }
 
     .item-price {
       font-size: 13px;
       font-weight: 600;
-      color: #333;
+      color: var(--color-text-primary);
     }
 
     .actions {
       padding: 16px;
-      background: white;
-      border-top: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border-top: 1px solid var(--admin-border);
       display: flex;
       gap: 8px;
     }
@@ -375,41 +378,41 @@
     }
 
     .btn-primary {
-      background: #2196F3;
-      color: white;
+      background: var(--color-primary);
+      color: var(--color-text-inverse);
     }
 
     .btn-primary:hover {
-      background: #1976D2;
+      background: var(--color-primary-hover);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+      box-shadow: 0 4px 12px rgba(46, 125, 79, 0.3);
     }
 
     .btn-success {
-      background: #4CAF50;
-      color: white;
+      background: var(--color-success);
+      color: var(--color-text-inverse);
     }
 
     .btn-success:hover {
-      background: #388E3C;
+      background: var(--color-primary-hover);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+      box-shadow: 0 4px 12px rgba(46, 125, 79, 0.3);
     }
 
     .btn-danger {
-      background: #F44336;
-      color: white;
+      background: var(--color-danger);
+      color: var(--color-text-inverse);
     }
 
     .btn-danger:hover {
-      background: #D32F2F;
+      background: var(--color-accent-hover);
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+      box-shadow: 0 4px 12px rgba(217, 79, 48, 0.3);
     }
 
     .btn:disabled {
-      background: #e0e0e0;
-      color: #999;
+      background: var(--admin-border);
+      color: var(--color-text-secondary);
       cursor: not-allowed;
       transform: none;
     }
@@ -417,7 +420,7 @@
     .empty-state {
       text-align: center;
       padding: 60px 20px;
-      color: #999;
+      color: var(--color-text-secondary);
     }
 
     .empty-state-icon {
@@ -428,12 +431,12 @@
 
     .map-placeholder {
       height: 250px;
-      background: #f0f0f0;
+      background: var(--admin-content-bg);
       border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #999;
+      color: var(--color-text-secondary);
       font-size: 13px;
     }
 
@@ -443,14 +446,14 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       padding: 12px;
-      background: white;
-      border-bottom: 1px solid #e0e0e0;
+      background: var(--admin-card-bg);
+      border-bottom: 1px solid var(--admin-border);
     }
 
     .stat-card {
       text-align: center;
       padding: 10px 8px;
-      background: #fafafa;
+      background: var(--admin-content-bg);
       border-radius: 6px;
     }
 
@@ -462,15 +465,15 @@
 
     .stat-label {
       font-size: 10px;
-      color: #666;
+      color: var(--color-text-secondary);
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
 
-    .stat-card.new .stat-value { color: #FF9800; }
-    .stat-card.active .stat-value { color: #2196F3; }
-    .stat-card.completed .stat-value { color: #4CAF50; }
-    .stat-card.cancelled .stat-value { color: #F44336; }
+    .stat-card.new .stat-value { color: var(--color-info); }
+    .stat-card.active .stat-value { color: var(--color-primary); }
+    .stat-card.completed .stat-value { color: var(--color-success); }
+    .stat-card.cancelled .stat-value { color: var(--color-danger); }
 
     /* Scrollbar */
     ::-webkit-scrollbar {
@@ -478,16 +481,16 @@
     }
 
     ::-webkit-scrollbar-track {
-      background: #f1f1f1;
+      background: var(--admin-content-bg);
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #ccc;
+      background: var(--color-grey-4);
       border-radius: 4px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #999;
+      background: var(--color-text-secondary);
     }
   </style>
 </head>
@@ -693,6 +696,9 @@
 
       const d = selectedDelivery;
       const detailsView = document.getElementById('detailsView');
+      // Заглушка «Выберите доставку» центрирована строкой; карточке деталей нужна колонка
+      detailsView.className = '';
+      detailsView.style.cssText = 'flex: 1; display: flex; flex-direction: column; overflow: hidden;';
 
       const statusSteps = [
         { key: 'new', label: 'Создан', icon: '📋' },
@@ -765,9 +771,9 @@
                 </div>
               `).join('')}
             </div>
-            <div class="info-row" style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #e0e0e0;">
+            <div class="info-row" style="margin-top: 15px; padding-top: 15px; border-top: 2px solid var(--admin-border);">
               <span class="info-label" style="font-weight: 600;">Итого</span>
-              <span class="info-value" style="font-size: 18px; color: #2196F3;">${d.total} ₽</span>
+              <span class="info-value" style="font-size: 18px; color: var(--color-primary);">${d.total} ₽</span>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="kitchen">
 <head>
   <link rel="stylesheet" href="/css/tokens.css">
     <script src="js/auth.js"></script>
@@ -842,6 +842,64 @@
       }
     }
   </style>
+  <style>
+    /* ══ Кухня: тёмная тема (токены в /css/tokens.css → [data-theme="kitchen"]) ══ */
+    body { font-family: var(--font-family) !important; }
+    .title, .order-number, .stat-value { font-family: var(--font-family-heading) !important; }
+
+    /* Крупные тач-цели: кнопки на карточках от 56px */
+    .order-actions .btn, .btn-ready, .btn-recall {
+      min-height: var(--kitchen-touch-min, 56px);
+      font-size: 17px;
+      border-radius: 14px;
+    }
+    .order-actions { gap: 12px; }
+    .topbar-hamburger, .menu-toggle { min-width: 48px; min-height: 48px; }
+
+    /* На светлых заливках — тёмный текст (белый на #5FB884 не читается) */
+    .btn-ready  { background: var(--color-success) !important; color: var(--color-text-inverse) !important; }
+    .btn-recall { background: var(--color-danger)  !important; color: var(--color-text-inverse) !important; }
+    .btn-ready:hover, .btn-recall:hover { filter: brightness(1.08); box-shadow: none; }
+    .badge-new { color: var(--color-text-inverse); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+    .notif-count { color: var(--color-text-inverse); border-color: var(--admin-topbar-bg); }
+
+    /* Карточки заказов: статус читается по левой полосе */
+    .order-card { border-color: var(--admin-border); box-shadow: var(--shadow-card); }
+    .order-card:hover { box-shadow: var(--shadow-hover); }
+    .order-card.preparing { border-left: 6px solid var(--color-warning); box-shadow: var(--shadow-card); }
+    .order-card.ready     { border-left: 6px solid var(--color-success); }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(95, 184, 132, 0.0); }
+      50%      { box-shadow: 0 0 0 6px rgba(95, 184, 132, 0.25); }
+    }
+    .order-number { color: var(--color-text-primary); }
+    .item { background: var(--admin-content-bg); border-left-color: var(--color-primary); }
+    .item-name { font-size: 17px; }
+    .item-qty  { font-size: 22px; }
+
+    /* Типы заказа: тёплые цвета темы вместо синего/фиолетового */
+    .type-delivery { background: var(--color-warning-light); color: var(--color-warning); }
+    .type-pickup   { background: var(--color-accent-light);  color: var(--color-accent); }
+    .type-dine-in  { background: var(--color-success-light); color: var(--color-success); }
+
+    /* Комментарии к блюдам и заказу — жёлтым, заметно */
+    .item-notes, .order-special-instructions {
+      background: var(--color-warning-light);
+      border-left-color: var(--color-warning);
+      color: var(--color-warning);
+    }
+    .item-notes { font-size: 14px; }
+    .special-instructions-text { font-size: 15px; }
+
+    /* Контейнер в колонке flex с margin:auto ужимался до ширины одной карточки — растягиваем на весь экран */
+    .main-wrapper > .container { width: 100%; }
+    .kds-clock { font-family: var(--font-family-heading); font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+    .stat-icon[style*="67, 160, 71"] { background: var(--color-success-light) !important; }
+    .topbar-search input { background: var(--admin-content-bg); }
+    .sidebar { box-shadow: 2px 0 8px rgba(0,0,0,.4) !important; }
+    /* Логотип с тёмной надписью — на светлой плашке, иначе текст пропадает */
+    .sidebar-brand img, img[src*="logo.png"] { background: #FFFDF7; padding: 6px 10px; border-radius: 8px; box-sizing: content-box; }
+  </style>
 </head>
 <body>
 <!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
@@ -1098,6 +1156,7 @@ AUTH.requireAuth();
     <!-- Header -->
     <div class="header">
       <h1 class="title">👨‍🍳 Kitchen Display System</h1>
+      <div class="kds-clock" id="currentTime" aria-label="Текущее время"></div>
     </div>
 
     <!-- Statistics -->
@@ -1129,7 +1188,7 @@ AUTH.requireAuth();
   </div>
 
   <script>
-    const API_BASE_URL = 'http://localhost/api';
+    const API_BASE_URL = window.location.origin + '/api';
     let orders = [];
     let timers = {};
 
@@ -1166,7 +1225,8 @@ AUTH.requireAuth();
       const hours = String(now.getHours()).padStart(2, '0');
       const minutes = String(now.getMinutes()).padStart(2, '0');
       const seconds = String(now.getSeconds()).padStart(2, '0');
-      document.getElementById('currentTime').textContent = `${hours}:${minutes}:${seconds}`;
+      const clock = document.getElementById('currentTime');
+      if (clock) clock.textContent = `${hours}:${minutes}:${seconds}`;
     }
 
     // Load orders
