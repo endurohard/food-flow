@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS warehouses (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_warehouses_restaurant ON warehouses(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_warehouses_restaurant ON warehouses(restaurant_id);
 
 -- Inventory items (ingredients, supplies)
 CREATE TABLE IF NOT EXISTS inventory_items (
@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_inventory_items_enterprise ON inventory_items(enterprise_id);
-CREATE INDEX idx_inventory_items_category ON inventory_items(category);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_enterprise ON inventory_items(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_category ON inventory_items(category);
 
 -- Current stock levels per warehouse
 CREATE TABLE IF NOT EXISTS inventory_stock (
@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS inventory_stock (
     UNIQUE(warehouse_id, inventory_item_id)
 );
 
-CREATE INDEX idx_inventory_stock_warehouse ON inventory_stock(warehouse_id);
-CREATE INDEX idx_inventory_stock_item ON inventory_stock(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_warehouse ON inventory_stock(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_item ON inventory_stock(inventory_item_id);
 
 -- Stock movements (receipts, write-offs, transfers, sales)
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -64,10 +64,10 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_stock_movements_warehouse ON stock_movements(warehouse_id);
-CREATE INDEX idx_stock_movements_item ON stock_movements(inventory_item_id);
-CREATE INDEX idx_stock_movements_date ON stock_movements(created_at);
-CREATE INDEX idx_stock_movements_type ON stock_movements(movement_type);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_warehouse ON stock_movements(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_item ON stock_movements(inventory_item_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON stock_movements(created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_type ON stock_movements(movement_type);
 
 -- Suppliers
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_suppliers_enterprise ON suppliers(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_suppliers_enterprise ON suppliers(enterprise_id);
 
 -- Supply invoices
 CREATE TABLE IF NOT EXISTS supply_invoices (
@@ -108,9 +108,9 @@ CREATE TABLE IF NOT EXISTS supply_invoices (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supply_invoices_enterprise ON supply_invoices(enterprise_id);
-CREATE INDEX idx_supply_invoices_supplier ON supply_invoices(supplier_id);
-CREATE INDEX idx_supply_invoices_status ON supply_invoices(status);
+CREATE INDEX IF NOT EXISTS idx_supply_invoices_enterprise ON supply_invoices(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_supply_invoices_supplier ON supply_invoices(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supply_invoices_status ON supply_invoices(status);
 
 -- Supply invoice line items
 CREATE TABLE IF NOT EXISTS supply_invoice_items (
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS supply_invoice_items (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_supply_invoice_items_invoice ON supply_invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_supply_invoice_items_invoice ON supply_invoice_items(invoice_id);
 
 -- Tech cards (recipes - maps menu items to inventory items)
 CREATE TABLE IF NOT EXISTS tech_cards (
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS tech_cards (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_tech_cards_menu_item ON tech_cards(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_tech_cards_menu_item ON tech_cards(menu_item_id);
 
 -- Tech card ingredients
 CREATE TABLE IF NOT EXISTS tech_card_ingredients (
@@ -152,12 +152,18 @@ CREATE TABLE IF NOT EXISTS tech_card_ingredients (
     is_optional BOOLEAN DEFAULT false
 );
 
-CREATE INDEX idx_tech_card_ingredients_card ON tech_card_ingredients(tech_card_id);
+CREATE INDEX IF NOT EXISTS idx_tech_card_ingredients_card ON tech_card_ingredients(tech_card_id);
 
 -- Triggers
+DROP TRIGGER IF EXISTS update_warehouses_updated_at ON warehouses;
 CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON warehouses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_inventory_items_updated_at ON inventory_items;
 CREATE TRIGGER update_inventory_items_updated_at BEFORE UPDATE ON inventory_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_inventory_stock_updated_at ON inventory_stock;
 CREATE TRIGGER update_inventory_stock_updated_at BEFORE UPDATE ON inventory_stock FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_suppliers_updated_at ON suppliers;
 CREATE TRIGGER update_suppliers_updated_at BEFORE UPDATE ON suppliers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_supply_invoices_updated_at ON supply_invoices;
 CREATE TRIGGER update_supply_invoices_updated_at BEFORE UPDATE ON supply_invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_tech_cards_updated_at ON tech_cards;
 CREATE TRIGGER update_tech_cards_updated_at BEFORE UPDATE ON tech_cards FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

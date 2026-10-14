@@ -34,7 +34,9 @@ for f in "$MIGRATIONS_DIR"/*.sql; do
   fi
 
   echo "[migrations] Applying $BASENAME..."
-  psql -v ON_ERROR_STOP=0 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f "$f"
+  # ON_ERROR_STOP=1 + одна транзакция: упавшая миграция откатывается целиком
+  # и НЕ попадает в migration_history (иначе ошибка пометилась бы успехом).
+  psql -v ON_ERROR_STOP=1 --single-transaction --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f "$f"
 
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
     -c "INSERT INTO migration_history (filename) VALUES ('$BASENAME')"

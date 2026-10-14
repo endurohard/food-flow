@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS delivery_zones (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_delivery_zones_restaurant ON delivery_zones(restaurant_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_zones_restaurant ON delivery_zones(restaurant_id);
 
 -- Delivery tracking events (GPS breadcrumbs)
 CREATE TABLE IF NOT EXISTS delivery_tracking (
@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS delivery_tracking (
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_delivery_tracking_delivery ON delivery_tracking(delivery_id);
-CREATE INDEX idx_delivery_tracking_time ON delivery_tracking(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_delivery_tracking_delivery ON delivery_tracking(delivery_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_tracking_time ON delivery_tracking(recorded_at);
 
 -- Driver shifts
 CREATE TABLE IF NOT EXISTS driver_shifts (
@@ -45,8 +45,9 @@ CREATE TABLE IF NOT EXISTS driver_shifts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_driver_shifts_driver ON driver_shifts(driver_id);
-CREATE INDEX idx_driver_shifts_status ON driver_shifts(status);
+CREATE INDEX IF NOT EXISTS idx_driver_shifts_driver ON driver_shifts(driver_id);
+CREATE INDEX IF NOT EXISTS idx_driver_shifts_status ON driver_shifts(status);
 
 -- Triggers
+DROP TRIGGER IF EXISTS update_delivery_zones_updated_at ON delivery_zones;
 CREATE TRIGGER update_delivery_zones_updated_at BEFORE UPDATE ON delivery_zones FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

@@ -57,12 +57,24 @@ CREATE TABLE IF NOT EXISTS order_item_modifiers (
 
 CREATE INDEX IF NOT EXISTS idx_order_item_modifiers_item ON order_item_modifiers(order_item_id);
 
--- Add table FK to orders
-ALTER TABLE orders ADD CONSTRAINT fk_orders_table
-    FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
-    ON DELETE SET NULL;
+-- Add table FK to orders.
+-- DO-блок, потому что ADD CONSTRAINT не имеет IF NOT EXISTS:
+-- без проверки повторный прогон миграции падает.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_orders_table'
+          AND conrelid = 'orders'::regclass
+    ) THEN
+        ALTER TABLE orders ADD CONSTRAINT fk_orders_table
+            FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
+            ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- Trigger for restaurant_tables
+DROP TRIGGER IF EXISTS update_restaurant_tables_updated_at ON restaurant_tables;
 CREATE TRIGGER update_restaurant_tables_updated_at
     BEFORE UPDATE ON restaurant_tables
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

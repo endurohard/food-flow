@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS menu_item_modifiers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_menu_item_modifiers_item ON menu_item_modifiers(menu_item_id);
-CREATE INDEX idx_menu_item_modifiers_enterprise ON menu_item_modifiers(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_menu_item_modifiers_item ON menu_item_modifiers(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_menu_item_modifiers_enterprise ON menu_item_modifiers(enterprise_id);
 
 -- Extend menu_items with POS-relevant columns
 ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sku VARCHAR(50);
@@ -31,6 +31,7 @@ ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS enterprise_id UUID REFERENCES en
 ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS enterprise_id UUID REFERENCES enterprises(id);
 
 -- Add updated_at trigger for modifiers
+DROP TRIGGER IF EXISTS update_menu_item_modifiers_updated_at ON menu_item_modifiers;
 CREATE TRIGGER update_menu_item_modifiers_updated_at
     BEFORE UPDATE ON menu_item_modifiers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

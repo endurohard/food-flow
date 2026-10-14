@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS enterprise_menu_templates (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_enterprise_menu_templates_enterprise ON enterprise_menu_templates(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_enterprise_menu_templates_enterprise ON enterprise_menu_templates(enterprise_id);
 
 -- Restaurant performance benchmarks (daily snapshots)
 CREATE TABLE IF NOT EXISTS restaurant_benchmarks (
@@ -31,9 +31,10 @@ CREATE TABLE IF NOT EXISTS restaurant_benchmarks (
     UNIQUE(restaurant_id, period_date)
 );
 
-CREATE INDEX idx_restaurant_benchmarks_enterprise ON restaurant_benchmarks(enterprise_id);
-CREATE INDEX idx_restaurant_benchmarks_date ON restaurant_benchmarks(period_date);
+CREATE INDEX IF NOT EXISTS idx_restaurant_benchmarks_enterprise ON restaurant_benchmarks(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_restaurant_benchmarks_date ON restaurant_benchmarks(period_date);
 
+DROP TRIGGER IF EXISTS update_enterprise_menu_templates_updated_at ON enterprise_menu_templates;
 CREATE TRIGGER update_enterprise_menu_templates_updated_at
     BEFORE UPDATE ON enterprise_menu_templates
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

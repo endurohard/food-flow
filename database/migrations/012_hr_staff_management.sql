@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS staff_profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_staff_profiles_user ON staff_profiles(user_id);
-CREATE INDEX idx_staff_profiles_enterprise ON staff_profiles(enterprise_id);
+CREATE INDEX IF NOT EXISTS idx_staff_profiles_user ON staff_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_staff_profiles_enterprise ON staff_profiles(enterprise_id);
 
 CREATE TABLE IF NOT EXISTS work_schedules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS work_schedules (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_work_schedules_user ON work_schedules(user_id, shift_date);
-CREATE INDEX idx_work_schedules_restaurant ON work_schedules(restaurant_id, shift_date);
+CREATE INDEX IF NOT EXISTS idx_work_schedules_user ON work_schedules(user_id, shift_date);
+CREATE INDEX IF NOT EXISTS idx_work_schedules_restaurant ON work_schedules(restaurant_id, shift_date);
 
 CREATE TABLE IF NOT EXISTS time_entries (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_time_entries_user ON time_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
 
 CREATE TABLE IF NOT EXISTS payroll (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -75,8 +75,10 @@ CREATE TABLE IF NOT EXISTS payroll (
     paid_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_payroll_user ON payroll(user_id);
-CREATE INDEX idx_payroll_period ON payroll(period_start, period_end);
+CREATE INDEX IF NOT EXISTS idx_payroll_user ON payroll(user_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_period ON payroll(period_start, period_end);
 
+DROP TRIGGER IF EXISTS update_staff_profiles_updated_at ON staff_profiles;
 CREATE TRIGGER update_staff_profiles_updated_at BEFORE UPDATE ON staff_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_work_schedules_updated_at ON work_schedules;
 CREATE TRIGGER update_work_schedules_updated_at BEFORE UPDATE ON work_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

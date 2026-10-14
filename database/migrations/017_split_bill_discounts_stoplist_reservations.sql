@@ -91,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_reservations_enterprise
 CREATE INDEX IF NOT EXISTS idx_reservations_phone
   ON reservations(customer_phone);
 
+DROP TRIGGER IF EXISTS trigger_reservations_updated_at ON reservations;
 CREATE TRIGGER trigger_reservations_updated_at
   BEFORE UPDATE ON reservations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

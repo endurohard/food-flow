@@ -94,11 +94,13 @@ CREATE INDEX IF NOT EXISTS idx_enterprise_users_user_id ON enterprise_users(user
 CREATE INDEX IF NOT EXISTS idx_enterprise_addresses_enterprise_id ON enterprise_addresses(enterprise_id);
 
 -- Create trigger for enterprises updated_at
+DROP TRIGGER IF EXISTS update_enterprises_updated_at ON enterprises;
 CREATE TRIGGER update_enterprises_updated_at
     BEFORE UPDATE ON enterprises
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_enterprise_addresses_updated_at ON enterprise_addresses;
 CREATE TRIGGER update_enterprise_addresses_updated_at
     BEFORE UPDATE ON enterprise_addresses
     FOR EACH ROW
@@ -154,6 +156,7 @@ ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policy: Users can only see enterprises they belong to
+DROP POLICY IF EXISTS enterprise_isolation_policy ON enterprises;
 CREATE POLICY enterprise_isolation_policy ON enterprises
     FOR ALL
     USING (
@@ -166,6 +169,7 @@ CREATE POLICY enterprise_isolation_policy ON enterprises
     );
 
 -- RLS Policy: Restaurants isolation by enterprise
+DROP POLICY IF EXISTS restaurant_enterprise_isolation ON restaurants;
 CREATE POLICY restaurant_enterprise_isolation ON restaurants
     FOR ALL
     USING (
@@ -178,6 +182,7 @@ CREATE POLICY restaurant_enterprise_isolation ON restaurants
     );
 
 -- RLS Policy: Menu categories isolation
+DROP POLICY IF EXISTS menu_categories_enterprise_isolation ON menu_categories;
 CREATE POLICY menu_categories_enterprise_isolation ON menu_categories
     FOR ALL
     USING (
@@ -190,6 +195,7 @@ CREATE POLICY menu_categories_enterprise_isolation ON menu_categories
     );
 
 -- RLS Policy: Menu items isolation
+DROP POLICY IF EXISTS menu_items_enterprise_isolation ON menu_items;
 CREATE POLICY menu_items_enterprise_isolation ON menu_items
     FOR ALL
     USING (
@@ -202,6 +208,7 @@ CREATE POLICY menu_items_enterprise_isolation ON menu_items
     );
 
 -- RLS Policy: Orders isolation
+DROP POLICY IF EXISTS orders_enterprise_isolation ON orders;
 CREATE POLICY orders_enterprise_isolation ON orders
     FOR ALL
     USING (

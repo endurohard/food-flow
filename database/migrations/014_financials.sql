@@ -155,10 +155,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_cash_registers_updated_at ON cash_registers;
 CREATE TRIGGER trigger_cash_registers_updated_at
   BEFORE UPDATE ON cash_registers
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS trigger_payments_updated_at ON payments;
 CREATE TRIGGER trigger_payments_updated_at
   BEFORE UPDATE ON payments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
