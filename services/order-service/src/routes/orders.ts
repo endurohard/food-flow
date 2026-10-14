@@ -216,3 +216,7 @@ router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
 });
 
 export default router;
+
+// Экспортируем сервис, чтобы index.ts мог запустить воркер outbox
+// и корректно остановить его при завершении процесса.
+export { orderService };

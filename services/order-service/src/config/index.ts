@@ -30,5 +30,14 @@ export const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production'
-  }
+  },
+
+  // Списание ингредиентов по техкартам при закрытии заказа
+  inventoryServiceUrl: process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:3006',
+  internalToken: process.env.INTERNAL_TOKEN || '',
+  // Автосписание можно выключить, если склад ведётся вручную
+  autoDeductStock: process.env.AUTO_DEDUCT_STOCK !== 'false',
+
+  // Как часто воркер outbox досылает события в RabbitMQ, мс
+  outboxIntervalMs: parseInt(process.env.OUTBOX_INTERVAL_MS || '5000', 10)
 };

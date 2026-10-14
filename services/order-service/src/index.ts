@@ -6,7 +6,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import { config } from './config';
 import { logger } from './utils/logger';
-import ordersRouter from './routes/orders';
+import ordersRouter, { orderService } from './routes/orders';
 import tablesRouter from './routes/tables';
 import discountsRouter from './routes/discounts';
 
@@ -63,8 +63,13 @@ const server = app.listen(PORT, () => {
   logger.info(`Order service listening on port ${PORT}`);
 });
 
+// Воркер outbox: досылает в RabbitMQ события, записанные в транзакции
+// вместе с заказом. Без него события останутся в таблице навсегда.
+orderService.outbox.start(config.outboxIntervalMs);
+
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  orderService.outbox.stop();
   server.close(async () => {
     await healthPool.end().catch(() => {});
     process.exit(0);

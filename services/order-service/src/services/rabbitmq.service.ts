@@ -22,7 +22,7 @@ export class RabbitMQPublisher {
     }
   }
 
-  async publishOrderEvent(routingKey: string, orderData: any): Promise<boolean> {
+  async publishOrderEvent(routingKey: string, orderData: any, exchange?: string): Promise<boolean> {
     if (!this.channel) {
       logger.warn('RabbitMQ not connected, skipping event publish');
       return false;
@@ -30,7 +30,7 @@ export class RabbitMQPublisher {
 
     try {
       const message = Buffer.from(JSON.stringify(orderData));
-      this.channel.publish(this.EXCHANGE, routingKey, message, {
+      this.channel.publish(exchange || this.EXCHANGE, routingKey, message, {
         persistent: true,
         contentType: 'application/json'
       });

@@ -125,6 +125,12 @@ services:
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      # Автосписание ингредиентов по техкартам при закрытии заказа
+      INVENTORY_SERVICE_URL: http://inventory-service:3006
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      AUTO_DEDUCT_STOCK: ${AUTO_DEDUCT_STOCK:-true}
+      # Интервал воркера outbox (досылка событий в RabbitMQ), мс
+      OUTBOX_INTERVAL_MS: ${OUTBOX_INTERVAL_MS:-5000}
     expose:
       - "3003"
     networks:

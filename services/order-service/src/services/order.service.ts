@@ -2,7 +2,9 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import crypto from 'crypto';
 import { RabbitMQPublisher } from './rabbitmq.service';
+import { OutboxService } from './outbox.service';
 import { DiscountService } from './discount.service';
+import { config } from '../config';
 import { logger } from '../utils/logger';
 
 export const VALID_ORDER_STATUSES = [
@@ -39,10 +41,13 @@ export interface CreateOrderInput {
 export class OrderService {
   private pool: InstanceType<typeof Pool>;
   private rabbitmq: RabbitMQPublisher;
+  /** Transactional outbox: событие пишется в транзакции заказа. */
+  public readonly outbox: OutboxService;
 
   constructor(connectionString: string, rabbitmq: RabbitMQPublisher) {
     this.pool = new Pool({ connectionString });
     this.rabbitmq = rabbitmq;
+    this.outbox = new OutboxService(this.pool, rabbitmq);
   }
 
   private generateOrderNumber(): string {
@@ -191,12 +196,12 @@ export class OrderService {
         );
       }
 
-      await client.query('COMMIT');
-
-      // Get customer info for RabbitMQ message
+      // Get customer info for RabbitMQ message.
+      // Читаем ТЕМ ЖЕ client: запись в outbox должна попасть в транзакцию
+      // вместе с заказом, поэтому COMMIT ниже, а не здесь.
       let customer = { name: 'Guest', phone: '' };
       if (data.customerId) {
-        const custResult = await this.pool.query(
+        const custResult = await client.query(
           `SELECT first_name, last_name, phone FROM users WHERE id = $1`,
           [data.customerId]
         );
@@ -241,14 +246,23 @@ export class OrderService {
         estimatedTime: 30
       };
 
-      // RabbitMQ publish is best-effort: DB state is already committed, so a
-      // broker outage must NOT fail the API. TODO: replace with outbox pattern
-      // (insert event row in same tx, background worker drains it).
-      try {
-        await this.rabbitmq.publishOrderEvent('order.confirmed', rabbitmqMessage);
-      } catch (err) {
-        logger.error(`Failed to publish order.confirmed for ${orderNumber}: ${(err as Error).message}`);
-      }
+      // Событие пишется в outbox В ТОЙ ЖЕ транзакции, что и заказ:
+      // либо есть и заказ, и событие, либо нет ни того, ни другого.
+      // Воркер (outbox.service) досылает его в RabbitMQ — падение брокера
+      // больше не теряет заказ для кухни, склада и CRM.
+      await this.outbox.enqueue(client, {
+        routingKey: 'order.confirmed',
+        payload: rabbitmqMessage,
+        aggregateType: 'order',
+        aggregateId: order.id,
+        enterpriseId: data.enterpriseId || null
+      });
+
+      await client.query('COMMIT');
+
+      // Пробуем отправить сразу, чтобы не ждать интервал воркера.
+      // Ошибка не страшна: событие уже в outbox и будет досланo.
+      this.outbox.drainOnce().catch(() => {});
 
       logger.info(`Order ${orderNumber} created, total: ${total}`);
 
@@ -376,8 +390,8 @@ export class OrderService {
       );
     }
 
+    // Доп. поля задаются через NOW() прямо в SQL, поэтому значений не требуют
     const extraFields: string[] = [];
-    const extraValues: any[] = [];
 
     if (status === 'confirmed') {
       extraFields.push('confirmed_at = NOW()');
@@ -394,38 +408,128 @@ export class OrderService {
       vals.push(enterpriseId);
     }
 
-    const result = await this.pool.query(
-      `UPDATE orders SET ${setClause} WHERE ${whereConds.join(' AND ')} RETURNING *`,
-      vals
-    );
-
-    if (result.rows.length === 0) return null;
-
-    const order = result.rows[0];
-
-    // Free table if completed/cancelled
-    if ((status === 'completed' || status === 'cancelled') && order.table_id) {
-      await this.pool.query(
-        `UPDATE restaurant_tables SET status = 'free', current_order_id = NULL WHERE id = $1`,
-        [order.table_id]
-      );
-    }
-
-    // Best-effort publish (DB already committed). TODO: outbox pattern.
+    const client = await this.pool.connect();
+    let order: any;
     try {
-      await this.rabbitmq.publishOrderEvent(`order.${status}`, {
-        id: order.id,
-        orderNumber: order.order_number,
-        restaurantId: order.restaurant_id,
-        enterpriseId: order.enterprise_id || null,
-        status,
-        timestamp: new Date().toISOString()
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `UPDATE orders SET ${setClause} WHERE ${whereConds.join(' AND ')} RETURNING *`,
+        vals
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      order = result.rows[0];
+
+      // Free table if completed/cancelled
+      if ((status === 'completed' || status === 'cancelled') && order.table_id) {
+        await client.query(
+          `UPDATE restaurant_tables SET status = 'free', current_order_id = NULL WHERE id = $1`,
+          [order.table_id]
+        );
+      }
+
+      // Событие в outbox — в той же транзакции, что и смена статуса.
+      // Раньше публикация шла после коммита в try/catch: при недоступном
+      // брокере статус менялся, а подписчики об этом не узнавали никогда.
+      await this.outbox.enqueue(client, {
+        routingKey: `order.${status}`,
+        payload: {
+          id: order.id,
+          orderNumber: order.order_number,
+          restaurantId: order.restaurant_id,
+          enterpriseId: order.enterprise_id || null,
+          status,
+          timestamp: new Date().toISOString()
+        },
+        aggregateType: 'order',
+        aggregateId: order.id,
+        enterpriseId: order.enterprise_id || null
       });
-    } catch (err) {
-      logger.error(`Failed to publish order.${status} for ${order.order_number}: ${(err as Error).message}`);
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+    // Автосписание ингредиентов по техкартам при закрытии заказа.
+    // Делается ПОСЛЕ коммита: нехватка остатка не должна отменять оплаченный
+    // заказ. Ошибка логируется — склад правится вручную в админке.
+    if (status === 'completed' || status === 'delivered') {
+      await this.deductStockForOrder(order);
+    }
+
+    // Пробуем разослать сразу; при неудаче событие останется в outbox.
+    this.outbox.drainOnce().catch(() => {});
 
     return order;
+  }
+
+  /**
+   * Просит inventory-service списать ингредиенты по техкартам заказа.
+   * Идемпотентно на стороне inventory-service (проверка по reference_id),
+   * поэтому повторный переход статуса не списывает дважды.
+   */
+  private async deductStockForOrder(order: any): Promise<void> {
+    if (!config.autoDeductStock) return;
+    if (!config.internalToken) {
+      logger.warn('AUTO_DEDUCT_STOCK включён, но INTERNAL_TOKEN не задан — списание пропущено');
+      return;
+    }
+
+    try {
+      // Основной склад заведения: списываем с него
+      const warehouse = await this.pool.query(
+        `SELECT id FROM warehouses
+         WHERE restaurant_id = $1 AND is_active = true
+         ORDER BY (warehouse_type = 'main') DESC, created_at ASC
+         LIMIT 1`,
+        [order.restaurant_id]
+      );
+      const warehouseId = warehouse.rows[0]?.id;
+      if (!warehouseId) {
+        logger.info(`Order ${order.order_number}: у заведения нет склада, списание пропущено`);
+        return;
+      }
+
+      const response = await fetch(`${config.inventoryServiceUrl}/api/inventory/deduct-by-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Token': config.internalToken
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          warehouseId,
+          enterpriseId: order.enterprise_id || undefined
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        logger.error(
+          `Order ${order.order_number}: списание по техкартам не удалось ` +
+          `(${response.status}): ${text}`
+        );
+        return;
+      }
+      const result: any = await response.json();
+      logger.info(
+        `Order ${order.order_number}: списано позиций ${result.deducted?.length ?? 0}` +
+        (result.skipped?.length ? `, пропущено: ${result.skipped.join('; ')}` : '')
+      );
+    } catch (err) {
+      logger.error(
+        `Order ${order.order_number}: ошибка вызова списания по техкартам: ${(err as Error).message}`
+      );
+    }
   }
 
   async splitOrder(orderId: string, itemGroups: Array<{ itemIds: string[] }>, enterpriseId?: string): Promise<any[]> {
