@@ -114,6 +114,18 @@ else
      LIMIT 5"
 fi
 
+# Склад пуст целиком — техкарты строить не на чем. Проверяем до остальных
+# выводов, иначе «все ингредиенты в наличии» звучит как успех на пустой базе.
+items_total=$(q "SELECT count(*) FROM inventory_items")
+wh_total=$(q "SELECT count(*) FROM warehouses")
+if [[ "$wh_total" == "0" ]]; then
+  bad "складов не создано ни одного — приёмка и списание невозможны"
+elif [[ "$items_total" == "0" ]]; then
+  bad "номенклатуры на складе нет — техкарту составлять не из чего"
+else
+  note "складов: $wh_total, номенклатуры: $items_total"
+fi
+
 # Ингредиент есть в техкарте, но на складе его нет ни одной партией
 no_stock=$(q "SELECT count(DISTINCT i.inventory_item_id)
               FROM tech_card_ingredients i
@@ -122,7 +134,10 @@ no_stock=$(q "SELECT count(DISTINCT i.inventory_item_id)
                   SELECT 1 FROM inventory_batches b
                   WHERE b.inventory_item_id = i.inventory_item_id
                     AND b.is_depleted = false AND b.quantity > 0)")
-if [[ "$no_stock" == "0" ]]; then
+ing_total=$(q "SELECT count(*) FROM tech_card_ingredients")
+if [[ "$ing_total" == "0" ]]; then
+  note "ингредиентов в техкартах нет — проверять наличие нечего"
+elif [[ "$no_stock" == "0" ]]; then
   ok "все обязательные ингредиенты есть в наличии"
 else
   bad "обязательных ингредиентов без остатка: $no_stock — продажа упрётся в нехватку"
@@ -140,7 +155,10 @@ fi
 # Партии без себестоимости: FIFO посчитает прибыль неверно
 zero_cost=$(q "SELECT count(*) FROM inventory_batches
                WHERE is_depleted = false AND (cost_price IS NULL OR cost_price = 0)")
-if [[ "$zero_cost" == "0" ]]; then
+batches_total=$(q "SELECT count(*) FROM inventory_batches WHERE is_depleted = false")
+if [[ "$batches_total" == "0" ]]; then
+  note "активных партий нет — себестоимость проверять не на чем"
+elif [[ "$zero_cost" == "0" ]]; then
   ok "у всех активных партий задана себестоимость"
 else
   bad "активных партий с нулевой себестоимостью: $zero_cost — прибыль считается неверно"
