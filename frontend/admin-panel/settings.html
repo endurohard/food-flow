@@ -1639,10 +1639,27 @@ AUTH.requireAuth();
             }
         }
 
+        // Заведение берётся из API предприятия, а не хардкодом:
+        // иначе экран правил бы PBX чужого ресторана.
+        let pbxRestaurantId = null;
+
+        async function resolvePbxRestaurantId() {
+            if (pbxRestaurantId) return pbxRestaurantId;
+            const res = await AUTH.fetch('/api/restaurants');
+            if (!res.ok) throw new Error('Не удалось получить список заведений');
+            const data = await res.json();
+            const list = data.restaurants || data.data || [];
+            if (!list.length) throw new Error('У предприятия нет заведения');
+            pbxRestaurantId = list[0].id;
+            return pbxRestaurantId;
+        }
+
         // Load PBX settings
         async function loadPBXSettings() {
             try {
-                const response = await fetch('/api/restaurants/650e8400-e29b-41d4-a716-446655440001/pbx-settings');
+                const restaurantId = await resolvePbxRestaurantId();
+                const response = await AUTH.fetch('/api/restaurants/' + restaurantId + '/pbx-settings');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
 
                 if (data) {
@@ -1684,9 +1701,9 @@ AUTH.requireAuth();
             };
 
             try {
-                const response = await fetch('/api/restaurants/650e8400-e29b-41d4-a716-446655440001/pbx-settings', {
+                const restaurantId = await resolvePbxRestaurantId();
+                const response = await AUTH.fetch('/api/restaurants/' + restaurantId + '/pbx-settings', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
                 });
 

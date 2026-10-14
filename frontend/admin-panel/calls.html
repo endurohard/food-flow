@@ -929,10 +929,30 @@ AUTH.requireAuth();
         </div>
     </div>
 
+    <!-- Тост для уведомлений: alert() заблокирован во встроенном браузере VS Code -->
+    <div id="callToast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+         background:#1C2026;color:#E8EAED;border:1px solid #2E3440;border-radius:10px;
+         padding:12px 18px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.35);
+         opacity:0;pointer-events:none;transition:opacity .2s;z-index:9999;"></div>
+
     <script>
-        const API_BASE = window.location.origin;
+        // Запросы идут через AUTH.fetch — он подставляет Bearer-токен.
+        // Без него телефонное API отвечает 401.
+        const API_BASE = '';
         let activeCalls = [];
         let recentCalls = [];
+        let _callToastTimer = null;
+
+        // Уведомление вместо alert(): во встроенном браузере VS Code
+        // (Simple Browser) alert/prompt заблокированы и кнопка выглядит «мёртвой».
+        function showCallToast(message) {
+            const el = document.getElementById('callToast');
+            if (!el) return;
+            el.textContent = message;
+            el.style.opacity = '1';
+            clearTimeout(_callToastTimer);
+            _callToastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3500);
+        }
 
         // Format time
         function formatTime(date) {
@@ -1051,7 +1071,8 @@ AUTH.requireAuth();
         // Fetch active calls
         async function fetchActiveCalls() {
             try {
-                const response = await fetch(`${API_BASE}/api/calls/active`);
+                const response = await AUTH.fetch(`${API_BASE}/api/calls/active`);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
                 activeCalls = data.calls || [];
                 renderActiveCalls();
@@ -1066,7 +1087,8 @@ AUTH.requireAuth();
         // Fetch recent calls
         async function fetchRecentCalls() {
             try {
-                const response = await fetch(`${API_BASE}/api/calls/logs?limit=50`);
+                const response = await AUTH.fetch(`${API_BASE}/api/calls/logs?limit=50`);
+                if (!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
                 recentCalls = data.logs || [];
                 renderRecentCalls();
@@ -1118,28 +1140,27 @@ AUTH.requireAuth();
             const to = document.getElementById('dial-to').value;
 
             if (!from || !to) {
-                alert('Пожалуйста, заполните все поля');
+                showCallToast('Пожалуйста, заполните все поля');
                 return;
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/calls/dial`, {
+                const response = await AUTH.fetch(`${API_BASE}/api/calls/dial`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ from, to, autoAnswer: true })
                 });
 
                 if (response.ok) {
-                    alert('Звонок инициирован');
+                    showCallToast('Звонок инициирован');
                     closeDialModal();
                     document.getElementById('dial-from').value = '';
                     document.getElementById('dial-to').value = '';
                 } else {
-                    alert('Ошибка при совершении звонка');
+                    showCallToast('Ошибка при совершении звонка: HTTP ' + response.status);
                 }
             } catch (error) {
                 console.error('Error making call:', error);
-                alert('Ошибка при совершении звонка');
+                showCallToast('Ошибка при совершении звонка');
             }
         }
 
@@ -1147,18 +1168,18 @@ AUTH.requireAuth();
             if (!confirm('Завершить звонок?')) return;
 
             try {
-                const response = await fetch(`${API_BASE}/api/calls/hangup/${callId}`, {
+                const response = await AUTH.fetch(`${API_BASE}/api/calls/hangup/${callId}`, {
                     method: 'POST'
                 });
 
                 if (response.ok) {
-                    console.log('Call hung up');
+                    showCallToast('Звонок завершён');
                 } else {
-                    alert('Ошибка при завершении звонка');
+                    showCallToast('Ошибка при завершении звонка: HTTP ' + response.status);
                 }
             } catch (error) {
                 console.error('Error hanging up call:', error);
-                alert('Ошибка при завершении звонка');
+                showCallToast('Ошибка при завершении звонка');
             }
         }
 

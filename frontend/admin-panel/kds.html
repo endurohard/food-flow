@@ -1188,7 +1188,9 @@ AUTH.requireAuth();
   </div>
 
   <script>
-    const API_BASE_URL = window.location.origin + '/api';
+    // Запросы идут через AUTH.fetch — он сам подставляет базовый URL,
+    // Bearer-токен и обновляет истёкший токен. Без него API отвечает 401.
+    const API_BASE_URL = '/api';
     let orders = [];
     let timers = {};
 
@@ -1232,7 +1234,7 @@ AUTH.requireAuth();
     // Load orders
     async function loadOrders() {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders`);
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders`);
         if (response.ok) {
           const data = await response.json();
           const allOrders = data.data || [];
@@ -1242,6 +1244,8 @@ AUTH.requireAuth();
 
           updateStats();
           renderOrders();
+        } else {
+          console.error('Не удалось загрузить заказы: HTTP', response.status);
         }
       } catch (error) {
         console.error('Error loading orders:', error);
@@ -1384,15 +1388,16 @@ AUTH.requireAuth();
     // Mark order as ready
     async function markReady(orderId) {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ready' })
         });
 
         if (response.ok) {
           playSound('ready');
           await loadOrders();
+        } else {
+          console.error('Не удалось отметить заказ готовым: HTTP', response.status);
         }
       } catch (error) {
         console.error('Error marking order as ready:', error);
@@ -1402,14 +1407,15 @@ AUTH.requireAuth();
     // Recall order (back to preparing)
     async function recallOrder(orderId) {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'preparing' })
         });
 
         if (response.ok) {
           await loadOrders();
+        } else {
+          console.error('Не удалось вернуть заказ в готовку: HTTP', response.status);
         }
       } catch (error) {
         console.error('Error recalling order:', error);

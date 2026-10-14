@@ -1625,7 +1625,9 @@ AUTH.requireAuth();
   <div class="notification" id="notification"></div>
 
   <script>
-    const API_BASE_URL = window.location.origin + '/api';
+    // Запросы идут через AUTH.fetch — он сам подставляет базовый URL,
+    // Bearer-токен и обновляет истёкший токен. Без него API отвечает 401.
+    const API_BASE_URL = '/api';
     let orders = [];
     let allOrders = []; // Хранит все заказы до фильтрации
     let searchTerm = '';
@@ -1682,7 +1684,7 @@ AUTH.requireAuth();
     // Load orders
     async function loadOrders() {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders`);
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders`);
         if (response.ok) {
           const data = await response.json();
           const newOrders = data.data || [];
@@ -1925,17 +1927,19 @@ AUTH.requireAuth();
     // Update order status
     async function updateStatus(orderId, newStatus) {
       try {
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: newStatus })
         });
 
         if (response.ok) {
           await loadOrders();
+        } else {
+          showNotification('Не удалось изменить статус заказа', 'error');
         }
       } catch (error) {
         console.error('Error updating status:', error);
+        showNotification('Ошибка связи с сервером', 'error');
       }
     }
 
@@ -2056,12 +2060,12 @@ AUTH.requireAuth();
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/orders/${selectedOrderIdForCourier}`, {
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${selectedOrderIdForCourier}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             status: 'out_for_delivery',
-            courierId: parseInt(courierId),
+            // Идентификаторы — UUID-строки, приводить к числу нельзя
+            courierId: courierId,
             courierName: courier.name
           })
         });
