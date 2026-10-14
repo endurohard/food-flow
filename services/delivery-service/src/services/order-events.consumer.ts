@@ -28,6 +28,9 @@ export class OrderEventsConsumer {
     private deliveryService: DeliveryService
   ) {}
 
+  /** Остановлен ли подписчик штатно: тогда не переподключаемся. */
+  private stopped = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   async connect(): Promise<void> {
     this.connection = await amqp.connect(config.rabbitmq.url);
@@ -41,10 +44,38 @@ export class OrderEventsConsumer {
     // ходит в БД, параллелить тут нечего.
     await this.channel.prefetch(1);
 
+    // Без переподключения сервис глохнет после любого рестарта брокера:
+    // соединение закрыто, consume больше никогда не вызывается.
+    this.connection.on('close', () => {
+      if (this.stopped) return;
+      logger.warn('Delivery consumer: соединение закрыто, переподключаюсь');
+      this.channel = null;
+      this.connection = null;
+      this.scheduleReconnect();
+    });
+    this.connection.on('error', (err: Error) => {
+      logger.warn(`Delivery consumer: ошибка соединения: ${err.message}`);
+    });
 
     logger.info('Delivery consumer: подключён к RabbitMQ');
   }
 
+  /** Повторная попытка через 5 секунд, пока брокер не поднимется. */
+  private scheduleReconnect(): void {
+    if (this.stopped || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        await this.connect();
+        await this.consume();
+        logger.info('Delivery consumer: подписка восстановлена');
+      } catch (err) {
+        logger.warn(`Delivery consumer: переподключение не удалось: ${(err as Error).message}`);
+        this.scheduleReconnect();
+      }
+    }, 5000);
+    this.reconnectTimer.unref?.();
+  }
 
   async consume(): Promise<void> {
     if (!this.channel) throw new Error('RabbitMQ channel not initialized');
@@ -120,6 +151,11 @@ export class OrderEventsConsumer {
   }
 
   async disconnect(): Promise<void> {
+    this.stopped = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     try {
       await this.channel?.close();
       await this.connection?.close();

@@ -123,7 +123,7 @@ services:
       PORT: 3003
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-foodflow}:${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
       # Автосписание ингредиентов по техкартам при закрытии заказа
       INVENTORY_SERVICE_URL: http://inventory-service:3006
@@ -155,7 +155,7 @@ services:
       PORT: 3004
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-foodflow}:${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
     expose:
       - "3004"
@@ -181,7 +181,7 @@ services:
       PORT: 3005
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-foodflow}:${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}@rabbitmq:5672
       PRINTER_TYPE: network
       PRINTER_INTERFACE: 192.168.1.100:9100
       AUTO_PRINT: "true"
@@ -213,7 +213,7 @@ services:
       NODE_ENV: production
       PORT: 3006
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
-      RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-foodflow}:${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
       FINANCE_SERVICE_URL: http://finance-service:3012
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
@@ -259,7 +259,7 @@ services:
       # Нужен idempotency-мидлваре: без него ключ идемпотентности вешал запрос
       REDIS_URL: redis://redis:6379
       # Подписка на order.completed/order.delivered: автоначисление баллов
-      RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-foodflow}:${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}@rabbitmq:5672
       # false — баллы только вручную через API
       AUTO_EARN_POINTS: ${AUTO_EARN_POINTS:-true}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
@@ -372,8 +372,8 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: food-flow-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: foodflow
-      RABBITMQ_DEFAULT_PASS: foodflow_secret
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-foodflow}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS required}
     expose:
       - "5672"   # AMQP
       - "15672"  # Management UI
