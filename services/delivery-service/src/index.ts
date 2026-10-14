@@ -9,6 +9,8 @@ const { Pool } = pkg;
 import { config } from './config';
 import { logger } from './utils/logger';
 import deliveryRoutes from './routes/delivery.routes';
+import { DeliveryService } from './services/delivery.service';
+import { OrderEventsConsumer } from './services/order-events.consumer';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -116,8 +118,20 @@ const server = httpServer.listen(PORT, () => {
   logger.info(`Socket.IO ready for real-time tracking`);
 });
 
+// Подписка на события заказов: доставка создаётся автоматически по
+// order.confirmed. Падение брокера не должно валить сервис — HTTP API
+// обязан работать и без событий.
+const orderEventsConsumer = new OrderEventsConsumer(healthPool, new DeliveryService(config.database.url));
+orderEventsConsumer
+  .connect()
+  .then(() => orderEventsConsumer.consume())
+  .catch((err: Error) =>
+    logger.warn(`Автосоздание доставок недоступно (RabbitMQ): ${err.message}`)
+  );
+
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  orderEventsConsumer.disconnect().catch(() => {});
   server.close(async () => {
     await healthPool.end().catch(() => {});
     process.exit(0);

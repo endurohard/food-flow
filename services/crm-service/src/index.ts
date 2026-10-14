@@ -7,6 +7,8 @@ const { Pool } = pkg;
 import { config } from './config';
 import { logger } from './utils/logger';
 import crmRoutes from './routes/crm.routes';
+import { CRMService } from './services/crm.service';
+import { OrderEventsConsumer } from './services/order-events.consumer';
 
 const app = express();
 
@@ -55,8 +57,19 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 const PORT = config.port;
 const server = app.listen(PORT, () => { logger.info(`CRM service listening on port ${PORT}`); });
 
+// Подписка на закрытие заказов: баллы лояльности начисляются автоматически.
+// Падение брокера не валит сервис — HTTP API работает и без событий.
+const orderEventsConsumer = new OrderEventsConsumer(healthPool, new CRMService(config.database.url));
+orderEventsConsumer
+  .connect()
+  .then(() => orderEventsConsumer.consume())
+  .catch((err: Error) =>
+    logger.warn(`Автоначисление баллов недоступно (RabbitMQ): ${err.message}`)
+  );
+
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  orderEventsConsumer.disconnect().catch(() => {});
   server.close(async () => {
     await healthPool.end().catch(() => {});
     process.exit(0);

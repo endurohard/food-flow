@@ -258,6 +258,10 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       # Нужен idempotency-мидлваре: без него ключ идемпотентности вешал запрос
       REDIS_URL: redis://redis:6379
+      # Подписка на order.completed/order.delivered: автоначисление баллов
+      RABBITMQ_URL: amqp://foodflow:foodflow_secret@rabbitmq:5672
+      # false — баллы только вручную через API
+      AUTO_EARN_POINTS: ${AUTO_EARN_POINTS:-true}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
     expose:
       - "3011"
@@ -265,6 +269,8 @@ services:
       - food-flow-network
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

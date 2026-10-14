@@ -14,7 +14,12 @@ if (process.env.NODE_ENV === 'production') {
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3011', 10),
-  database: { url: process.env.DATABASE_URL || 'postgresql://foodflow:foodflow_secret@localhost:5432/foodflow' },
+  database: { url: process.env.DATABASE_URL || 'postgresql://foodflow:***@localhost:5432/foodflow' },
+  rabbitmq: { url: process.env.RABBITMQ_URL || 'amqp://foodflow:***@localhost:5672' },
   redis: { url: process.env.REDIS_URL || 'redis://localhost:6379' },
-  jwt: { secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production' }
+  jwt: { secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production' },
+
+  // Автоначисление баллов по событию закрытия заказа.
+  // false — баллы начисляются только вручную через API.
+  autoEarnPoints: process.env.AUTO_EARN_POINTS !== 'false'
 };
