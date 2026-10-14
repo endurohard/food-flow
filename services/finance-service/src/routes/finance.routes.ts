@@ -395,6 +395,47 @@ router.get('/fiscal-receipts/:orderId', authenticateUser, requireRole('admin', '
   }
 });
 
+// Регистрация фискального чека, пробитого на кассовом терминале (APK на АТОЛ Sigma).
+// Касса печатает чек локально на своём ФР и присылает реквизиты сюда.
+// Идемпотентно по idempotency-key: повтор после обрыва сети не создаст дубль.
+router.post('/fiscal-receipts', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), idempotencyCheck, async (req: Request, res: Response) => {
+  try {
+    const schema = Joi.object({
+      orderId: Joi.string().uuid().required(),
+      registerId: Joi.string().uuid().allow(null).optional(),
+      receiptNumber: Joi.string().max(100).required(),
+      fiscalSign: Joi.string().max(255).allow(null, '').optional(),
+      fiscalDocumentNumber: Joi.string().max(100).allow(null, '').optional(),
+      ofdUrl: Joi.string().max(500).allow(null, '').optional(),
+      receiptType: Joi.string().valid('sale', 'refund').default('sale'),
+      totalAmount: Joi.number().positive().required(),
+      vatAmount: Joi.number().min(0).default(0)
+    });
+    const { error, value } = schema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+
+    const receipt = await financeService.createFiscalReceipt({
+      orderId: value.orderId,
+      registerId: value.registerId || undefined,
+      enterpriseId: isSuper ? undefined : req.enterpriseId,
+      receiptNumber: value.receiptNumber,
+      fiscalSign: value.fiscalSign || undefined,
+      fiscalDocumentNumber: value.fiscalDocumentNumber || undefined,
+      ofdUrl: value.ofdUrl || undefined,
+      receiptType: value.receiptType,
+      totalAmount: value.totalAmount,
+      vatAmount: value.vatAmount
+    });
+    return res.status(201).json({ receipt });
+  } catch (err) {
+    console.error('Create fiscal receipt error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ========== ЭКСПОРТ 1С ==========
 
 router.get('/exports/sales', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {

@@ -69,7 +69,11 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
 
     const techCard = await techCardService.create(value, req.enterpriseId);
     return res.status(201).json({ techCard });
-  } catch (error) {
+  } catch (error: any) {
+    // Цикл в составе — ошибка пользователя, а не сервера
+    if (error.message && (error.message.includes('Циклическая') || error.message.includes('сам себя'))) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Create tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -84,7 +88,10 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
     const techCard = await techCardService.update(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!techCard) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ techCard });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message && (error.message.includes('Циклическая') || error.message.includes('сам себя'))) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Update tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }

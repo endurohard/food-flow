@@ -1406,7 +1406,7 @@ AUTH.requireAuth();
       <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
         <h2 style="font-size: 20px; font-weight: 700;">📋 Техкарты (Рецепты)</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-secondary" onclick="loadSampleRecipes()">📥 Загрузить образцы</button>
+          <button class="btn btn-secondary" onclick="loadTechCards(true)">🔄 Обновить</button>
           <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Добавить техкарту</button>
         </div>
       </div>
@@ -1632,25 +1632,52 @@ AUTH.requireAuth();
   <div class="modal" id="recipeModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title">Создать техкарту</h2>
+        <h2 class="modal-title" id="recipeModalTitle">Создать техкарту</h2>
         <button class="close-btn" onclick="closeRecipeModal()">&times;</button>
       </div>
 
       <form id="recipeForm" onsubmit="saveRecipe(event)">
+        <!-- Тип техкарты: блюдо меню или производственная (полуфабрикат) -->
         <div class="form-group">
-          <label class="form-label">Выберите блюдо:</label>
-          <select class="form-select" id="recipeDishId" required onchange="updateRecipeName()">
+          <label class="form-label">Тип техкарты:</label>
+          <select class="form-select" id="recipeKind" onchange="onRecipeKindChange()">
+            <option value="menu">Блюдо меню</option>
+            <option value="production">Полуфабрикат (производство)</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="recipeMenuGroup">
+          <label class="form-label">Блюдо меню:</label>
+          <select class="form-select" id="recipeDishId" onchange="updateRecipeName()">
             <option value="">Выберите</option>
           </select>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Название техкарты:</label>
-          <input type="text" class="form-input" id="recipeName" required>
+        <div id="recipeProductionGroup" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Товар склада на выходе (полуфабрикат):</label>
+            <select class="form-select" id="recipeOutputItemId" onchange="updateRecipeName()">
+              <option value="">Выберите</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Выход, ед.:</label>
+            <input type="number" class="form-input" id="recipeOutputQuantity" step="0.001" min="0.001" value="1">
+          </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Описание:</label>
+          <label class="form-label">Название техкарты:</label>
+          <input type="text" class="form-input" id="recipeName" required oninput="this.dataset.touched = '1'">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Выход блюда, г:</label>
+          <input type="number" class="form-input" id="recipeYieldWeight" step="1" min="0" placeholder="Например, 350">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Технология приготовления:</label>
           <textarea class="form-textarea" id="recipeDescription" placeholder="Технология приготовления..."></textarea>
         </div>
 
@@ -1825,78 +1852,7 @@ AUTH.requireAuth();
         stoplist = [];
       }
 
-      const savedRecipes = localStorage.getItem('menuRecipes');
-      if (savedRecipes) {
-        recipes = JSON.parse(savedRecipes);
-      } else {
-        // Sample recipes with realistic ingredients for existing dishes
-        recipes = [
-          {
-            id: 1,
-            dishId: 1, // Маргарита
-            name: 'Техкарта: Маргарита',
-            description: 'Раскатать тесто, нанести соус, выложить моцареллу, базилик. Выпекать 12 минут при 250°C.',
-            ingredients: [
-              { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
-              { inventoryId: 2, name: 'Моцарелла', quantity: 150, unit: 'г' },
-              { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
-              { inventoryId: 4, name: 'Базилик', quantity: 5, unit: 'г' }
-            ],
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 2,
-            dishId: 2, // Пепперони
-            name: 'Техкарта: Пепперони',
-            description: 'Раскатать тесто, нанести соус, выложить моцареллу и салями. Выпекать 12 минут при 250°C.',
-            ingredients: [
-              { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
-              { inventoryId: 2, name: 'Моцарелла', quantity: 130, unit: 'г' },
-              { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
-              { inventoryId: 5, name: 'Салями Пепперони', quantity: 80, unit: 'г' }
-            ],
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 3,
-            dishId: 3, // Филадельфия
-            name: 'Техкарта: Филадельфия',
-            description: 'Приготовить рис, выложить на нори, добавить лосось и сливочный сыр, свернуть ролл.',
-            ingredients: [
-              { inventoryId: 7, name: 'Рис для суши', quantity: 120, unit: 'г' },
-              { inventoryId: 8, name: 'Нори', quantity: 2, unit: 'шт' },
-              { inventoryId: 6, name: 'Лосось свежий', quantity: 80, unit: 'г' },
-              { inventoryId: 9, name: 'Сливочный сыр', quantity: 60, unit: 'г' }
-            ],
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 4,
-            dishId: 5, // Чизбургер
-            name: 'Техкарта: Чизбургер',
-            description: 'Обжарить котлету, разрезать булочку, выложить салат, котлету, сыр. Подать горячим.',
-            ingredients: [
-              { inventoryId: 10, name: 'Говяжья котлета', quantity: 1, unit: 'шт' },
-              { inventoryId: 11, name: 'Булочка для бургера', quantity: 1, unit: 'шт' },
-              { inventoryId: 12, name: 'Салат Айсберг', quantity: 30, unit: 'г' },
-              { inventoryId: 2, name: 'Моцарелла', quantity: 40, unit: 'г' }
-            ],
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 5,
-            dishId: 6, // Цезарь
-            name: 'Техкарта: Цезарь',
-            description: 'Обжарить куриное филе, нарезать салат, добавить сыр. Заправить соусом Цезарь.',
-            ingredients: [
-              { inventoryId: 13, name: 'Куриное филе', quantity: 150, unit: 'г' },
-              { inventoryId: 12, name: 'Салат Айсберг', quantity: 100, unit: 'г' },
-              { inventoryId: 2, name: 'Моцарелла', quantity: 50, unit: 'г' }
-            ],
-            createdAt: new Date().toISOString()
-          }
-        ];
-      }
+      // Техкарты живут только в API (см. loadTechCards), localStorage для них не используется
 
       const savedInventory = localStorage.getItem('inventory');
       if (savedInventory) {
@@ -1935,7 +1891,6 @@ AUTH.requireAuth();
       localStorage.setItem('menuCategories', JSON.stringify(categories));
       localStorage.setItem('menuModifiers', JSON.stringify(modifiers));
       localStorage.setItem('menuStoplist', JSON.stringify(stoplist));
-      localStorage.setItem('menuRecipes', JSON.stringify(recipes));
       localStorage.setItem('inventory', JSON.stringify(inventory));
     }
 
@@ -1997,7 +1952,7 @@ AUTH.requireAuth();
         if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
         await loadMargins();
       } catch (e) {
-        alert('Ошибка сохранения цен: ' + e.message);
+        showNotification('⚠️ Ошибка сохранения цен: ' + e.message);
       }
     }
 
@@ -2008,7 +1963,7 @@ AUTH.requireAuth();
       event.target.classList.add('active');
       document.getElementById(tab + 'Tab').classList.add('active');
 
-      if (tab === 'recipes') renderRecipesManagement();
+      if (tab === 'recipes') loadTechCards();
       else if (tab === 'categories') renderCategoriesManagement();
       else if (tab === 'modifiers') renderModifiersManagement();
       else if (tab === 'prices') loadMargins();
@@ -2058,8 +2013,10 @@ AUTH.requireAuth();
 
       grid.innerHTML = filteredDishes.map(dish => {
         const inStoplist = stoplist.includes(dish.id);
-        const recipe = recipes.find(r => r.dishId === dish.id);
-        const dishCost = recipe ? calculateDishCost(recipe.id) : 0;
+        // Техкарта и себестоимость берутся из API (recipes / techCardCosts)
+        const recipe = recipes.find(r => r.menu_item_id && String(r.menu_item_id) === String(dish.id));
+        const cost = recipe ? techCardCosts[recipe.id] : null;
+        const dishCost = cost ? (parseFloat(cost.totalCost) || 0) : 0;
         const profit = dish.price - dishCost;
         const profitMargin = dish.price > 0 ? ((profit / dish.price) * 100) : 0;
 
@@ -2574,62 +2531,162 @@ AUTH.requireAuth();
       }, 3000);
     }
 
-    // Recipes (Tech Cards)
+    // ─── Техкарты (реальный API /api/tech-cards) ───
+    let stockItems = [];            // товары склада из /api/inventory/items
+    let techCardCosts = {};         // расчёты себестоимости: techCardId -> cost
+    let editingRecipeId = null;     // id редактируемой техкарты (null = создание)
+
+    // Разбор ошибки ответа API в читаемый текст
+    async function techCardError(res) {
+      const data = await res.json().catch(() => ({}));
+      return data.error || data.message || ('HTTP ' + res.status);
+    }
+
+    // Загрузка товаров склада (нужны для ингредиентов и выбора полуфабриката)
+    async function loadStockItems() {
+      try {
+        const res = await AUTH.fetch('/api/inventory/items');
+        if (!res.ok) throw new Error(await techCardError(res));
+        const data = await res.json();
+        stockItems = data.items || [];
+      } catch (e) {
+        stockItems = [];
+        showNotification('⚠️ Не удалось загрузить склад: ' + e.message);
+      }
+    }
+
+    // Загрузка списка техкарт + расчётов себестоимости
+    async function loadTechCards(notify) {
+      const container = document.getElementById('recipesManagement');
+      if (container) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка техкарт...</div>';
+      }
+      try {
+        if (stockItems.length === 0) await loadStockItems();
+
+        const res = await AUTH.fetch('/api/tech-cards');
+        if (!res.ok) throw new Error(await techCardError(res));
+        const data = await res.json();
+        recipes = data.techCards || [];
+
+        // Себестоимость считает бэкенд — забираем параллельно
+        techCardCosts = {};
+        const costs = await Promise.all(recipes.map(async tc => {
+          try {
+            const cres = await AUTH.fetch('/api/tech-cards/' + tc.id + '/cost');
+            if (!cres.ok) return null;
+            const cdata = await cres.json();
+            return { id: tc.id, cost: cdata.cost || cdata };
+          } catch (e) {
+            return null;
+          }
+        }));
+        costs.forEach(c => { if (c && c.cost) techCardCosts[c.id] = c.cost; });
+
+        renderRecipesManagement();
+        renderDishes();
+        if (notify) showNotification('✅ Техкарты обновлены');
+      } catch (e) {
+        recipes = [];
+        techCardCosts = {};
+        if (container) {
+          container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-danger);background:var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Не удалось загрузить техкарты: ' + e.message + '</div>';
+        }
+        showNotification('⚠️ Ошибка загрузки техкарт: ' + e.message);
+      }
+    }
+
     function openAddRecipeModal() {
+      editingRecipeId = null;
       ingredientRowCounter = 0;
       document.getElementById('recipeForm').reset();
       document.getElementById('recipeIngredientsList').innerHTML = '';
+      document.getElementById('recipeModalTitle').textContent = 'Создать техкарту';
+      document.getElementById('recipeName').dataset.touched = '';
+      document.getElementById('recipeKind').value = 'menu';
+      document.getElementById('recipeOutputQuantity').value = '1';
+      onRecipeKindChange();
       updateRecipeDishOptions();
+      updateRecipeOutputOptions();
       addIngredientRow();
       document.getElementById('recipeModal').classList.add('active');
     }
 
     function closeRecipeModal() {
       document.getElementById('recipeModal').classList.remove('active');
+      editingRecipeId = null;
+    }
+
+    // Переключение типа техкарты: блюдо меню / производственная
+    function onRecipeKindChange() {
+      const kind = document.getElementById('recipeKind').value;
+      document.getElementById('recipeMenuGroup').style.display = kind === 'menu' ? '' : 'none';
+      document.getElementById('recipeProductionGroup').style.display = kind === 'production' ? '' : 'none';
     }
 
     function updateRecipeDishOptions() {
       const select = document.getElementById('recipeDishId');
-      const dishesWithoutRecipes = dishes.filter(d => !recipes.some(r => r.dishId === d.id));
-
       select.innerHTML = '<option value="">Выберите блюдо</option>' +
-        dishesWithoutRecipes.map(d => {
+        dishes.map(d => {
           const category = categories.find(c => c.id === d.category);
-          return `<option value="${d.id}">${d.icon} ${d.name}${category ? ' (' + category.name + ')' : ''}</option>`;
+          return `<option value="${d.id}">${d.icon || '🍽️'} ${d.name}${category ? ' (' + category.name + ')' : ''}</option>`;
         }).join('');
     }
 
+    // Товары склада, которые можно получать производством
+    function updateRecipeOutputOptions() {
+      const select = document.getElementById('recipeOutputItemId');
+      select.innerHTML = '<option value="">Выберите товар склада</option>' +
+        stockItems.map(i =>
+          `<option value="${i.id}">${i.is_produced ? '🏭 ' : ''}${i.name} (${i.unit || ''})</option>`
+        ).join('');
+    }
+
+    // Автоподстановка названия техкарты по выбранному блюду/полуфабрикату
     function updateRecipeName() {
-      const dishId = parseInt(document.getElementById('recipeDishId').value);
-      if (dishId) {
-        const dish = dishes.find(d => d.id === dishId);
-        if (dish) {
-          document.getElementById('recipeName').value = `Техкарта: ${dish.name}`;
-        }
+      const nameInput = document.getElementById('recipeName');
+      const kind = document.getElementById('recipeKind').value;
+      if (kind === 'menu') {
+        const dishId = document.getElementById('recipeDishId').value;
+        const dish = dishes.find(d => String(d.id) === String(dishId));
+        if (dish && !nameInput.dataset.touched) nameInput.value = `Техкарта: ${dish.name}`;
+      } else {
+        const itemId = document.getElementById('recipeOutputItemId').value;
+        const item = stockItems.find(i => String(i.id) === String(itemId));
+        if (item && !nameInput.dataset.touched) nameInput.value = `Производство: ${item.name}`;
       }
     }
 
-    function addIngredientRow() {
+    function addIngredientRow(preset) {
       const container = document.getElementById('recipeIngredientsList');
       const rowId = ingredientRowCounter++;
 
       const row = document.createElement('div');
-      row.className = 'form-row';
+      row.className = 'form-row ingredient-row';
       row.style.marginBottom = '12px';
       row.style.alignItems = 'end';
       row.id = `ingredient-row-${rowId}`;
 
+      const selectedId = preset ? String(preset.inventoryItemId) : '';
       row.innerHTML = `
         <div class="form-group" style="margin-bottom: 0;">
           <label class="form-label">Ингредиент:</label>
           <select class="form-select ingredient-select" required>
             <option value="">Выберите</option>
-            ${inventory.map(item => `<option value="${item.id}">${item.name} (${item.costPrice ? item.costPrice.toFixed(2) + ' ₽/' + item.unit : item.unit})</option>`).join('')}
+            ${stockItems.map(item => `<option value="${item.id}"${String(item.id) === selectedId ? ' selected' : ''}>${item.is_produced ? '🏭 ' : ''}${item.name} (${item.cost_price !== null && item.cost_price !== undefined ? parseFloat(item.cost_price).toFixed(2) + ' ₽/' + (item.unit || '') : (item.unit || '')})</option>`).join('')}
           </select>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label class="form-label">Количество:</label>
-          <input type="number" class="form-input ingredient-quantity" required step="0.01" min="0" placeholder="0">
+          <input type="number" class="form-input ingredient-quantity" required step="0.001" min="0" placeholder="0" value="${preset ? preset.quantity : ''}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">% потерь:</label>
+          <input type="number" class="form-input ingredient-waste" step="0.1" min="0" max="100" value="${preset && preset.wastePercent !== undefined && preset.wastePercent !== null ? preset.wastePercent : 0}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label">Необяз.:</label>
+          <input type="checkbox" class="ingredient-optional" style="width:20px;height:20px;"${preset && preset.isOptional ? ' checked' : ''}>
         </div>
         <button type="button" class="btn btn-danger btn-small" onclick="removeIngredientRow(${rowId})" style="padding: 10px 12px;">🗑️</button>
       `;
@@ -2642,29 +2699,83 @@ AUTH.requireAuth();
       if (row) row.remove();
     }
 
-    function saveRecipe(event) {
+    // Открыть существующую техкарту на редактирование
+    async function editRecipe(recipeId) {
+      try {
+        if (stockItems.length === 0) await loadStockItems();
+        const res = await AUTH.fetch('/api/tech-cards/' + recipeId);
+        if (!res.ok) throw new Error(await techCardError(res));
+        const tc = (await res.json()).techCard;
+
+        editingRecipeId = recipeId;
+        ingredientRowCounter = 0;
+        document.getElementById('recipeForm').reset();
+        document.getElementById('recipeIngredientsList').innerHTML = '';
+        document.getElementById('recipeModalTitle').textContent = 'Изменить техкарту';
+
+        const isProduction = !!tc.output_item_id;
+        document.getElementById('recipeKind').value = isProduction ? 'production' : 'menu';
+        onRecipeKindChange();
+        updateRecipeDishOptions();
+        updateRecipeOutputOptions();
+
+        document.getElementById('recipeDishId').value = tc.menu_item_id || '';
+        document.getElementById('recipeOutputItemId').value = tc.output_item_id || '';
+        document.getElementById('recipeOutputQuantity').value = tc.output_quantity !== null && tc.output_quantity !== undefined ? tc.output_quantity : 1;
+        const nameInput = document.getElementById('recipeName');
+        nameInput.value = tc.name || tc.menu_item_name || tc.output_item_name || '';
+        nameInput.dataset.touched = '1';
+        document.getElementById('recipeYieldWeight').value = tc.yield_weight !== null && tc.yield_weight !== undefined ? tc.yield_weight : '';
+        document.getElementById('recipeDescription').value = tc.cooking_instructions || '';
+
+        (tc.ingredients || []).forEach(ing => addIngredientRow({
+          inventoryItemId: ing.inventory_item_id,
+          quantity: parseFloat(ing.quantity),
+          wastePercent: ing.waste_percent !== null && ing.waste_percent !== undefined ? parseFloat(ing.waste_percent) : 0,
+          isOptional: !!ing.is_optional
+        }));
+        if (!(tc.ingredients || []).length) addIngredientRow();
+
+        document.getElementById('recipeModal').classList.add('active');
+      } catch (e) {
+        showNotification('⚠️ Не удалось открыть техкарту: ' + e.message);
+      }
+    }
+
+    // Создание (POST) или обновление (PUT) техкарты
+    async function saveRecipe(event) {
       event.preventDefault();
 
-      const dishId = parseInt(document.getElementById('recipeDishId').value);
-      const name = document.getElementById('recipeName').value;
-      const description = document.getElementById('recipeDescription').value;
+      const kind = document.getElementById('recipeKind').value;
+      const menuItemId = document.getElementById('recipeDishId').value;
+      const outputItemId = document.getElementById('recipeOutputItemId').value;
+      const outputQuantity = parseFloat(document.getElementById('recipeOutputQuantity').value);
+      const name = document.getElementById('recipeName').value.trim();
+      const yieldWeightRaw = document.getElementById('recipeYieldWeight').value;
+      const cookingInstructions = document.getElementById('recipeDescription').value.trim();
 
-      // Collect ingredients
-      const ingredientRows = document.querySelectorAll('#recipeIngredientsList .form-row');
+      if (kind === 'menu' && !menuItemId) {
+        showNotification('⚠️ Выберите блюдо меню');
+        return;
+      }
+      if (kind === 'production' && !outputItemId) {
+        showNotification('⚠️ Выберите товар склада на выходе');
+        return;
+      }
+      if (kind === 'production' && (!outputQuantity || outputQuantity <= 0)) {
+        showNotification('⚠️ Укажите выход больше нуля');
+        return;
+      }
+
+      // Сбор состава
       const ingredients = [];
-
-      ingredientRows.forEach(row => {
-        const ingredientId = parseInt(row.querySelector('.ingredient-select').value);
+      document.querySelectorAll('#recipeIngredientsList .ingredient-row').forEach(row => {
+        const inventoryItemId = row.querySelector('.ingredient-select').value;
         const quantity = parseFloat(row.querySelector('.ingredient-quantity').value);
-
-        if (ingredientId && quantity > 0) {
-          const inventoryItem = inventory.find(i => i.id === ingredientId);
-          ingredients.push({
-            inventoryId: ingredientId,
-            name: inventoryItem.name,
-            quantity: quantity,
-            unit: inventoryItem.unit
-          });
+        const wastePercent = parseFloat(row.querySelector('.ingredient-waste').value) || 0;
+        const isOptional = row.querySelector('.ingredient-optional').checked;
+        if (inventoryItemId && quantity > 0) {
+          ingredients.push({ inventoryItemId, quantity, wastePercent, isOptional });
         }
       });
 
@@ -2673,269 +2784,189 @@ AUTH.requireAuth();
         return;
       }
 
-      const newId = recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 1 : 1;
-      recipes.push({
-        id: newId,
-        dishId: dishId,
-        name: name,
-        description: description,
-        ingredients: ingredients,
-        createdAt: new Date().toISOString()
-      });
+      const payload = { ingredients };
+      if (name) payload.name = name;
+      if (cookingInstructions) payload.cookingInstructions = cookingInstructions;
+      if (yieldWeightRaw !== '') payload.yieldWeight = parseFloat(yieldWeightRaw);
+      if (kind === 'menu') {
+        payload.menuItemId = menuItemId;
+      } else {
+        payload.outputItemId = outputItemId;
+        payload.outputQuantity = outputQuantity;
+      }
 
-      saveData();
-      renderRecipesManagement();
-      closeRecipeModal();
-      showNotification('✅ Техкарта создана');
+      try {
+        const url = editingRecipeId ? '/api/tech-cards/' + editingRecipeId : '/api/tech-cards';
+        const res = await AUTH.fetch(url, {
+          method: editingRecipeId ? 'PUT' : 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await techCardError(res));
+        const wasEditing = !!editingRecipeId;
+        closeRecipeModal();
+        await loadTechCards();
+        showNotification(wasEditing ? '✅ Техкарта обновлена' : '✅ Техкарта создана');
+      } catch (e) {
+        showNotification('⚠️ ' + e.message);
+      }
     }
 
-    // Calculate dish cost based on recipe
-    function calculateDishCost(recipeId) {
-      const recipe = recipes.find(r => r.id === recipeId);
-      if (!recipe) return 0;
+    async function deleteRecipe(recipeId) {
+      if (!confirm('Удалить техкарту?')) return;
+      try {
+        const res = await AUTH.fetch('/api/tech-cards/' + recipeId, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await techCardError(res));
+        await loadTechCards();
+        showNotification('🗑️ Техкарта удалена');
+      } catch (e) {
+        showNotification('⚠️ ' + e.message);
+      }
+    }
 
-      let totalCost = 0;
-      recipe.ingredients.forEach(ing => {
-        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
-        if (inventoryItem && inventoryItem.costPrice) {
-          totalCost += ing.quantity * inventoryItem.costPrice;
+    function fmtTechCardMoney(v) {
+      const n = parseFloat(v);
+      return isNaN(n) ? '—' : n.toFixed(2) + ' ₽';
+    }
+
+    // Карточка одной техкарты
+    function renderTechCard(tc) {
+      const cost = techCardCosts[tc.id] || null;
+      const isProduction = !!tc.output_item_id;
+      const dish = tc.menu_item_id ? dishes.find(d => String(d.id) === String(tc.menu_item_id)) : null;
+      const title = tc.name || tc.menu_item_name || tc.output_item_name || 'Техкарта';
+      const menuPrice = cost ? parseFloat(cost.menuPrice) || 0 : (parseFloat(tc.menu_item_price) || 0);
+      const totalCost = cost ? parseFloat(cost.totalCost) || 0 : null;
+      const unitCost = cost ? parseFloat(cost.unitCost) || 0 : null;
+      const margin = cost && cost.margin !== null && cost.margin !== undefined ? parseFloat(cost.margin) : null;
+      const ingredients = Array.isArray(tc.ingredients) ? tc.ingredients : [];
+
+      const metrics = [];
+      metrics.push(`
+        <div style="background: var(--color-primary-light); border: 1px solid var(--color-primary); border-radius: 8px; padding: 12px;">
+          <div style="color: var(--color-primary); font-size: 11px; margin-bottom: 4px;">💰 Себестоимость${isProduction ? ' партии' : ''}</div>
+          <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${totalCost === null ? '—' : fmtTechCardMoney(totalCost)}</div>
+        </div>`);
+
+      if (isProduction) {
+        metrics.push(`
+          <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px;">
+            <div style="color: var(--color-text-secondary); font-size: 11px; margin-bottom: 4px;">🏭 Себестоимость единицы</div>
+            <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${unitCost === null ? '—' : fmtTechCardMoney(unitCost)}</div>
+          </div>`);
+        if (cost && cost.wholesalePrice !== null && cost.wholesalePrice !== undefined) {
+          metrics.push(`
+            <div style="background: #fff8e1; border: 1px solid var(--color-warning); border-radius: 8px; padding: 12px;">
+              <div style="color: var(--color-warning); font-size: 11px; margin-bottom: 4px;">📊 Маржа опт</div>
+              <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${cost.wholesaleMargin === null || cost.wholesaleMargin === undefined ? '—' : cost.wholesaleMargin + '%'}</div>
+            </div>`);
         }
-      });
-      return totalCost;
+      } else {
+        const profit = totalCost === null ? null : menuPrice - totalCost;
+        metrics.push(`
+          <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px;">
+            <div style="color: var(--color-text-secondary); font-size: 11px; margin-bottom: 4px;">🏷️ Цена продажи</div>
+            <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${fmtTechCardMoney(menuPrice)}</div>
+          </div>`);
+        metrics.push(`
+          <div style="background: ${profit !== null && profit > 0 ? '#f1f8f4' : '#fef2f2'}; border: 1px solid ${profit !== null && profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; border-radius: 8px; padding: 12px;">
+            <div style="color: ${profit !== null && profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-size: 11px; margin-bottom: 4px;">💵 Прибыль</div>
+            <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${profit === null ? '—' : fmtTechCardMoney(profit)}</div>
+          </div>`);
+        metrics.push(`
+          <div style="background: #f3e5f5; border: 1px solid #9c27b0; border-radius: 8px; padding: 12px;">
+            <div style="color: #9c27b0; font-size: 11px; margin-bottom: 4px;">📈 Маржа</div>
+            <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${margin === null ? '—' : margin.toFixed(0) + '%'}</div>
+          </div>`);
+      }
+
+      return `
+        <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <span style="font-size: 32px;">${isProduction ? '🏭' : (dish ? (dish.icon || '🍽️') : '🍽️')}</span>
+                <div>
+                  <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">${title}</div>
+                  <div style="color: var(--color-grey-5); font-size: 13px; margin-top: 4px;">
+                    ${isProduction
+                      ? `Выход: ${tc.output_item_name || '—'}, ${tc.output_quantity !== null && tc.output_quantity !== undefined ? parseFloat(tc.output_quantity) : 1} ${tc.output_item_unit || ''}`
+                      : `Блюдо меню: ${tc.menu_item_name || '—'}`}
+                    ${tc.yield_weight ? ' · Выход: ' + parseFloat(tc.yield_weight) + ' г' : ''}
+                  </div>
+                </div>
+              </div>
+              ${tc.cooking_instructions ? `<div style="color: var(--color-text-secondary); font-size: 14px; margin-top: 8px; line-height: 1.5;">${tc.cooking_instructions}</div>` : ''}
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary btn-small" onclick="editRecipe('${tc.id}')">✏️ Изменить</button>
+              <button class="btn btn-danger btn-small" onclick="deleteRecipe('${tc.id}')">🗑️</button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
+            ${metrics.join('')}
+          </div>
+
+          <div style="background: var(--admin-content-bg); border-radius: 12px; padding: 16px;">
+            <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 12px;">📦 Ингредиенты:</div>
+            <div style="display: grid; gap: 8px;">
+              ${ingredients.length === 0
+                ? '<div style="color: var(--color-grey-5); font-size: 13px;">Состав не задан</div>'
+                : ingredients.map(ing => {
+                    const stockItem = stockItems.find(i => String(i.id) === String(ing.inventoryItemId));
+                    const produced = stockItem && stockItem.is_produced;
+                    const waste = parseFloat(ing.wastePercent) || 0;
+                    const qty = parseFloat(ing.quantity) || 0;
+                    const price = ing.costPrice !== null && ing.costPrice !== undefined ? parseFloat(ing.costPrice) : null;
+                    const lineCost = price === null ? null : qty * (1 + waste / 100) * price;
+                    return `
+                      <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--admin-card-bg); border-radius: 8px; gap: 12px; flex-wrap: wrap;">
+                        <span style="color: var(--color-text-primary); font-size: 13px;">${produced ? '🏭 ' : ''}${ing.itemName || '—'}</span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                          <span style="color: var(--color-text-secondary); font-size: 13px; font-weight: 600;">${qty} ${ing.unit || (stockItem ? stockItem.unit : '') || ''}</span>
+                          ${waste > 0 ? `<span style="color: var(--color-warning); font-size: 11px;">потери ${waste}%</span>` : ''}
+                          ${lineCost === null ? '' : `<span style="color: var(--color-primary); font-size: 11px; font-weight: 600;">${fmtTechCardMoney(lineCost)}</span>`}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function renderRecipesManagement() {
       const container = document.getElementById('recipesManagement');
+      if (!container) return;
 
       if (recipes.length === 0) {
         container.innerHTML = `
           <div style="text-align: center; padding: 60px 20px; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px;">
             <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
             <div style="font-size: 18px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 8px;">Техкарты не созданы</div>
-            <div style="color: var(--color-grey-5); margin-bottom: 20px;">Создайте техкарты для автоматического списания ингредиентов</div>
+            <div style="color: var(--color-grey-5); margin-bottom: 20px;">Создайте техкарты для автоматического списания ингредиентов и производства полуфабрикатов</div>
             <button class="btn btn-primary" onclick="openAddRecipeModal()">➕ Создать техкарту</button>
           </div>
         `;
         return;
       }
 
-      container.innerHTML = `
-        <div style="display: grid; gap: 16px;">
-          ${recipes.map(recipe => {
-            const dish = dishes.find(d => d.id === recipe.dishId);
-            const category = dish ? categories.find(c => c.id === dish.category) : null;
-            const dishCost = calculateDishCost(recipe.id);
-            const sellPrice = dish ? dish.price : 0;
-            const profit = sellPrice - dishCost;
-            const profitMargin = sellPrice > 0 ? ((profit / sellPrice) * 100) : 0;
-            const markup = dishCost > 0 ? ((profit / dishCost) * 100) : 0;
+      // Производственные техкарты показываем первыми — они дают полуфабрикаты для блюд
+      const production = recipes.filter(tc => tc.output_item_id);
+      const menuCards = recipes.filter(tc => !tc.output_item_id);
 
-            return `
-              <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-                  <div style="flex: 1;">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                      <span style="font-size: 32px;">${dish ? dish.icon : '🍽️'}</span>
-                      <div>
-                        <div style="font-size: 18px; font-weight: 700; color: var(--color-text-primary);">${recipe.name}</div>
-                        <div style="color: var(--color-grey-5); font-size: 13px; margin-top: 4px;">
-                          ${category ? category.icon + ' ' + category.name : ''}
-                        </div>
-                      </div>
-                    </div>
-                    ${recipe.description ? `<div style="color: var(--color-text-secondary); font-size: 14px; margin-top: 8px; line-height: 1.5;">${recipe.description}</div>` : ''}
-                  </div>
-                  <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-success btn-small" onclick="writeOffIngredients(${recipe.id})" title="Списать ингредиенты">📤 Списать</button>
-                    <button class="btn btn-danger btn-small" onclick="deleteRecipe(${recipe.id})">🗑️</button>
-                  </div>
-                </div>
-
-                <!-- Cost Analysis -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                  <div style="background: var(--color-primary-light); border: 1px solid var(--color-primary); border-radius: 8px; padding: 12px;">
-                    <div style="color: var(--color-primary); font-size: 11px; margin-bottom: 4px;">💰 Себестоимость</div>
-                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${dishCost.toFixed(2)} ₽</div>
-                  </div>
-                  <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px;">
-                    <div style="color: var(--color-text-secondary); font-size: 11px; margin-bottom: 4px;">🏷️ Цена продажи</div>
-                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${sellPrice.toFixed(2)} ₽</div>
-                  </div>
-                  <div style="background: ${profit > 0 ? '#f1f8f4' : '#fef2f2'}; border: 1px solid ${profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; border-radius: 8px; padding: 12px;">
-                    <div style="color: ${profit > 0 ? 'var(--color-success)' : 'var(--color-danger)'}; font-size: 11px; margin-bottom: 4px;">💵 Прибыль</div>
-                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${profit.toFixed(2)} ₽</div>
-                  </div>
-                  <div style="background: #fff8e1; border: 1px solid var(--color-warning); border-radius: 8px; padding: 12px;">
-                    <div style="color: var(--color-warning); font-size: 11px; margin-bottom: 4px;">📊 Наценка</div>
-                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${markup.toFixed(0)}%</div>
-                  </div>
-                  <div style="background: #f3e5f5; border: 1px solid #9c27b0; border-radius: 8px; padding: 12px;">
-                    <div style="color: #9c27b0; font-size: 11px; margin-bottom: 4px;">📈 Маржа</div>
-                    <div style="color: var(--color-text-primary); font-weight: 700; font-size: 18px;">${profitMargin.toFixed(0)}%</div>
-                  </div>
-                </div>
-
-                <div style="background: var(--admin-content-bg); border-radius: 12px; padding: 16px;">
-                  <div style="font-size: 14px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 12px;">📦 Ингредиенты:</div>
-                  <div style="display: grid; gap: 8px;">
-                    ${recipe.ingredients.map(ing => {
-                      const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
-                      const hasEnough = inventoryItem && inventoryItem.quantity >= ing.quantity;
-                      const ingredientCost = inventoryItem && inventoryItem.costPrice ? (ing.quantity * inventoryItem.costPrice) : 0;
-
-                      return `
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--admin-card-bg); border-radius: 8px;">
-                          <span style="color: var(--color-text-primary); font-size: 13px;">${ing.name}</span>
-                          <div style="display: flex; align-items: center; gap: 12px;">
-                            <span style="color: var(--color-text-secondary); font-size: 13px; font-weight: 600;">${ing.quantity} ${ing.unit}</span>
-                            ${inventoryItem && inventoryItem.costPrice ? `<span style="color: var(--color-primary); font-size: 11px; font-weight: 600;">${ingredientCost.toFixed(2)} ₽</span>` : ''}
-                            ${hasEnough
-                              ? `<span style="color: var(--color-success); font-size: 11px;">✅ ${inventoryItem.quantity} ${ing.unit}</span>`
-                              : `<span style="color: var(--color-danger); font-size: 11px;">⚠️ ${inventoryItem ? inventoryItem.quantity : 0} ${ing.unit}</span>`
-                            }
-                          </div>
-                        </div>
-                      `;
-                    }).join('')}
-                  </div>
-                </div>
-              </div>
-            `;
-          }).join('')}
+      const section = (title, hint, cards) => cards.length === 0 ? '' : `
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin: 8px 0 4px;">${title}</div>
+          <div style="color: var(--color-grey-5); font-size: 13px; margin-bottom: 12px;">${hint}</div>
+          <div style="display: grid; gap: 16px;">${cards.map(renderTechCard).join('')}</div>
         </div>
       `;
-    }
 
-    function writeOffIngredients(recipeId) {
-      const recipe = recipes.find(r => r.id === recipeId);
-      if (!recipe) return;
-
-      const dish = dishes.find(d => d.id === recipe.dishId);
-
-      // Check if all ingredients are available
-      const insufficientIngredients = [];
-      recipe.ingredients.forEach(ing => {
-        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
-        if (!inventoryItem || inventoryItem.quantity < ing.quantity) {
-          insufficientIngredients.push(ing.name);
-        }
-      });
-
-      if (insufficientIngredients.length > 0) {
-        showNotification(`⚠️ Недостаточно: ${insufficientIngredients.join(', ')}`);
-        return;
-      }
-
-      // Write off ingredients
-      recipe.ingredients.forEach(ing => {
-        const inventoryItem = inventory.find(i => i.id === ing.inventoryId);
-        if (inventoryItem) {
-          inventoryItem.quantity -= ing.quantity;
-        }
-      });
-
-      saveData();
-      renderRecipesManagement();
-      showNotification(`✅ Ингредиенты списаны для "${dish ? dish.name : recipe.name}"`);
-    }
-
-    function deleteRecipe(recipeId) {
-      if (!confirm('Удалить техкарту?')) return;
-
-      recipes = recipes.filter(r => r.id !== recipeId);
-      saveData();
-      renderRecipesManagement();
-      showNotification('🗑️ Техкарта удалена');
-    }
-
-    // Load sample recipes
-    function loadSampleRecipes() {
-      if (recipes.length > 0) {
-        if (!confirm('Загрузить образцы техкарт? Существующие техкарты не будут удалены.')) return;
-      }
-
-      const sampleRecipes = [
-        {
-          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 1 : 1,
-          dishId: 1, // Маргарита
-          name: 'Техкарта: Маргарита',
-          description: 'Раскатать тесто, нанести соус, выложить моцареллу, базилик. Выпекать 12 минут при 250°C.',
-          ingredients: [
-            { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
-            { inventoryId: 2, name: 'Моцарелла', quantity: 150, unit: 'г' },
-            { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
-            { inventoryId: 4, name: 'Базилик', quantity: 5, unit: 'г' }
-          ],
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 2 : 2,
-          dishId: 2, // Пепперони
-          name: 'Техкарта: Пепперони',
-          description: 'Раскатать тесто, нанести соус, выложить моцареллу и салями. Выпекать 12 минут при 250°C.',
-          ingredients: [
-            { inventoryId: 1, name: 'Тесто для пиццы', quantity: 300, unit: 'г' },
-            { inventoryId: 2, name: 'Моцарелла', quantity: 130, unit: 'г' },
-            { inventoryId: 3, name: 'Томатный соус', quantity: 80, unit: 'мл' },
-            { inventoryId: 5, name: 'Салями Пепперони', quantity: 80, unit: 'г' }
-          ],
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 3 : 3,
-          dishId: 3, // Филадельфия
-          name: 'Техкарта: Филадельфия',
-          description: 'Приготовить рис, выложить на нори, добавить лосось и сливочный сыр, свернуть ролл.',
-          ingredients: [
-            { inventoryId: 7, name: 'Рис для суши', quantity: 120, unit: 'г' },
-            { inventoryId: 8, name: 'Нори', quantity: 2, unit: 'шт' },
-            { inventoryId: 6, name: 'Лосось свежий', quantity: 80, unit: 'г' },
-            { inventoryId: 9, name: 'Сливочный сыр', quantity: 60, unit: 'г' }
-          ],
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 4 : 4,
-          dishId: 5, // Чизбургер
-          name: 'Техкарта: Чизбургер',
-          description: 'Обжарить котлету, разрезать булочку, выложить салат, котлету, сыр. Подать горячим.',
-          ingredients: [
-            { inventoryId: 10, name: 'Говяжья котлета', quantity: 1, unit: 'шт' },
-            { inventoryId: 11, name: 'Булочка для бургера', quantity: 1, unit: 'шт' },
-            { inventoryId: 12, name: 'Салат Айсберг', quantity: 30, unit: 'г' },
-            { inventoryId: 2, name: 'Моцарелла', quantity: 40, unit: 'г' }
-          ],
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: recipes.length > 0 ? Math.max(...recipes.map(r => r.id)) + 5 : 5,
-          dishId: 6, // Цезарь
-          name: 'Техкарта: Цезарь',
-          description: 'Обжарить куриное филе, нарезать салат, добавить сыр. Заправить соусом Цезарь.',
-          ingredients: [
-            { inventoryId: 13, name: 'Куриное филе', quantity: 150, unit: 'г' },
-            { inventoryId: 12, name: 'Салат Айсберг', quantity: 100, unit: 'г' },
-            { inventoryId: 2, name: 'Моцарелла', quantity: 50, unit: 'г' }
-          ],
-          createdAt: new Date().toISOString()
-        }
-      ];
-
-      // Filter out recipes for dishes that already have recipes
-      const newRecipes = sampleRecipes.filter(sample =>
-        !recipes.some(existing => existing.dishId === sample.dishId)
-      );
-
-      if (newRecipes.length === 0) {
-        showNotification('ℹ️ Все образцы уже загружены');
-        return;
-      }
-
-      recipes.push(...newRecipes);
-      saveData();
-      renderRecipesManagement();
-      renderDishes(); // Update dishes view to show cost info
-      showNotification(`✅ Загружено техкарт: ${newRecipes.length}`);
+      container.innerHTML =
+        section('🏭 Производственные техкарты (полуфабрикаты)', 'Дают товар склада на выходе — доступны на экране производства', production) +
+        section('🍽️ Техкарты блюд меню', 'Списывают ингредиенты при продаже блюда', menuCards);
     }
 
     // Cost Prices Management
@@ -2991,7 +3022,12 @@ AUTH.requireAuth();
     }
 
     // Initialize
-    initializeData();
+    initializeData().then(() => {
+      renderCategories();
+      renderDishes();
+      // Техкарты всегда из API — подтягиваем сразу, чтобы в карточках блюд была себестоимость
+      return loadTechCards();
+    }).catch(e => console.error('Ошибка инициализации:', e));
     renderCategories();
     renderDishes();
   </script>

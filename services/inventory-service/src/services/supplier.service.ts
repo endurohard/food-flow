@@ -92,7 +92,9 @@ export class SupplierService {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await this.pool.query(
-      `SELECT si.*, s.name as supplier_name, w.name as warehouse_name
+      `SELECT si.*, s.name as supplier_name, w.name as warehouse_name,
+              (SELECT COUNT(*) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_count,
+              (SELECT COALESCE(SUM(sii.total_price), 0) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_total
        FROM supply_invoices si
        LEFT JOIN suppliers s ON si.supplier_id = s.id
        LEFT JOIN warehouses w ON si.warehouse_id = w.id
@@ -117,13 +119,49 @@ export class SupplierService {
   }
 
   async addInvoiceItem(invoiceId: string, data: any): Promise<any> {
-    const result = await this.pool.query(
-      `INSERT INTO supply_invoice_items (invoice_id, inventory_item_id, name, quantity, unit, price_per_unit, total_price)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [invoiceId, data.inventoryItemId || null, data.name, data.quantity,
-       data.unit || null, data.pricePerUnit || null, data.totalPrice || null]
-    );
-    return result.rows[0];
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Нельзя менять состав уже принятой накладной: товар оприходован,
+      // долг поставщику посчитан — добавление позиции разъехалось бы с остатком.
+      const inv = await client.query(
+        `SELECT status FROM supply_invoices WHERE id = $1 FOR UPDATE`,
+        [invoiceId]
+      );
+      if (!inv.rows[0]) throw new Error('Invoice not found');
+      if (inv.rows[0].status === 'received') {
+        throw new Error('Invoice already confirmed — состав изменить нельзя');
+      }
+
+      const result = await client.query(
+        `INSERT INTO supply_invoice_items (invoice_id, inventory_item_id, name, quantity, unit, price_per_unit, total_price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [invoiceId, data.inventoryItemId || null, data.name, data.quantity,
+         data.unit || null, data.pricePerUnit || null, data.totalPrice || null]
+      );
+
+      // Сумма накладной пересчитывается по позициям: именно по total_amount
+      // при приёмке растёт долг поставщику, и расхождение дало бы неверный долг.
+      await client.query(
+        `UPDATE supply_invoices
+         SET total_amount = (
+               SELECT COALESCE(SUM(total_price), 0)
+               FROM supply_invoice_items WHERE invoice_id = $1
+             ),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [invoiceId]
+      );
+
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async getInvoiceItems(invoiceId: string): Promise<any[]> {

@@ -69,10 +69,64 @@ export class TechCardService {
     return { ...result.rows[0], ingredients: ingredients.rows };
   }
 
+  /**
+   * Проверка, что полуфабрикат не попадёт в состав сам себя
+   * (прямо или через цепочку: соус → бургер → соус).
+   * Без неё расчёт себестоимости и производство уходят в рекурсию.
+   *
+   * Обход вверх по графу: ищем, не производится ли какой-то из ингредиентов
+   * из outputItemId по цепочке производственных техкарт.
+   */
+  private async assertNoCycle(
+    client: any,
+    outputItemId: string | null | undefined,
+    ingredientItemIds: string[]
+  ): Promise<void> {
+    if (!outputItemId || ingredientItemIds.length === 0) return;
+
+    // Прямой случай: товар сам у себя в составе
+    if (ingredientItemIds.includes(outputItemId)) {
+      throw new Error('Полуфабрикат не может входить в состав сам себя');
+    }
+
+    // Транзитивный случай: BFS по рёбрам «ингредиент ← выход техкарты»
+    const visited = new Set<string>(ingredientItemIds);
+    let frontier = [...ingredientItemIds];
+
+    while (frontier.length > 0) {
+      const parents = await client.query(
+        `SELECT DISTINCT tci.inventory_item_id
+         FROM tech_cards tc
+         INNER JOIN tech_card_ingredients tci ON tci.tech_card_id = tc.id
+         WHERE tc.output_item_id = ANY($1::uuid[]) AND tc.is_active = true`,
+        [frontier]
+      );
+
+      const next: string[] = [];
+      for (const row of parents.rows) {
+        const id = row.inventory_item_id;
+        if (id === outputItemId) {
+          throw new Error(
+            'Циклическая техкарта: этот полуфабрикат уже используется ' +
+            'в производстве одного из своих ингредиентов'
+          );
+        }
+        if (!visited.has(id)) {
+          visited.add(id);
+          next.push(id);
+        }
+      }
+      frontier = next;
+    }
+  }
+
   async create(data: any, enterpriseId?: string): Promise<any> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      const ingredientIds: string[] = (data.ingredients || []).map((i: any) => i.inventoryItemId);
+      await this.assertNoCycle(client, data.outputItemId, ingredientIds);
 
       const tcResult = await client.query(
         `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name, output_item_id, output_quantity)
@@ -112,7 +166,7 @@ export class TechCardService {
       const ownConds = ['id = $1'];
       const ownVals: any[] = [techCardId];
       if (enterpriseId) { ownConds.push('enterprise_id = $2'); ownVals.push(enterpriseId); }
-      const owned = await client.query(`SELECT id FROM tech_cards WHERE ${ownConds.join(' AND ')} FOR UPDATE`, ownVals);
+      const owned = await client.query(`SELECT id, output_item_id FROM tech_cards WHERE ${ownConds.join(' AND ')} FOR UPDATE`, ownVals);
       if (!owned.rows[0]) {
         await client.query('ROLLBACK');
         return null;
@@ -138,6 +192,13 @@ export class TechCardService {
 
       // Replace ingredients if provided
       if (data.ingredients) {
+        // Защита от цикла: берём итоговый outputItemId (новый или текущий)
+        const effectiveOutput = data.outputItemId !== undefined
+          ? data.outputItemId
+          : owned.rows[0].output_item_id;
+        const ingredientIds: string[] = data.ingredients.map((i: any) => i.inventoryItemId);
+        await this.assertNoCycle(client, effectiveOutput, ingredientIds);
+
         await client.query('DELETE FROM tech_card_ingredients WHERE tech_card_id = $1', [techCardId]);
         for (const ing of data.ingredients) {
           await client.query(

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { InventoryService } from '../services/inventory.service';
-import { authenticateUser, requireRole } from '../middleware/auth.middleware';
+import { authenticateUser, authenticateInternal, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
@@ -246,6 +246,46 @@ router.get('/expiring', authenticateUser, requireRole('admin', 'owner', 'manager
     return res.json({ items });
   } catch (error) {
     console.error('Get expiring items error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Списание ингредиентов по техкартам при продаже блюда.
+// Вызывается order-service при закрытии заказа (internal-token) либо
+// вручную менеджером. Идемпотентно по orderId.
+router.post('/deduct-by-order', authenticateInternal, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const schema = Joi.object({
+      orderId: Joi.string().uuid().required(),
+      warehouseId: Joi.string().uuid().required(),
+      // При internal-вызове тенант приходит в теле: JWT пользователя нет
+      enterpriseId: Joi.string().uuid().optional(),
+      performedBy: Joi.string().uuid().optional()
+    });
+    const { error, value } = schema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    const isSuper = req.userRole === 'super_admin';
+    const enterpriseId = req.isInternal
+      ? value.enterpriseId
+      : (isSuper ? undefined : req.enterpriseId);
+    if (!req.isInternal && !isSuper && !enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+
+    const result = await inventoryService.deductByTechCards(
+      value.orderId,
+      value.warehouseId,
+      value.performedBy || req.userId,
+      enterpriseId
+    );
+    return res.json(result);
+  } catch (error: any) {
+    if (error.message && (error.message.includes('Недостаточно') ||
+        error.message.includes('Insufficient') || error.message.includes('not found'))) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Deduct by tech cards error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

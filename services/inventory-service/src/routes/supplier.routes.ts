@@ -148,7 +148,10 @@ router.post('/invoices/:id/items', authenticateUser, async (req: Request, res: R
     }
     const item = await supplierService.addInvoiceItem(req.params.id, req.body);
     return res.status(201).json({ item });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message && (error.message.includes('already confirmed') || error.message.includes('not found'))) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Add invoice item error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }

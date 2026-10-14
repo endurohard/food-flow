@@ -304,7 +304,22 @@ export class InventoryService {
 
   // ========== AUTO-DEDUCTION (for order completion) ==========
 
-  async deductByTechCards(orderId: string, warehouseId: string, performedBy?: string, enterpriseId?: string): Promise<void> {
+  /**
+   * Списание ингредиентов по техкартам при продаже блюда.
+   *
+   * Списывает через FIFO-партии, поэтому себестоимость самостоятельно
+   * произведённых полуфабрикатов (например, свой соус в бургере) берётся
+   * по фактической цене выпуска, а не по нулю.
+   *
+   * Идемпотентно: повторный вызов для того же orderId ничего не списывает
+   * (проверка по stock_movements с reference_type = 'order').
+   */
+  async deductByTechCards(
+    orderId: string,
+    warehouseId: string,
+    performedBy?: string,
+    enterpriseId?: string
+  ): Promise<{ deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }>; skipped: string[] }> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -320,6 +335,19 @@ export class InventoryService {
         }
       }
 
+      // Защита от двойного списания: заказ мог уже быть проведён
+      // (повторный переход статуса, retry из order-service).
+      const already = await client.query(
+        `SELECT 1 FROM stock_movements
+         WHERE reference_type = 'order' AND reference_id = $1 AND movement_type = 'sale'
+         LIMIT 1`,
+        [orderId]
+      );
+      if (already.rowCount && already.rowCount > 0) {
+        await client.query('COMMIT');
+        return { deducted: [], skipped: ['already_deducted'] };
+      }
+
       // Get order items with their menu_item_ids
       const orderItems = await client.query(
         `SELECT oi.menu_item_id, oi.quantity
@@ -327,19 +355,51 @@ export class InventoryService {
         [orderId]
       );
 
+      const deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }> = [];
+      const skipped: string[] = [];
+
       for (const orderItem of orderItems.rows) {
         // Get tech card ingredients for this menu item
         const ingredients = await client.query(
-          `SELECT tci.inventory_item_id, tci.quantity, tci.waste_percent
+          `SELECT tci.inventory_item_id, tci.quantity, tci.waste_percent, tci.is_optional,
+                  ii.name AS item_name
            FROM tech_card_ingredients tci
            INNER JOIN tech_cards tc ON tci.tech_card_id = tc.id
+           INNER JOIN inventory_items ii ON tci.inventory_item_id = ii.id
            WHERE tc.menu_item_id = $1 AND tc.is_active = true`,
           [orderItem.menu_item_id]
         );
 
+        // У блюда нет техкарты — списывать нечего, это не ошибка
+        if (ingredients.rowCount === 0) {
+          skipped.push(`menu_item ${orderItem.menu_item_id}: no tech card`);
+          continue;
+        }
+
         for (const ing of ingredients.rows) {
           const wasteFactor = 1 + (parseFloat(ing.waste_percent) || 0) / 100;
           const totalQty = parseFloat(ing.quantity) * orderItem.quantity * wasteFactor;
+
+          // FIFO-списание: даёт фактическую себестоимость партии.
+          // Для своих полуфабрикатов это цена выпуска из production_runs.
+          let cost = 0;
+          try {
+            const fifo = await this.deductFIFO(warehouseId, ing.inventory_item_id, totalQty, client);
+            cost = fifo.batches.reduce(
+              (sum: number, b: any) => sum + parseFloat(b.deducted) * (parseFloat(b.costPrice) || 0),
+              0
+            );
+          } catch (fifoError: any) {
+            // Необязательный ингредиент можно пропустить, обязательный — нет
+            if (ing.is_optional) {
+              skipped.push(`${ing.item_name}: ${fifoError.message}`);
+              continue;
+            }
+            throw new Error(
+              `Недостаточно «${ing.item_name}» для списания по техкарте ` +
+              `(нужно ${totalQty.toFixed(3)}): ${fifoError.message}`
+            );
+          }
 
           // Deduct from stock ATOMICALLY: fail if not enough or row missing.
           // Guarantees stock can never go negative even under concurrent orders.
@@ -359,15 +419,22 @@ export class InventoryService {
 
           // Record movement
           await client.query(
-            `INSERT INTO stock_movements (warehouse_id, inventory_item_id, movement_type, quantity,
-              reference_type, reference_id, performed_by)
-             VALUES ($1, $2, 'sale', $3, 'order', $4, $5)`,
-            [warehouseId, ing.inventory_item_id, totalQty, orderId, performedBy || null]
+            `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type,
+              quantity, cost_price, reference_type, reference_id, performed_by, notes)
+             VALUES ($1, $2, $3, 'sale', $4, $5, 'order', $6, $7, $8)`,
+            [
+              enterpriseId || null, warehouseId, ing.inventory_item_id, totalQty,
+              totalQty > 0 ? cost / totalQty : 0, orderId, performedBy || null,
+              `Списание по техкарте: ${ing.item_name}`
+            ]
           );
+
+          deducted.push({ inventoryItemId: ing.inventory_item_id, quantity: totalQty, cost });
         }
       }
 
       await client.query('COMMIT');
+      return { deducted, skipped };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

@@ -1295,6 +1295,7 @@ AUTH.requireAuth();
       <button class="tab" onclick="switchTab('production')">🏭 Производство</button>
       <button class="tab" onclick="switchTab('wholesale')">📤 Опт и отгрузка</button>
       <button class="tab" onclick="switchTab('suppliers')">🏢 Поставщики</button>
+      <button class="tab" onclick="switchTab('invoices')">📄 Накладные</button>
       <button class="tab" onclick="switchTab('orders')">📋 История заказов</button>
       <button class="tab" onclick="switchTab('reports')">📊 Отчёты</button>
     </div>
@@ -1494,6 +1495,74 @@ AUTH.requireAuth();
       </div>
     </div>
 
+    <!-- Invoices Tab — накладные от поставщиков -->
+    <div id="invoicesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">📄 Накладные от поставщиков</h2>
+        <button class="btn btn-primary" onclick="openNewInvoiceModal()">➕ Новая накладная</button>
+      </div>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-icon total">📄</div>
+          <div class="stat-info">
+            <div class="stat-label">Всего накладных</div>
+            <div class="stat-value" id="totalInvoices">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon in-stock">📥</div>
+          <div class="stat-info">
+            <div class="stat-label">Принято на склад</div>
+            <div class="stat-value" id="receivedInvoices">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-info" style="flex: 1;">
+            <div class="stat-label">Сумма принятых накладных</div>
+            <div class="stat-value" id="receivedInvoicesAmount">0 ₽</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
+        <div class="form-group" style="margin-bottom:0;min-width:200px;">
+          <label class="form-label">Поставщик:</label>
+          <select class="form-select" id="invoiceFilterSupplier" onchange="loadSupplierInvoices()">
+            <option value="">Все поставщики</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;min-width:180px;">
+          <label class="form-label">Статус:</label>
+          <select class="form-select" id="invoiceFilterStatus" onchange="loadSupplierInvoices()">
+            <option value="">Все статусы</option>
+            <option value="draft">Черновик</option>
+            <option value="received">Принята</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Номер</th>
+              <th>Дата</th>
+              <th>Поставщик</th>
+              <th>Склад</th>
+              <th>Сумма</th>
+              <th>Позиций</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="invoicesTableBody">
+            <tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Orders Tab -->
     <div id="ordersTab" class="tab-content">
       <div style="display: flex; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
@@ -1569,6 +1638,119 @@ AUTH.requireAuth();
             <!-- Critical items will be rendered here -->
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка: новая накладная от поставщика -->
+  <div class="modal" id="invoiceModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Новая накладная</h2>
+        <button class="close-btn" onclick="closeInvoiceModal()">&times;</button>
+      </div>
+      <form id="invoiceForm" onsubmit="submitInvoice(event)">
+        <div class="form-group">
+          <label class="form-label">Поставщик:</label>
+          <select class="form-select" id="invoiceSupplier" required>
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Склад приёмки:</label>
+          <select class="form-select" id="invoiceWarehouse" required>
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Номер накладной:</label>
+            <input type="text" class="form-input" id="invoiceNumber" maxlength="100" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дата накладной:</label>
+            <input type="date" class="form-input" id="invoiceDate" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Комментарий (необязательно):</label>
+            <input type="text" class="form-input" id="invoiceNotes">
+          </div>
+        </div>
+        <div class="form-group" style="color:var(--color-text-secondary);font-size:13px;">
+          Сумма накладной считается автоматически по добавленным позициям —
+          именно на неё вырастет долг поставщику при приёмке.
+        </div>
+        <div id="invoiceError" style="color:var(--color-danger);font-size:13px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn" onclick="closeInvoiceModal()">Отмена</button>
+          <button type="submit" class="btn btn-primary">📄 Создать накладную</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модалка: позиции накладной -->
+  <div class="modal" id="invoiceItemsModal">
+    <div class="modal-content" style="max-width:860px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="invoiceItemsTitle">Позиции накладной</h2>
+        <button class="close-btn" onclick="closeInvoiceItemsModal()">&times;</button>
+      </div>
+
+      <div class="table-wrapper" style="margin-bottom:16px;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Товар</th>
+              <th>Количество</th>
+              <th>Цена за ед.</th>
+              <th>Сумма</th>
+            </tr>
+          </thead>
+          <tbody id="invoiceItemsBody">
+            <tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-bottom:16px;font-weight:700;color:var(--color-text-primary);">
+        Итого по позициям: <span id="invoiceItemsTotal">0 ₽</span>
+      </div>
+
+      <!-- Форма добавления позиции: скрыта для принятой накладной -->
+      <form id="invoiceItemForm" onsubmit="submitInvoiceItem(event)" style="border-top:1px solid var(--admin-border);padding-top:16px;">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;">➕ Добавить позицию</h3>
+        <div class="form-group">
+          <label class="form-label">Товар:</label>
+          <select class="form-select" id="invoiceItemProduct" required onchange="prefillInvoiceItemPrice()">
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Количество:</label>
+            <input type="number" class="form-input" id="invoiceItemQty" step="0.001" min="0.001" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Цена за единицу, ₽:</label>
+            <input type="number" class="form-input" id="invoiceItemPrice" step="0.01" min="0" required>
+          </div>
+        </div>
+        <div id="invoiceItemError" style="color:var(--color-danger);font-size:13px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="submit" class="btn btn-secondary">➕ Добавить позицию</button>
+        </div>
+      </form>
+
+      <div id="invoiceItemsReadonlyHint" style="display:none;color:var(--color-text-secondary);font-size:13px;border-top:1px solid var(--admin-border);padding-top:16px;">
+        Накладная принята на склад — позиции доступны только для просмотра.
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
+        <button type="button" class="btn" onclick="closeInvoiceItemsModal()">Закрыть</button>
+        <button type="button" class="btn btn-primary" id="invoiceConfirmBtn" onclick="confirmInvoiceFromModal()">📥 Принять на склад</button>
       </div>
     </div>
   </div>
@@ -1941,6 +2123,7 @@ AUTH.requireAuth();
       else if (tab === 'orders') renderOrders();
       else if (tab === 'reports') renderReports();
       else if (tab === 'production') loadProductionRuns();
+      else if (tab === 'invoices') loadSupplierInvoices();
     }
 
     function getItemStatus(item) {
@@ -2659,6 +2842,362 @@ AUTH.requireAuth();
         await reloadInventoryFromAPI();
       } catch (e) {
         alert('Ошибка: ' + e.message);
+      }
+    }
+
+    // ── Накладные от поставщиков (реальный API /api/suppliers/invoices) ──
+    let supplierInvoices = [];          // список накладных
+    let invoiceItemsCache = [];         // позиции открытой накладной
+    let currentInvoice = null;          // открытая накладная
+    let invoiceInventoryItems = [];     // товары для выбора в позиции
+    let invoiceSuppliersLoaded = false; // фильтр по поставщикам заполнен
+
+    // Единый разбор ошибки API: отдаём текст из error/message, молча не глотаем
+    async function invoiceApiError(res) {
+      const data = await res.json().catch(() => ({}));
+      return new Error(data.error || data.message || ('HTTP ' + res.status));
+    }
+
+    async function loadSupplierInvoices() {
+      const tbody = document.getElementById('invoicesTableBody');
+      try {
+        if (!invoiceSuppliersLoaded) await fillInvoiceSupplierFilter();
+
+        const params = new URLSearchParams();
+        const supplierId = document.getElementById('invoiceFilterSupplier').value;
+        const status = document.getElementById('invoiceFilterStatus').value;
+        if (supplierId) params.set('supplierId', supplierId);
+        if (status) params.set('status', status);
+        const qs = params.toString();
+
+        const res = await AUTH.fetch('/api/suppliers/invoices' + (qs ? '?' + qs : ''));
+        if (!res.ok) throw await invoiceApiError(res);
+        const data = await res.json();
+        supplierInvoices = data.invoices || [];
+        renderSupplierInvoices();
+        fillInvoiceItemsCounts();
+      } catch (e) {
+        supplierInvoices = [];
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-danger);">Ошибка загрузки накладных: ' + e.message + '</td></tr>';
+      }
+    }
+
+    // Заполняем фильтр поставщиков из /api/suppliers
+    async function fillInvoiceSupplierFilter() {
+      const res = await AUTH.fetch('/api/suppliers');
+      if (!res.ok) throw await invoiceApiError(res);
+      const data = await res.json();
+      const list = data.suppliers || [];
+      document.getElementById('invoiceFilterSupplier').innerHTML =
+        '<option value="">Все поставщики</option>' +
+        list.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      invoiceSuppliersLoaded = true;
+    }
+
+    function renderSupplierInvoices() {
+      const tbody = document.getElementById('invoicesTableBody');
+      const received = supplierInvoices.filter(i => i.status === 'received');
+
+      document.getElementById('totalInvoices').textContent = supplierInvoices.length;
+      document.getElementById('receivedInvoices').textContent = received.length;
+      document.getElementById('receivedInvoicesAmount').textContent =
+        received.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0)
+          .toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
+
+      if (!supplierInvoices.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Накладных пока нет — создайте накладную от поставщика</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = supplierInvoices.map(inv => {
+        const isReceived = inv.status === 'received';
+        const statusHtml = isReceived
+          ? '<span style="color:var(--color-success);">Принята</span>'
+          : '<span style="color:var(--color-text-secondary);">Черновик</span>';
+        const dateText = inv.invoice_date
+          ? new Date(inv.invoice_date).toLocaleDateString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric'})
+          : '—';
+        const itemsCount = inv.items_count !== undefined && inv.items_count !== null
+          ? inv.items_count
+          : '<span class="invoice-items-count" data-invoice="' + inv.id + '" style="color:var(--color-text-secondary);">…</span>';
+        const actions = isReceived
+          ? `<button class="btn btn-small" onclick="openInvoiceItemsModal('${inv.id}')">👁 Позиции</button>`
+          : `<button class="btn btn-small btn-secondary" onclick="openInvoiceItemsModal('${inv.id}')">📝 Позиции</button>
+             <button class="btn btn-small btn-primary" onclick="confirmSupplierInvoice('${inv.id}')">📥 Принять</button>`;
+        return `<tr${isReceived ? '' : ' style="opacity:.85"'}>
+          <td><strong>${inv.invoice_number || '—'}</strong></td>
+          <td>${dateText}</td>
+          <td>${inv.supplier_name || '—'}</td>
+          <td>${inv.warehouse_name || '—'}</td>
+          <td>${(parseFloat(inv.total_amount) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td>${itemsCount}</td>
+          <td>${statusHtml}</td>
+          <td style="white-space:nowrap;">${actions}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Создание накладной ──
+
+    async function openNewInvoiceModal() {
+      document.getElementById('invoiceError').textContent = '';
+      document.getElementById('invoiceForm').reset();
+      // По умолчанию — сегодняшняя дата
+      document.getElementById('invoiceDate').value = new Date().toISOString().slice(0, 10);
+
+      try {
+        const [supRes, whRes] = await Promise.all([
+          AUTH.fetch('/api/suppliers'),
+          AUTH.fetch('/api/inventory/warehouses')
+        ]);
+        if (!supRes.ok) throw await invoiceApiError(supRes);
+        if (!whRes.ok) throw await invoiceApiError(whRes);
+        const supData = await supRes.json();
+        const whData = await whRes.json();
+
+        const sups = supData.suppliers || [];
+        document.getElementById('invoiceSupplier').innerHTML =
+          '<option value="">Выберите поставщика</option>' +
+          sups.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+        const whs = whData.warehouses || [];
+        document.getElementById('invoiceWarehouse').innerHTML =
+          whs.length
+            ? whs.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
+            : '<option value="">Нет складов</option>';
+      } catch (e) {
+        document.getElementById('invoiceError').textContent = 'Ошибка загрузки данных: ' + e.message;
+      }
+
+      document.getElementById('invoiceModal').classList.add('active');
+    }
+
+    function closeInvoiceModal() {
+      document.getElementById('invoiceModal').classList.remove('active');
+    }
+
+    async function submitInvoice(event) {
+      event.preventDefault();
+      const errEl = document.getElementById('invoiceError');
+      errEl.textContent = '';
+      try {
+        // Имена полей — по схеме createInvoice в supplier.service.ts
+        const res = await AUTH.fetch('/api/suppliers/invoices', {
+          method: 'POST',
+          body: JSON.stringify({
+            supplierId: document.getElementById('invoiceSupplier').value,
+            warehouseId: document.getElementById('invoiceWarehouse').value,
+            invoiceNumber: document.getElementById('invoiceNumber').value.trim(),
+            invoiceDate: document.getElementById('invoiceDate').value,
+            // total_amount пересчитывается на бэкенде при добавлении позиций
+            totalAmount: 0,
+            notes: document.getElementById('invoiceNotes').value.trim() || undefined
+          })
+        });
+        if (!res.ok) throw await invoiceApiError(res);
+        const data = await res.json();
+        closeInvoiceModal();
+        showNotification('📄 Накладная создана — добавьте позиции');
+        await loadSupplierInvoices();
+        // Сразу открываем позиции созданной накладной
+        if (data.invoice && data.invoice.id) await openInvoiceItemsModal(data.invoice.id);
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    // ── Позиции накладной ──
+
+    async function openInvoiceItemsModal(invoiceId) {
+      currentInvoice = supplierInvoices.find(i => i.id === invoiceId) || { id: invoiceId, status: 'draft' };
+      const isReceived = currentInvoice.status === 'received';
+
+      document.getElementById('invoiceItemError').textContent = '';
+      document.getElementById('invoiceItemForm').reset();
+      document.getElementById('invoiceItemsTitle').textContent =
+        'Позиции накладной' + (currentInvoice.invoice_number ? ' № ' + currentInvoice.invoice_number : '')
+        + (isReceived ? ' (принята)' : '');
+
+      // Принятую накладную только смотрим: форма добавления и приёмка скрыты
+      document.getElementById('invoiceItemForm').style.display = isReceived ? 'none' : 'block';
+      document.getElementById('invoiceItemsReadonlyHint').style.display = isReceived ? 'block' : 'none';
+      document.getElementById('invoiceConfirmBtn').style.display = isReceived ? 'none' : 'inline-block';
+
+      document.getElementById('invoiceItemsModal').classList.add('active');
+
+      if (!isReceived) await loadInvoiceProductOptions();
+      await loadInvoiceItems(invoiceId);
+    }
+
+    function closeInvoiceItemsModal() {
+      document.getElementById('invoiceItemsModal').classList.remove('active');
+      currentInvoice = null;
+    }
+
+    // Товары для выбора в позиции накладной
+    async function loadInvoiceProductOptions() {
+      const sel = document.getElementById('invoiceItemProduct');
+      try {
+        const res = await AUTH.fetch('/api/inventory/items');
+        if (!res.ok) throw await invoiceApiError(res);
+        const data = await res.json();
+        invoiceInventoryItems = data.items || [];
+        sel.innerHTML = '<option value="">Выберите товар</option>' +
+          invoiceInventoryItems.map(i => `<option value="${i.id}">${i.name}${i.unit ? ' (' + i.unit + ')' : ''}</option>`).join('');
+      } catch (e) {
+        invoiceInventoryItems = [];
+        sel.innerHTML = '<option value="">Ошибка загрузки товаров</option>';
+        document.getElementById('invoiceItemError').textContent = 'Ошибка загрузки товаров: ' + e.message;
+      }
+    }
+
+    // Подставляем последнюю закупочную цену товара как подсказку
+    function prefillInvoiceItemPrice() {
+      const id = document.getElementById('invoiceItemProduct').value;
+      const item = invoiceInventoryItems.find(i => i.id === id);
+      const priceEl = document.getElementById('invoiceItemPrice');
+      if (item && !priceEl.value) {
+        const cost = parseFloat(item.cost_price);
+        if (cost > 0) priceEl.value = cost;
+      }
+    }
+
+    async function loadInvoiceItems(invoiceId) {
+      const tbody = document.getElementById('invoiceItemsBody');
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + invoiceId + '/items');
+        if (!res.ok) throw await invoiceApiError(res);
+        const data = await res.json();
+        invoiceItemsCache = data.items || [];
+        renderInvoiceItems();
+      } catch (e) {
+        invoiceItemsCache = [];
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--color-danger);">Ошибка загрузки позиций: ' + e.message + '</td></tr>';
+        document.getElementById('invoiceItemsTotal').textContent = '0 ₽';
+      }
+    }
+
+    function renderInvoiceItems() {
+      const tbody = document.getElementById('invoiceItemsBody');
+      if (!invoiceItemsCache.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Позиций пока нет — добавьте товары из накладной</td></tr>';
+        document.getElementById('invoiceItemsTotal').textContent = '0 ₽';
+        return;
+      }
+
+      let total = 0;
+      tbody.innerHTML = invoiceItemsCache.map(it => {
+        const qty = parseFloat(it.quantity) || 0;
+        const price = parseFloat(it.price_per_unit) || 0;
+        const sum = it.total_price !== null && it.total_price !== undefined
+          ? (parseFloat(it.total_price) || 0)
+          : qty * price;
+        total += sum;
+        return `<tr>
+          <td><strong>${it.inventory_item_name || it.name || '—'}</strong></td>
+          <td>${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${it.unit || ''}</td>
+          <td>${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td>${sum.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('invoiceItemsTotal').textContent =
+        total.toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽';
+    }
+
+    // Количество позиций приходит из API (items_count) — догрузка не нужна.
+    // Функция оставлена как подстраховка на случай старой версии бэкенда.
+    async function fillInvoiceItemsCounts() {
+      const cells = Array.from(document.querySelectorAll('#invoicesTableBody .invoice-items-count'))
+        .filter(c => c.textContent === '…');
+      for (const cell of cells) {
+        const id = cell.getAttribute('data-invoice');
+        try {
+          const res = await AUTH.fetch('/api/suppliers/invoices/' + id + '/items');
+          if (!res.ok) throw await invoiceApiError(res);
+          const data = await res.json();
+          cell.textContent = (data.items || []).length;
+        } catch (e) {
+          cell.textContent = '—';
+          cell.title = 'Не удалось получить позиции: ' + e.message;
+        }
+      }
+    }
+
+    async function submitInvoiceItem(event) {
+      event.preventDefault();
+      const errEl = document.getElementById('invoiceItemError');
+      errEl.textContent = '';
+      if (!currentInvoice) { errEl.textContent = 'Накладная не выбрана'; return; }
+
+      const itemId = document.getElementById('invoiceItemProduct').value;
+      const item = invoiceInventoryItems.find(i => i.id === itemId);
+      if (!item) { errEl.textContent = 'Выберите товар из списка'; return; }
+
+      const qty = parseFloat(document.getElementById('invoiceItemQty').value);
+      const price = parseFloat(document.getElementById('invoiceItemPrice').value);
+      if (!(qty > 0)) { errEl.textContent = 'Количество должно быть больше нуля'; return; }
+      if (!(price >= 0)) { errEl.textContent = 'Укажите корректную цену за единицу'; return; }
+
+      try {
+        // Имена полей — по addInvoiceItem в supplier.service.ts (name обязателен в БД)
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + currentInvoice.id + '/items', {
+          method: 'POST',
+          body: JSON.stringify({
+            inventoryItemId: item.id,
+            name: item.name,
+            quantity: qty,
+            unit: item.unit || undefined,
+            pricePerUnit: price,
+            totalPrice: Math.round(qty * price * 100) / 100
+          })
+        });
+        if (!res.ok) throw await invoiceApiError(res);
+        document.getElementById('invoiceItemForm').reset();
+        showNotification('➕ Позиция добавлена в накладную');
+        await loadInvoiceItems(currentInvoice.id);
+        await loadSupplierInvoices();
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    // ── Приёмка накладной на склад ──
+
+    function confirmInvoiceFromModal() {
+      if (!currentInvoice) return;
+      confirmSupplierInvoice(currentInvoice.id, true);
+    }
+
+    async function confirmSupplierInvoice(invoiceId, fromModal) {
+      const inv = supplierInvoices.find(i => i.id === invoiceId);
+      const label = inv && inv.invoice_number ? ' № ' + inv.invoice_number : '';
+      const amount = inv ? (parseFloat(inv.total_amount) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2}) : '0';
+
+      // Операция необратима — обязательное подтверждение
+      if (!confirm(
+        'Принять накладную' + label + ' на склад?\n\n'
+        + 'Это действие НЕОБРАТИМО:\n'
+        + '• товары из позиций придут на склад (FIFO-партии по цене закупки);\n'
+        + '• долг поставщику вырастет на ' + amount + ' ₽;\n'
+        + '• в финансах появится расход.\n\n'
+        + 'Повторная приёмка невозможна. Продолжить?'
+      )) return;
+
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + invoiceId + '/confirm', { method: 'POST' });
+        if (!res.ok) throw await invoiceApiError(res);
+        showNotification('📥 Накладная принята: товар оприходован на склад');
+        if (fromModal) closeInvoiceItemsModal();
+        await loadSupplierInvoices();
+        await reloadInventoryFromAPI();
+      } catch (e) {
+        // Показываем ошибку там, где пользователь работает
+        if (fromModal) {
+          document.getElementById('invoiceItemError').textContent = 'Ошибка приёмки: ' + e.message;
+        } else {
+          showNotification('⚠️ Ошибка приёмки: ' + e.message);
+        }
       }
     }
 
