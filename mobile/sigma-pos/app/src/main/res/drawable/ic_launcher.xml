@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Заглушка иконки: зелёный кружок с «F». Замени на логотип FoodFlow. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#1F9254"
+        android:pathData="M54,6a48,48 0 1,0 0.1,0z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,30h30v10H50v12h17v10H50v18H40z" />
+</vector>

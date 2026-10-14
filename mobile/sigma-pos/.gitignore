@@ -1,0 +1,13 @@
+# Выходные артефакты сборки
+/app/build/
+/build/
+/.gradle/
+local.properties
+
+# SDK вендора кассы — не коммитим бинарники АТОЛ
+/app/libs/*.aar
+/app/libs/*.jar
+
+# Ключи подписи
+*.jks
+*.keystore
