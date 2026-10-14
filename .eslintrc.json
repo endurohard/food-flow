@@ -14,6 +14,19 @@
     "ecmaVersion": 2020,
     "sourceType": "module"
   },
+  "ignorePatterns": [
+    "dist/",
+    "build/",
+    "node_modules/",
+    "coverage/",
+    "mobile/"
+  ],
+  "overrides": [
+    {
+      "files": ["frontend/**/*.js"],
+      "env": { "browser": true, "node": false }
+    }
+  ],
   "rules": {
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-function-return-type": "off",

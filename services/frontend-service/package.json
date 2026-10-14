@@ -4,7 +4,8 @@
   "description": "Static file server for Food Flow frontend",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "express": "^4.18.2"

@@ -7,10 +7,29 @@ on:
     branches: [main]
 
 jobs:
+  # Тесты и типы прогоняются одной установкой зависимостей.
+  # Репозиторий — npm workspaces: package-lock.json только в корне,
+  # поэтому npm ci делается один раз сверху, а не в каждом сервисе
+  # (прежний CI ссылался на services/*/package-lock.json, которых нет).
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm test --workspaces --if-present
+
   typecheck:
     name: TypeScript Check
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service:
           - user-service
@@ -28,15 +47,67 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
-      - run: cd services/${{ matrix.service }} && npm ci
-      - run: cd services/${{ matrix.service }} && npx tsc --noEmit
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p services/${{ matrix.service }}/tsconfig.json
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      # Пока в коде есть унаследованные ошибки линтера — не блокируем сборку,
+      # но держим вывод на виду, чтобы долг не рос незаметно.
+      - run: npx eslint . --ext .js,.ts || true
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: foodflow
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: foodflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U foodflow -d foodflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Применить схему и миграции
+        env:
+          PGPASSWORD: ci_test_password
+        run: |
+          psql -h localhost -U foodflow -d foodflow -v ON_ERROR_STOP=1 -f database/init/01-init.sql
+          DATABASE_URL="postgresql://foodflow:ci_test_password@localhost:5432/foodflow" \
+            bash scripts/migrate.sh
+      - name: Повторный прогон обязан быть пустым (идемпотентность)
+        env:
+          PGPASSWORD: ci_test_password
+        run: |
+          out=$(DATABASE_URL="postgresql://foodflow:ci_test_password@localhost:5432/foodflow" \
+            bash scripts/migrate.sh)
+          echo "$out"
+          echo "$out" | grep -q "применено 0" || {
+            echo "ОШИБКА: повторный прогон миграций не идемпотентен"; exit 1; }
 
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: typecheck
+    needs: [test, typecheck]
     strategy:
+      fail-fast: false
       matrix:
         service:
           - user-service
@@ -55,22 +126,12 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service:
-          - user-service
-          - restaurant-service
-          - order-service
-          - delivery-service
-          - kitchen-service
-          - inventory-service
-          - hr-service
-          - crm-service
-          - finance-service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: cd services/${{ matrix.service }} && npm ci
-      - run: cd services/${{ matrix.service }} && npm audit --audit-level=critical || true
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=critical || true
