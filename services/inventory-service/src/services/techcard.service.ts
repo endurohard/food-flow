@@ -25,7 +25,17 @@ export class TechCardService {
               'quantity', tci.quantity,
               'unit', tci.unit,
               'wastePercent', tci.waste_percent,
-              'costPrice', ii.cost_price
+              'costPrice', ii.cost_price,
+              -- Та же средневзвешенная по остатку, что и в getById:
+              -- список карточек не должен противоречить открытой карточке
+              'avgCostPrice', (
+                SELECT SUM(b.quantity * b.cost_price) / NULLIF(SUM(b.quantity), 0)
+                  FROM inventory_batches b
+                 WHERE b.inventory_item_id = tci.inventory_item_id
+                   AND b.is_depleted = false
+                   AND b.quantity > 0
+                   AND b.cost_price IS NOT NULL
+              )
             )
           ) FILTER (WHERE tci.id IS NOT NULL), '[]'
         ) as ingredients
@@ -59,7 +69,19 @@ export class TechCardService {
     if (!result.rows[0]) return null;
 
     const ingredients = await this.pool.query(
-      `SELECT tci.*, ii.name as item_name, ii.cost_price, ii.unit as item_unit
+      `SELECT tci.*, ii.name as item_name, ii.cost_price, ii.unit as item_unit,
+        -- Средневзвешенная цена ОСТАТКА на складе.
+        -- ii.cost_price — цена последнего прихода (или последнего выпуска
+        -- для своих полуфабрикатов): она затирается каждой накладной, из-за
+        -- чего карточка показывала цену новой дорогой партии, пока по FIFO
+        -- списывалась старая дешёвая. Для витрины себестоимости берём
+        -- средневзвешенную — так же, как это делает iiko.
+        (SELECT SUM(b.quantity * b.cost_price) / NULLIF(SUM(b.quantity), 0)
+           FROM inventory_batches b
+          WHERE b.inventory_item_id = tci.inventory_item_id
+            AND b.is_depleted = false
+            AND b.quantity > 0
+            AND b.cost_price IS NOT NULL) AS avg_cost_price
        FROM tech_card_ingredients tci
        INNER JOIN inventory_items ii ON tci.inventory_item_id = ii.id
        WHERE tci.tech_card_id = $1`,
@@ -235,9 +257,21 @@ export class TechCardService {
     let totalCost = 0;
     const ingredientCosts = card.ingredients.map((ing: any) => {
       const wasteFactor = 1 + (parseFloat(ing.waste_percent) || 0) / 100;
-      const cost = parseFloat(ing.quantity) * wasteFactor * (parseFloat(ing.cost_price) || 0);
+
+      // Цена берётся по остатку на складе, а не по последней накладной:
+      // именно по этим партиям пойдёт списание. Если остатка нет (ещё не
+      // закупали или всё израсходовано), откатываемся на справочную цену —
+      // иначе карточка показала бы ноль и фуд-кост стал бы бессмысленным.
+      const avg = ing.avg_cost_price !== null && ing.avg_cost_price !== undefined
+        ? parseFloat(ing.avg_cost_price)
+        : NaN;
+      const fallback = parseFloat(ing.cost_price) || 0;
+      const unitPrice = Number.isFinite(avg) ? avg : fallback;
+      const priceSource = Number.isFinite(avg) ? 'stock_avg' : 'last_purchase';
+
+      const cost = parseFloat(ing.quantity) * wasteFactor * unitPrice;
       totalCost += cost;
-      return { ...ing, calculatedCost: cost };
+      return { ...ing, unitPrice, priceSource, calculatedCost: cost };
     });
 
     const menuPrice = parseFloat(card.menu_item_price) || 0;
