@@ -175,7 +175,10 @@ const MODULE_ACCESS = {
   'orders.html':        ['restaurant', 'cafe', 'coffee_shop'],
   'tables.html':        ['restaurant', 'cafe'],
   'hall-designer.html': ['restaurant'],
-  'kds.html':           ['restaurant', 'cafe'],
+  // Кофейне экран очереди нужен не меньше кухни: бариста готовит напитки
+  // по очереди и отмечает готовность. Бэкенд (kitchen-service) заказы
+  // кофейни обрабатывает и так — закрыт был только экран.
+  'kds.html':           ['restaurant', 'cafe', 'coffee_shop'],
   'loyalty.html':       ['restaurant', 'cafe', 'coffee_shop'],
   'wholesale.html':     ['production', 'restaurant']
 };
