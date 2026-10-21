@@ -152,10 +152,12 @@ export class TechCardService {
       await this.assertNoCycle(client, data.outputItemId, ingredientIds);
 
       const tcResult = await client.query(
-        `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name, output_item_id, output_quantity)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name, output_item_id, output_quantity,
+           effective_from, effective_to)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::date, CURRENT_DATE), $9) RETURNING *`,
         [data.menuItemId || null, enterpriseId || null, data.yieldWeight || null, data.cookingInstructions || null,
-         data.name || null, data.outputItemId || null, data.outputQuantity ?? 1]
+         data.name || null, data.outputItemId || null, data.outputQuantity ?? 1,
+         data.effectiveFrom || null, data.effectiveTo || null]
       );
       const techCard = tcResult.rows[0];
 
@@ -251,6 +253,109 @@ export class TechCardService {
     if (enterpriseId) { conds.push('enterprise_id = $2'); vals.push(enterpriseId); }
     const r = await this.pool.query(`UPDATE tech_cards SET is_active = false WHERE ${conds.join(' AND ')}`, vals);
     return (r.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Новая версия техкарты с указанной даты.
+   *
+   * Правка существующей карты затирает историю: прошлые заказы начинают
+   * считаться по новой рецептуре. Поэтому смена состава — это не UPDATE,
+   * а новая версия: прежняя закрывается днём раньше, новая открывается
+   * с нужной даты. Обе операции в одной транзакции, иначе между ними
+   * возникнет либо дыра без действующей карты, либо пересечение версий.
+   */
+  async createVersion(
+    sourceCardId: string,
+    data: { effectiveFrom: string; ingredients?: any[]; yieldWeight?: number; cookingInstructions?: string; name?: string },
+    enterpriseId?: string
+  ): Promise<any> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const conds = ['id = $1'];
+      const vals: any[] = [sourceCardId];
+      if (enterpriseId) { conds.push('enterprise_id = $2'); vals.push(enterpriseId); }
+      // FOR UPDATE: параллельная попытка создать версию на ту же дату
+      // должна дождаться, иначе обе пройдут проверку и упрутся в EXCLUDE
+      const src = await client.query(
+        `SELECT * FROM tech_cards WHERE ${conds.join(' AND ')} FOR UPDATE`, vals
+      );
+      const source = src.rows[0];
+      if (!source) { await client.query('ROLLBACK'); return null; }
+
+      if (source.effective_from >= data.effectiveFrom) {
+        throw new Error('Дата новой версии должна быть позже начала текущей');
+      }
+
+      // Закрываем прежнюю версию днём раньше начала новой
+      await client.query(
+        `UPDATE tech_cards SET effective_to = ($1::date - INTERVAL '1 day')::date, updated_at = NOW()
+         WHERE id = $2`,
+        [data.effectiveFrom, sourceCardId]
+      );
+
+      const created = await client.query(
+        `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name,
+           output_item_id, output_quantity, effective_from, effective_to)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, NULL) RETURNING *`,
+        [source.menu_item_id, source.enterprise_id,
+         data.yieldWeight ?? source.yield_weight,
+         data.cookingInstructions ?? source.cooking_instructions,
+         data.name ?? source.name,
+         source.output_item_id, source.output_quantity, data.effectiveFrom]
+      );
+      const newCard = created.rows[0];
+
+      // Состав: либо новый, либо копия прежнего — версия без ингредиентов
+      // ничего не спишет и тихо обнулит учёт по этому блюду
+      const ingredients = data.ingredients ?? (await client.query(
+        `SELECT inventory_item_id, quantity, unit, cold_loss_percent, hot_loss_percent, is_optional
+         FROM tech_card_ingredients WHERE tech_card_id = $1`, [sourceCardId]
+      )).rows.map((r: any) => ({
+        inventoryItemId: r.inventory_item_id,
+        quantity: r.quantity,
+        unit: r.unit,
+        coldLossPercent: r.cold_loss_percent,
+        hotLossPercent: r.hot_loss_percent,
+        isOptional: r.is_optional
+      }));
+
+      for (const ing of ingredients) {
+        await client.query(
+          `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
+             cold_loss_percent, hot_loss_percent, is_optional)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [newCard.id, ing.inventoryItemId, ing.quantity, ing.unit || null,
+           ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
+        );
+      }
+
+      await client.query('COMMIT');
+      return this.getById(newCard.id, enterpriseId);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Все версии техкарты блюда, новые сверху. */
+  async getVersions(menuItemId: string, enterpriseId?: string): Promise<any[]> {
+    const conds = ['menu_item_id = $1', 'is_active = true'];
+    const vals: any[] = [menuItemId];
+    if (enterpriseId) { conds.push(`enterprise_id = $${vals.length + 1}`); vals.push(enterpriseId); }
+    const r = await this.pool.query(
+      `SELECT id, name, effective_from, effective_to,
+              (effective_from <= CURRENT_DATE
+               AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)) AS is_current
+       FROM tech_cards
+       WHERE ${conds.join(' AND ')}
+       ORDER BY effective_from DESC`,
+      vals
+    );
+    return r.rows;
   }
 
   async getCostCalculation(techCardId: string, enterpriseId?: string): Promise<any> {

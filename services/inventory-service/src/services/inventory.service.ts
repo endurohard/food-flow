@@ -348,10 +348,15 @@ export class InventoryService {
         return { deducted: [], skipped: ['already_deducted'] };
       }
 
-      // Get order items with their menu_item_ids
+      // Get order items with their menu_item_ids.
+      // Дата заказа нужна, чтобы списать по версии техкарты, действовавшей
+      // на момент продажи: после смены рецептуры прошлые заказы не должны
+      // пересчитываться по новой карте.
       const orderItems = await client.query(
-        `SELECT oi.menu_item_id, oi.quantity
-         FROM order_items oi WHERE oi.order_id = $1`,
+        `SELECT oi.menu_item_id, oi.quantity, o.created_at::date AS order_date
+         FROM order_items oi
+         INNER JOIN orders o ON o.id = oi.order_id
+         WHERE oi.order_id = $1`,
         [orderId]
       );
 
@@ -359,15 +364,25 @@ export class InventoryService {
       const skipped: string[] = [];
 
       for (const orderItem of orderItems.rows) {
-        // Get tech card ingredients for this menu item
+        // Get tech card ingredients for this menu item.
+        // Берём ОДНУ версию, действовавшую на дату заказа. LIMIT 1 в
+        // подзапросе обязателен: без него при нескольких подходящих картах
+        // вернулись бы ингредиенты всех сразу и списался двойной комплект.
         const ingredients = await client.query(
           `SELECT tci.inventory_item_id, tci.quantity, tci.cold_loss_percent, tci.hot_loss_percent, tci.is_optional,
                   ii.name AS item_name
            FROM tech_card_ingredients tci
-           INNER JOIN tech_cards tc ON tci.tech_card_id = tc.id
            INNER JOIN inventory_items ii ON tci.inventory_item_id = ii.id
-           WHERE tc.menu_item_id = $1 AND tc.is_active = true`,
-          [orderItem.menu_item_id]
+           WHERE tci.tech_card_id = (
+             SELECT tc.id FROM tech_cards tc
+             WHERE tc.menu_item_id = $1
+               AND tc.is_active = true
+               AND tc.effective_from <= $2
+               AND (tc.effective_to IS NULL OR tc.effective_to >= $2)
+             ORDER BY tc.effective_from DESC
+             LIMIT 1
+           )`,
+          [orderItem.menu_item_id, orderItem.order_date]
         );
 
         // У блюда нет техкарты — списывать нечего, это не ошибка
