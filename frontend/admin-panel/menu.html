@@ -2677,12 +2677,16 @@ AUTH.requireAuth();
           </select>
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label class="form-label">Количество:</label>
+          <label class="form-label">Брутто:</label>
           <input type="number" class="form-input ingredient-quantity" required step="0.001" min="0" placeholder="0" value="${preset ? preset.quantity : ''}">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
-          <label class="form-label">% потерь:</label>
-          <input type="number" class="form-input ingredient-waste" step="0.1" min="0" max="100" value="${preset && preset.wastePercent !== undefined && preset.wastePercent !== null ? preset.wastePercent : 0}">
+          <label class="form-label" title="Чистка, зачистка, разделка — % от брутто">Потери хол., %:</label>
+          <input type="number" class="form-input ingredient-cold-loss" step="0.1" min="0" max="99.99" value="${preset && preset.coldLossPercent !== undefined && preset.coldLossPercent !== null ? preset.coldLossPercent : 0}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" title="Варка, жарка, запекание — % от нетто">Потери гор., %:</label>
+          <input type="number" class="form-input ingredient-hot-loss" step="0.1" min="0" max="99.99" value="${preset && preset.hotLossPercent !== undefined && preset.hotLossPercent !== null ? preset.hotLossPercent : 0}">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label class="form-label">Необяз.:</label>
@@ -2731,7 +2735,8 @@ AUTH.requireAuth();
         (tc.ingredients || []).forEach(ing => addIngredientRow({
           inventoryItemId: ing.inventory_item_id,
           quantity: parseFloat(ing.quantity),
-          wastePercent: ing.waste_percent !== null && ing.waste_percent !== undefined ? parseFloat(ing.waste_percent) : 0,
+          coldLossPercent: ing.cold_loss_percent !== null && ing.cold_loss_percent !== undefined ? parseFloat(ing.cold_loss_percent) : 0,
+          hotLossPercent: ing.hot_loss_percent !== null && ing.hot_loss_percent !== undefined ? parseFloat(ing.hot_loss_percent) : 0,
           isOptional: !!ing.is_optional
         }));
         if (!(tc.ingredients || []).length) addIngredientRow();
@@ -2772,10 +2777,11 @@ AUTH.requireAuth();
       document.querySelectorAll('#recipeIngredientsList .ingredient-row').forEach(row => {
         const inventoryItemId = row.querySelector('.ingredient-select').value;
         const quantity = parseFloat(row.querySelector('.ingredient-quantity').value);
-        const wastePercent = parseFloat(row.querySelector('.ingredient-waste').value) || 0;
+        const coldLossPercent = parseFloat(row.querySelector('.ingredient-cold-loss').value) || 0;
+        const hotLossPercent = parseFloat(row.querySelector('.ingredient-hot-loss').value) || 0;
         const isOptional = row.querySelector('.ingredient-optional').checked;
         if (inventoryItemId && quantity > 0) {
-          ingredients.push({ inventoryItemId, quantity, wastePercent, isOptional });
+          ingredients.push({ inventoryItemId, quantity, coldLossPercent, hotLossPercent, isOptional });
         }
       });
 
@@ -2915,16 +2921,24 @@ AUTH.requireAuth();
                 : ingredients.map(ing => {
                     const stockItem = stockItems.find(i => String(i.id) === String(ing.inventoryItemId));
                     const produced = stockItem && stockItem.is_produced;
-                    const waste = parseFloat(ing.wastePercent) || 0;
+                    const coldLoss = parseFloat(ing.coldLossPercent) || 0;
+                    const hotLoss = parseFloat(ing.hotLossPercent) || 0;
+                    // quantity — брутто: столько списывается и столько стоит.
+                    // Потери показываем отдельно, они влияют на выход, не на цену.
                     const qty = parseFloat(ing.quantity) || 0;
-                    const price = ing.costPrice !== null && ing.costPrice !== undefined ? parseFloat(ing.costPrice) : null;
-                    const lineCost = price === null ? null : qty * (1 + waste / 100) * price;
+                    const yieldQty = qty * (1 - coldLoss / 100) * (1 - hotLoss / 100);
+                    // Средняя по остатку склада, если есть; иначе последняя закупочная
+                    const rawPrice = ing.avgCostPrice !== null && ing.avgCostPrice !== undefined
+                      ? ing.avgCostPrice
+                      : ing.costPrice;
+                    const price = rawPrice !== null && rawPrice !== undefined ? parseFloat(rawPrice) : null;
+                    const lineCost = price === null ? null : qty * price;
                     return `
                       <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--admin-card-bg); border-radius: 8px; gap: 12px; flex-wrap: wrap;">
                         <span style="color: var(--color-text-primary); font-size: 13px;">${produced ? '🏭 ' : ''}${ing.itemName || '—'}</span>
                         <div style="display: flex; align-items: center; gap: 12px;">
                           <span style="color: var(--color-text-secondary); font-size: 13px; font-weight: 600;">${qty} ${ing.unit || (stockItem ? stockItem.unit : '') || ''}</span>
-                          ${waste > 0 ? `<span style="color: var(--color-warning); font-size: 11px;">потери ${waste}%</span>` : ''}
+                          ${(coldLoss > 0 || hotLoss > 0) ? `<span style="color: var(--color-warning); font-size: 11px;" title="Брутто ${qty} → выход ${yieldQty.toFixed(3)}">потери${coldLoss > 0 ? ' хол. ' + coldLoss + '%' : ''}${hotLoss > 0 ? ' гор. ' + hotLoss + '%' : ''}</span>` : ''}
                           ${lineCost === null ? '' : `<span style="color: var(--color-primary); font-size: 11px; font-weight: 600;">${fmtTechCardMoney(lineCost)}</span>`}
                         </div>
                       </div>

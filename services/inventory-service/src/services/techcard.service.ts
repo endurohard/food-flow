@@ -24,7 +24,8 @@ export class TechCardService {
               'itemName', ii.name,
               'quantity', tci.quantity,
               'unit', tci.unit,
-              'wastePercent', tci.waste_percent,
+              'coldLossPercent', tci.cold_loss_percent,
+              'hotLossPercent', tci.hot_loss_percent,
               'costPrice', ii.cost_price,
               -- Та же средневзвешенная по остатку, что и в getById:
               -- список карточек не должен противоречить открытой карточке
@@ -161,10 +162,11 @@ export class TechCardService {
       if (data.ingredients && data.ingredients.length > 0) {
         for (const ing of data.ingredients) {
           await client.query(
-            `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit, waste_percent, is_optional)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
+               cold_loss_percent, hot_loss_percent, is_optional)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [techCard.id, ing.inventoryItemId, ing.quantity, ing.unit || null,
-             ing.wastePercent || 0, ing.isOptional || false]
+             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
           );
         }
       }
@@ -224,10 +226,11 @@ export class TechCardService {
         await client.query('DELETE FROM tech_card_ingredients WHERE tech_card_id = $1', [techCardId]);
         for (const ing of data.ingredients) {
           await client.query(
-            `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit, waste_percent, is_optional)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
+               cold_loss_percent, hot_loss_percent, is_optional)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [techCardId, ing.inventoryItemId, ing.quantity, ing.unit || null,
-             ing.wastePercent || 0, ing.isOptional || false]
+             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
           );
         }
       }
@@ -255,9 +258,9 @@ export class TechCardService {
     if (!card) return null;
 
     let totalCost = 0;
+    let totalNet = 0;
+    let totalYield = 0;
     const ingredientCosts = card.ingredients.map((ing: any) => {
-      const wasteFactor = 1 + (parseFloat(ing.waste_percent) || 0) / 100;
-
       // Цена берётся по остатку на складе, а не по последней накладной:
       // именно по этим партиям пойдёт списание. Если остатка нет (ещё не
       // закупали или всё израсходовано), откатываемся на справочную цену —
@@ -269,9 +272,29 @@ export class TechCardService {
       const unitPrice = Number.isFinite(avg) ? avg : fallback;
       const priceSource = Number.isFinite(avg) ? 'stock_avg' : 'last_purchase';
 
-      const cost = parseFloat(ing.quantity) * wasteFactor * unitPrice;
+      // Брутто → нетто → выход (миграция 032).
+      // Деньги считаются от БРУТТО: платим за то, что взяли со склада,
+      // включая очистки и ужарку.
+      const gross = parseFloat(ing.quantity) || 0;
+      const coldLoss = parseFloat(ing.cold_loss_percent) || 0;
+      const hotLoss = parseFloat(ing.hot_loss_percent) || 0;
+      const net = gross * (1 - coldLoss / 100);
+      const yieldQty = net * (1 - hotLoss / 100);
+
+      const cost = gross * unitPrice;
       totalCost += cost;
-      return { ...ing, unitPrice, priceSource, calculatedCost: cost };
+      totalNet += net;
+      totalYield += yieldQty;
+
+      return {
+        ...ing,
+        unitPrice,
+        priceSource,
+        grossQuantity: gross,
+        netQuantity: Math.round(net * 1000) / 1000,
+        yieldQuantity: Math.round(yieldQty * 1000) / 1000,
+        calculatedCost: cost
+      };
     });
 
     const menuPrice = parseFloat(card.menu_item_price) || 0;
@@ -293,6 +316,11 @@ export class TechCardService {
       outputQuantity: outputQty,
       menuPrice,
       totalCost,
+      // Итоги по массе: брутто взяли со склада, выход — вес готового блюда.
+      // Именно выход сверяется с нормой в техкарте.
+      totalGross: Math.round(ingredientCosts.reduce((s: number, i: any) => s + i.grossQuantity, 0) * 1000) / 1000,
+      totalNet: Math.round(totalNet * 1000) / 1000,
+      totalYield: Math.round(totalYield * 1000) / 1000,
       unitCost: Math.round(unitCost * 100) / 100,
       margin: Math.round(margin * 100) / 100,
       wholesalePrice,

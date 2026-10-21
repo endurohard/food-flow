@@ -76,8 +76,9 @@ export class ProductionService {
       const consumed: any[] = [];
 
       for (const ing of ingResult.rows) {
-        const wasteFactor = 1 + (parseFloat(ing.waste_percent) || 0) / 100;
-        const needQty = parseFloat(ing.quantity) * cycles * wasteFactor;
+        // quantity — БРУТТО (миграция 032): столько списывается со склада.
+        // Потери обработки уменьшают выход готового, а не расход сырья.
+        const needQty = parseFloat(ing.quantity) * cycles;
         if (needQty <= 0) continue;
 
         // FIFO-списание партий — даёт фактическую стоимость списанного

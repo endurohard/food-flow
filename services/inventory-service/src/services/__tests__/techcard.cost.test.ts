@@ -45,7 +45,7 @@ describe('Себестоимость техкарты — источник це�
     // поэтому карточка обязана показать среднюю 200, а не 300.
     const svc = makeService(card, [
       { inventory_item_id: 'i-1', item_name: 'Тесто', quantity: '1',
-        waste_percent: '0', cost_price: '300', avg_cost_price: '200' }
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '300', avg_cost_price: '200' }
     ]);
 
     const res = await svc.getCostCalculation('tc-1');
@@ -60,7 +60,7 @@ describe('Себестоимость техкарты — источник це�
     // и фуд-кост 100% — хуже, чем приблизительная цифра.
     const svc = makeService(card, [
       { inventory_item_id: 'i-1', item_name: 'Тесто', quantity: '2',
-        waste_percent: '0', cost_price: '150', avg_cost_price: null }
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '150', avg_cost_price: null }
     ]);
 
     const res = await svc.getCostCalculation('tc-1');
@@ -74,7 +74,7 @@ describe('Себестоимость техкарты — источник це�
     // случай: 0 должен остаться 0, а не подменяться справочной ценой.
     const svc = makeService(card, [
       { inventory_item_id: 'i-1', item_name: 'Тесто', quantity: '1',
-        waste_percent: '0', cost_price: '999', avg_cost_price: '0' }
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '999', avg_cost_price: '0' }
     ]);
 
     const res = await svc.getCostCalculation('tc-1');
@@ -85,26 +85,84 @@ describe('Себестоимость техкарты — источник це�
 });
 
 describe('Себестоимость техкарты — расчёт', () => {
-  it('потери увеличивают расход сырья', async () => {
-    // 1 кг нетто при 20% потерь требует 1.2 кг брутто
+  it('потери не влияют на себестоимость: платим за брутто', async () => {
+    // Ключевое изменение модели: quantity — это брутто, то, что взяли
+    // со склада. Очистки и ужарка уже оплачены, они уменьшают только выход.
     const svc = makeService(card, [
       { inventory_item_id: 'i-1', item_name: 'Картофель', quantity: '1',
-        waste_percent: '20', cost_price: '0', avg_cost_price: '100' }
+        cold_loss_percent: '20', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '100' }
     ]);
 
     const res = await svc.getCostCalculation('tc-1');
 
-    expect(res.totalCost).toBeCloseTo(120, 6);
+    expect(res.totalCost).toBeCloseTo(100, 6);
+  });
+
+  it('холодные потери уменьшают нетто', async () => {
+    // 1 кг картофеля, чистка 25% → нетто 0.75 кг
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-1', item_name: 'Картофель', quantity: '1',
+        cold_loss_percent: '25', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '100' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].netQuantity).toBeCloseTo(0.75, 3);
+    expect(res.ingredients[0].yieldQuantity).toBeCloseTo(0.75, 3);
+  });
+
+  it('горячие потери считаются от нетто, а не от брутто', async () => {
+    // 1 кг → чистка 25% → нетто 0.75 → варка 10% → выход 0.675.
+    // Если бы горячие считались от брутто, вышло бы 0.65 — это ошибка.
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-1', item_name: 'Картофель', quantity: '1',
+        cold_loss_percent: '25', hot_loss_percent: '10', cost_price: '0', avg_cost_price: '100' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].netQuantity).toBeCloseTo(0.75, 3);
+    expect(res.ingredients[0].yieldQuantity).toBeCloseTo(0.675, 3);
+  });
+
+  it('без потерь брутто, нетто и выход совпадают', async () => {
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-1', item_name: 'Сахар', quantity: '0.5',
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '80' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+    const ing = res.ingredients[0];
+
+    expect(ing.grossQuantity).toBe(0.5);
+    expect(ing.netQuantity).toBe(0.5);
+    expect(ing.yieldQuantity).toBe(0.5);
+  });
+
+  it('итоги по массе суммируются по всем ингредиентам', async () => {
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-1', item_name: 'Мясо', quantity: '1',
+        cold_loss_percent: '10', hot_loss_percent: '20', cost_price: '0', avg_cost_price: '500' },
+      { inventory_item_id: 'i-2', item_name: 'Лук', quantity: '0.2',
+        cold_loss_percent: '15', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '50' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    // брутто 1.2; нетто 0.9 + 0.17 = 1.07; выход 0.72 + 0.17 = 0.89
+    expect(res.totalGross).toBeCloseTo(1.2, 3);
+    expect(res.totalNet).toBeCloseTo(1.07, 3);
+    expect(res.totalYield).toBeCloseTo(0.89, 3);
   });
 
   it('складывает все ингредиенты', async () => {
     const svc = makeService(card, [
       { inventory_item_id: 'i-1', item_name: 'Тесто', quantity: '0.3',
-        waste_percent: '0', cost_price: '0', avg_cost_price: '100' },
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '100' },
       { inventory_item_id: 'i-2', item_name: 'Сыр', quantity: '0.15',
-        waste_percent: '0', cost_price: '0', avg_cost_price: '600' },
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '600' },
       { inventory_item_id: 'i-3', item_name: 'Соус', quantity: '0.1',
-        waste_percent: '0', cost_price: '0', avg_cost_price: '200' }
+        cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '200' }
     ]);
 
     const res = await svc.getCostCalculation('tc-1');
@@ -118,7 +176,7 @@ describe('Себестоимость техкарты — расчёт', () => {
     const svc = makeService(
       { ...card, menu_item_price: null, output_quantity: '3' },
       [{ inventory_item_id: 'i-1', item_name: 'Томаты', quantity: '6',
-         waste_percent: '0', cost_price: '0', avg_cost_price: '60' }]
+         cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '60' }]
     );
 
     const res = await svc.getCostCalculation('tc-1');
@@ -131,7 +189,7 @@ describe('Себестоимость техкарты — расчёт', () => {
     const svc = makeService(
       { ...card, menu_item_price: '200' },
       [{ inventory_item_id: 'i-1', item_name: 'Сырьё', quantity: '1',
-         waste_percent: '0', cost_price: '0', avg_cost_price: '50' }]
+         cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '50' }]
     );
 
     const res = await svc.getCostCalculation('tc-1');
@@ -144,7 +202,7 @@ describe('Себестоимость техкарты — расчёт', () => {
     const svc = makeService(
       { ...card, menu_item_price: null },
       [{ inventory_item_id: 'i-1', item_name: 'Сырьё', quantity: '1',
-         waste_percent: '0', cost_price: '0', avg_cost_price: '50' }]
+         cold_loss_percent: '0', hot_loss_percent: '0', cost_price: '0', avg_cost_price: '50' }]
     );
 
     const res = await svc.getCostCalculation('tc-1');

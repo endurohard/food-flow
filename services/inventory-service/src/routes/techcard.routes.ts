@@ -60,7 +60,11 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
         inventoryItemId: Joi.string().uuid().required(),
         quantity: Joi.number().positive().required(),
         unit: Joi.string().max(20).optional(),
-        wastePercent: Joi.number().min(0).max(100).optional(),
+        // Потери холодной обработки (чистка, разделка) — % от брутто,
+        // горячей (варка, жарка) — % от нетто. 100% запрещено: ингредиент
+        // не может исчезнуть полностью.
+        coldLossPercent: Joi.number().min(0).max(99.99).optional(),
+        hotLossPercent: Joi.number().min(0).max(99.99).optional(),
         isOptional: Joi.boolean().optional()
       })).optional()
     }).or('menuItemId', 'outputItemId');

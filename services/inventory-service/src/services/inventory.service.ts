@@ -361,7 +361,7 @@ export class InventoryService {
       for (const orderItem of orderItems.rows) {
         // Get tech card ingredients for this menu item
         const ingredients = await client.query(
-          `SELECT tci.inventory_item_id, tci.quantity, tci.waste_percent, tci.is_optional,
+          `SELECT tci.inventory_item_id, tci.quantity, tci.cold_loss_percent, tci.hot_loss_percent, tci.is_optional,
                   ii.name AS item_name
            FROM tech_card_ingredients tci
            INNER JOIN tech_cards tc ON tci.tech_card_id = tc.id
@@ -377,8 +377,10 @@ export class InventoryService {
         }
 
         for (const ing of ingredients.rows) {
-          const wasteFactor = 1 + (parseFloat(ing.waste_percent) || 0) / 100;
-          const totalQty = parseFloat(ing.quantity) * orderItem.quantity * wasteFactor;
+          // quantity — это БРУТТО (миграция 032): столько берётся со склада.
+          // Потери холодной и горячей обработки влияют на выход порции,
+          // но не на списание: испарившаяся влага со склада уже ушла.
+          const totalQty = parseFloat(ing.quantity) * orderItem.quantity;
 
           // FIFO-списание: даёт фактическую себестоимость партии.
           // Для своих полуфабрикатов это цена выпуска из production_runs.
