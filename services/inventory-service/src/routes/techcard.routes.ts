@@ -81,6 +81,16 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
     if (error.message && (error.message.includes('Циклическая') || error.message.includes('сам себя'))) {
       return res.status(400).json({ error: error.message });
     }
+    // Пересечение сроков действия — ошибка ввода, а не сбой сервера:
+    // без этой ветки пользователь видел бы 500 без объяснения причины
+    if (error.code === '23P01') {
+      return res.status(409).json({
+        error: 'На указанные даты у этого блюда уже действует другая версия техкарты'
+      });
+    }
+    if (error.code === '23514') {
+      return res.status(400).json({ error: 'Дата окончания действия раньше даты начала' });
+    }
     console.error('Create tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -98,6 +108,16 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error.message && (error.message.includes('Циклическая') || error.message.includes('сам себя'))) {
       return res.status(400).json({ error: error.message });
+    }
+    // Пересечение сроков действия — ошибка ввода, а не сбой сервера:
+    // без этой ветки пользователь видел бы 500 без объяснения причины
+    if (error.code === '23P01') {
+      return res.status(409).json({
+        error: 'На указанные даты у этого блюда уже действует другая версия техкарты'
+      });
+    }
+    if (error.code === '23514') {
+      return res.status(400).json({ error: 'Дата окончания действия раньше даты начала' });
     }
     console.error('Update tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
