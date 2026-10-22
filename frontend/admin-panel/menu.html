@@ -1677,6 +1677,20 @@ AUTH.requireAuth();
         </div>
 
         <div class="form-group">
+          <label class="form-label">Действует с:</label>
+          <input type="date" class="form-input" id="recipeEffectiveFrom">
+          <div style="font-size: 12px; color: #888; margin-top: 4px;">
+            Заказы считаются по той версии техкарты, что действовала на их дату.
+            Пусто — с сегодняшнего дня.
+          </div>
+        </div>
+
+        <div class="form-group" id="recipeVersionsBlock" style="display: none;">
+          <label class="form-label">Версии техкарты:</label>
+          <div id="recipeVersionsList" style="font-size: 13px; color: #aaa;"></div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Технология приготовления:</label>
           <textarea class="form-textarea" id="recipeDescription" placeholder="Технология приготовления..."></textarea>
         </div>
@@ -2605,6 +2619,9 @@ AUTH.requireAuth();
       document.getElementById('recipeName').dataset.touched = '';
       document.getElementById('recipeKind').value = 'menu';
       document.getElementById('recipeOutputQuantity').value = '1';
+      // Новая карта: дата и история версий не должны тянуться от прошлой
+      document.getElementById('recipeEffectiveFrom').value = '';
+      document.getElementById('recipeVersionsBlock').style.display = 'none';
       onRecipeKindChange();
       updateRecipeDishOptions();
       updateRecipeOutputOptions();
@@ -2654,6 +2671,29 @@ AUTH.requireAuth();
         const itemId = document.getElementById('recipeOutputItemId').value;
         const item = stockItems.find(i => String(i.id) === String(itemId));
         if (item && !nameInput.dataset.touched) nameInput.value = `Производство: ${item.name}`;
+      }
+    }
+
+    async function showRecipeVersions(menuItemId) {
+      const block = document.getElementById('recipeVersionsBlock');
+      const list = document.getElementById('recipeVersionsList');
+      if (!menuItemId) { block.style.display = 'none'; return; }
+      try {
+        const res = await AUTH.fetch('/api/tech-cards/menu-item/' + menuItemId + '/versions');
+        if (!res.ok) { block.style.display = 'none'; return; }
+        const data = await res.json();
+        const versions = data.versions || [];
+        // Одна версия — это обычная техкарта, показывать историю не о чем
+        if (versions.length < 2) { block.style.display = 'none'; return; }
+        list.innerHTML = versions.map(v => {
+          const to = v.effective_to ? String(v.effective_to).slice(0, 10) : 'бессрочно';
+          const from = String(v.effective_from).slice(0, 10);
+          const mark = v.is_current ? ' <span style="color:#4caf50;">◀ действует</span>' : '';
+          return `<div style="padding: 2px 0;">${from} — ${to}${mark}</div>`;
+        }).join('');
+        block.style.display = '';
+      } catch (e) {
+        block.style.display = 'none';
       }
     }
 
@@ -2731,6 +2771,9 @@ AUTH.requireAuth();
         nameInput.dataset.touched = '1';
         document.getElementById('recipeYieldWeight').value = tc.yield_weight !== null && tc.yield_weight !== undefined ? tc.yield_weight : '';
         document.getElementById('recipeDescription').value = tc.cooking_instructions || '';
+        document.getElementById('recipeEffectiveFrom').value = tc.effective_from
+          ? String(tc.effective_from).slice(0, 10) : '';
+        await showRecipeVersions(tc.menu_item_id);
 
         (tc.ingredients || []).forEach(ing => addIngredientRow({
           inventoryItemId: ing.inventory_item_id,
@@ -2794,6 +2837,8 @@ AUTH.requireAuth();
       if (name) payload.name = name;
       if (cookingInstructions) payload.cookingInstructions = cookingInstructions;
       if (yieldWeightRaw !== '') payload.yieldWeight = parseFloat(yieldWeightRaw);
+      const effectiveFrom = document.getElementById('recipeEffectiveFrom').value;
+      if (effectiveFrom) payload.effectiveFrom = effectiveFrom;
       if (kind === 'menu') {
         payload.menuItemId = menuItemId;
       } else {
