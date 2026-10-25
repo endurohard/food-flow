@@ -353,7 +353,7 @@ export class InventoryService {
       // на момент продажи: после смены рецептуры прошлые заказы не должны
       // пересчитываться по новой карте.
       const orderItems = await client.query(
-        `SELECT oi.menu_item_id, oi.quantity, o.created_at::date AS order_date
+        `SELECT oi.id AS order_item_id, oi.menu_item_id, oi.quantity, o.created_at::date AS order_date
          FROM order_items oi
          INNER JOIN orders o ON o.id = oi.order_id
          WHERE oi.order_id = $1`,
@@ -385,35 +385,33 @@ export class InventoryService {
           [orderItem.menu_item_id, orderItem.order_date]
         );
 
-        // У блюда нет техкарты — списывать нечего, это не ошибка
-        if (ingredients.rowCount === 0) {
-          skipped.push(`menu_item ${orderItem.menu_item_id}: no tech card`);
-          continue;
-        }
-
-        for (const ing of ingredients.rows) {
-          // quantity — это БРУТТО (миграция 032): столько берётся со склада.
-          // Потери холодной и горячей обработки влияют на выход порции,
-          // но не на списание: испарившаяся влага со склада уже ушла.
-          const totalQty = parseFloat(ing.quantity) * orderItem.quantity;
-
+        // Списание одной позиции склада: FIFO для фактической себестоимости,
+        // атомарное уменьшение остатка, запись движения. Вынесено в замыкание,
+        // потому что одинаково нужно и ингредиентам техкарты, и модификаторам.
+        const deductItem = async (
+          inventoryItemId: string,
+          totalQty: number,
+          itemName: string,
+          isOptional: boolean,
+          note: string
+        ): Promise<void> => {
           // FIFO-списание: даёт фактическую себестоимость партии.
           // Для своих полуфабрикатов это цена выпуска из production_runs.
           let cost = 0;
           try {
-            const fifo = await this.deductFIFO(warehouseId, ing.inventory_item_id, totalQty, client);
+            const fifo = await this.deductFIFO(warehouseId, inventoryItemId, totalQty, client);
             cost = fifo.batches.reduce(
               (sum: number, b: any) => sum + parseFloat(b.deducted) * (parseFloat(b.costPrice) || 0),
               0
             );
           } catch (fifoError: any) {
             // Необязательный ингредиент можно пропустить, обязательный — нет
-            if (ing.is_optional) {
-              skipped.push(`${ing.item_name}: ${fifoError.message}`);
-              continue;
+            if (isOptional) {
+              skipped.push(`${itemName}: ${fifoError.message}`);
+              return;
             }
             throw new Error(
-              `Недостаточно «${ing.item_name}» для списания по техкарте ` +
+              `Недостаточно «${itemName}» для списания по техкарте ` +
               `(нужно ${totalQty.toFixed(3)}): ${fifoError.message}`
             );
           }
@@ -425,11 +423,11 @@ export class InventoryService {
              SET quantity = quantity - $1, updated_at = NOW()
              WHERE warehouse_id = $2 AND inventory_item_id = $3 AND quantity >= $1
              RETURNING quantity`,
-            [totalQty, warehouseId, ing.inventory_item_id]
+            [totalQty, warehouseId, inventoryItemId]
           );
           if (deduct.rowCount === 0) {
             throw new Error(
-              `Insufficient stock for inventory_item ${ing.inventory_item_id} ` +
+              `Insufficient stock for inventory_item ${inventoryItemId} ` +
               `in warehouse ${warehouseId} (need ${totalQty})`
             );
           }
@@ -440,13 +438,128 @@ export class InventoryService {
               quantity, cost_price, reference_type, reference_id, performed_by, notes)
              VALUES ($1, $2, $3, 'sale', $4, $5, 'order', $6, $7, $8)`,
             [
-              enterpriseId || null, warehouseId, ing.inventory_item_id, totalQty,
+              enterpriseId || null, warehouseId, inventoryItemId, totalQty,
               totalQty > 0 ? cost / totalQty : 0, orderId, performedBy || null,
-              `Списание по техкарте: ${ing.item_name}`
+              note
             ]
           );
 
-          deducted.push({ inventoryItemId: ing.inventory_item_id, quantity: totalQty, cost });
+          deducted.push({ inventoryItemId, quantity: totalQty, cost });
+        };
+
+        // У блюда нет техкарты — списывать нечего, это не ошибка.
+        // Выбранные модификаторы при этом списать всё равно надо: добавка
+        // может иметь свой расход, даже когда у самого блюда карты нет.
+        if (ingredients.rowCount === 0) {
+          skipped.push(`menu_item ${orderItem.menu_item_id}: no tech card`);
+        }
+
+        for (const ing of ingredients.rows) {
+          // quantity — это БРУТТО (миграция 032): столько берётся со склада.
+          // Потери холодной и горячей обработки влияют на выход порции,
+          // но не на списание: испарившаяся влага со склада уже ушла.
+          const totalQty = parseFloat(ing.quantity) * orderItem.quantity;
+          await deductItem(
+            ing.inventory_item_id,
+            totalQty,
+            ing.item_name,
+            !!ing.is_optional,
+            `Списание по техкарте: ${ing.item_name}`
+          );
+        }
+
+        // ── Модификаторы со складским учётом (миграция 034) ──────────────────
+        // Раньше модификатор влиял только на цену в чеке, и добавка со склада
+        // не уходила никогда: продали 50 кофе с сиропом — остаток сиропа не
+        // изменился. Теперь модификатор может нести расход одним из двух
+        // способов (они взаимоисключающи по CHECK в схеме).
+        const chosenModifiers = await client.query(
+          `SELECT oim.name AS chosen_name,
+                  mim.name AS modifier_name,
+                  mim.inventory_item_id,
+                  mim.tech_card_id,
+                  mim.quantity
+             FROM order_item_modifiers oim
+             INNER JOIN menu_item_modifiers mim ON mim.id = oim.modifier_id
+            WHERE oim.order_item_id = $1
+              AND mim.quantity IS NOT NULL
+              AND (mim.inventory_item_id IS NOT NULL OR mim.tech_card_id IS NOT NULL)`,
+          [orderItem.order_item_id]
+        );
+
+        for (const mod of chosenModifiers.rows) {
+          const modName = mod.modifier_name || mod.chosen_name;
+          // Расход задан на ОДИН выбор модификатора, а строка заказа может
+          // быть на несколько порций — умножаем на количество блюд.
+          const modQty = parseFloat(mod.quantity) * orderItem.quantity;
+
+          // Способ 1: прямая позиция склада («доп. сыр 20 г»)
+          if (mod.inventory_item_id) {
+            const nameRow = await client.query(
+              `SELECT name FROM inventory_items WHERE id = $1`,
+              [mod.inventory_item_id]
+            );
+            const itemName = nameRow.rows[0]?.name || modName;
+            await deductItem(
+              mod.inventory_item_id,
+              modQty,
+              itemName,
+              false,
+              `Списание по модификатору «${modName}»: ${itemName}`
+            );
+            continue;
+          }
+
+          // Способ 2: наш полуфабрикат или блюдо по техкарте («соус Цезарь»).
+          // Карта с output_item_id выпускает позицию склада — её и списываем
+          // одной строкой: полуфабрикат уже сварен и лежит на складе со своей
+          // себестоимостью выпуска, разбирать его обратно на сырьё неверно.
+          const card = await client.query(
+            `SELECT tc.output_item_id, ii.name AS output_name
+               FROM tech_cards tc
+               LEFT JOIN inventory_items ii ON ii.id = tc.output_item_id
+              WHERE tc.id = $1 AND tc.is_active = true`,
+            [mod.tech_card_id]
+          );
+          if (card.rowCount === 0) {
+            skipped.push(`модификатор «${modName}»: техкарта неактивна или удалена`);
+            continue;
+          }
+
+          if (card.rows[0].output_item_id) {
+            const outName = card.rows[0].output_name || modName;
+            await deductItem(
+              card.rows[0].output_item_id,
+              modQty,
+              outName,
+              false,
+              `Списание по модификатору «${modName}» (полуфабрикат): ${outName}`
+            );
+            continue;
+          }
+
+          // Карта без выпуска на склад (обычное блюдо) — списываем её сырьё.
+          // Версия берётся по дате заказа, как и для самого блюда.
+          const modIngredients = await client.query(
+            `SELECT tci.inventory_item_id, tci.quantity, tci.is_optional, ii.name AS item_name
+               FROM tech_card_ingredients tci
+               INNER JOIN inventory_items ii ON ii.id = tci.inventory_item_id
+              WHERE tci.tech_card_id = $1`,
+            [mod.tech_card_id]
+          );
+          if (modIngredients.rowCount === 0) {
+            skipped.push(`модификатор «${modName}»: у техкарты нет состава`);
+            continue;
+          }
+          for (const ing of modIngredients.rows) {
+            await deductItem(
+              ing.inventory_item_id,
+              parseFloat(ing.quantity) * modQty,
+              ing.item_name,
+              !!ing.is_optional,
+              `Списание по модификатору «${modName}»: ${ing.item_name}`
+            );
+          }
         }
       }
 

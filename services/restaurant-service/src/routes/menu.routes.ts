@@ -1,5 +1,9 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
+import express from 'express';
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
 import { MenuService } from '../services/menu.service';
 import { authenticateUser, optionalAuth, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
@@ -13,12 +17,23 @@ const categorySchema = Joi.object({
   displayOrder: Joi.number().integer().min(0).optional()
 });
 
+// Значки блюд и цвета плашек — тот же набор, что в админке (menu.html)
+export const MENU_ITEM_ICONS = ['pizza', 'burger', 'roll', 'soup', 'salad', 'coffee', 'cake', 'drink'];
+export const MENU_ITEM_ICON_COLORS = ['green', 'tomato', 'yellow', 'cream'];
+
+// Фото: внешний URL или путь к файлу, загруженному через /menu-items/:id/image
+const imageUrlSchema = Joi.alternatives()
+  .try(Joi.string().uri({ scheme: ['http', 'https'] }), Joi.string().pattern(/^\/api\/restaurants\/media\/[\w\-./]+$/))
+  .allow('', null);
+
 const menuItemSchema = Joi.object({
   categoryId: Joi.string().uuid().allow(null).optional(),
   name: Joi.string().min(1).max(255).required(),
   description: Joi.string().max(2000).optional(),
   price: Joi.number().min(0).required(),
-  imageUrl: Joi.string().uri().allow('', null).optional(),
+  imageUrl: imageUrlSchema.optional(),
+  icon: Joi.string().valid(...MENU_ITEM_ICONS).allow(null).optional(),
+  iconColor: Joi.string().valid(...MENU_ITEM_ICON_COLORS).allow(null).optional(),
   isVegetarian: Joi.boolean().optional(),
   isVegan: Joi.boolean().optional(),
   isGlutenFree: Joi.boolean().optional(),
@@ -31,12 +46,47 @@ const menuItemSchema = Joi.object({
   weightGrams: Joi.number().integer().min(0).optional()
 });
 
-const modifierSchema = Joi.object({
+const menuItemVisualSchema = Joi.object({
+  imageUrl: imageUrlSchema.optional(),
+  icon: Joi.string().valid(...MENU_ITEM_ICONS).allow(null).optional(),
+  iconColor: Joi.string().valid(...MENU_ITEM_ICON_COLORS).allow(null).optional()
+});
+
+export const modifierSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
   modifierGroup: Joi.string().max(100).optional(),
   priceAdjustment: Joi.number().optional(),
-  isDefault: Joi.boolean().optional()
-});
+  isDefault: Joi.boolean().optional(),
+  inventoryItemId: Joi.string().uuid().allow(null).optional(),
+  techCardId: Joi.string().uuid().allow(null).optional(),
+  // Расход на ОДИН выбор модификатора. Строго больше нуля: нулевой расход
+  // означал бы «учитываем, но ничего не списываем» — это молчаливая ошибка.
+  // `when` вместо `with`: правило `with` считается выполненным и при
+  // quantity: null, поэтому источник без расхода проскакивал бы в БД.
+  // В ветке `then` схема задаётся ЗАНОВО, без allow(null): иначе разрешение
+  // null из базового правила переносится в ветку и снова пропускает пустой
+  // расход при заданном источнике.
+  quantity: Joi.alternatives().conditional(
+    Joi.ref('inventoryItemId'),
+    {
+      is: Joi.string().uuid().required(),
+      then: Joi.number().positive().required(),
+      otherwise: Joi.alternatives().conditional(
+        Joi.ref('techCardId'),
+        {
+          is: Joi.string().uuid().required(),
+          then: Joi.number().positive().required(),
+          otherwise: Joi.number().positive().allow(null).optional()
+        }
+      )
+    }
+  )
+})
+  .oxor('inventoryItemId', 'techCardId')
+  .messages({
+    'object.oxor': 'Укажите либо позицию склада, либо техкарту — но не оба источника сразу',
+    'any.required': 'Для складского учёта модификатора нужно указать расход больше нуля'
+  });
 
 // ========== FULL MENU ==========
 
@@ -175,6 +225,12 @@ router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'm
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
+    const { error: visualError } = menuItemVisualSchema.validate(
+      { imageUrl: req.body.imageUrl, icon: req.body.icon, iconColor: req.body.iconColor }
+    );
+    if (visualError) {
+      return res.status(400).json({ error: 'Validation error', message: visualError.details[0].message });
+    }
     const item = await menuService.updateItem(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
@@ -204,6 +260,89 @@ router.delete('/menu-items/:id', authenticateUser, requireRole('admin', 'owner',
 });
 
 // ========== STOP-LIST ==========
+
+// ========== ФОТО БЛЮДА ==========
+// Файл приходит JSON-ом как data URL: так не нужен multer, а лимит тела
+// поднят только для этого маршрута (см. index.ts). Файлы лежат в томе
+// UPLOAD_DIR и отдаются этим же сервисом по /api/restaurants/media/...
+
+const MEDIA_URL_PREFIX = '/api/restaurants/media/';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp'
+};
+
+const imageUploadSchema = Joi.object({
+  dataUrl: Joi.string().pattern(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/).required()
+});
+
+async function removeLocalImage(imageUrl: string | null | undefined): Promise<void> {
+  if (!imageUrl || !imageUrl.startsWith(MEDIA_URL_PREFIX)) return;
+  const rel = imageUrl.slice(MEDIA_URL_PREFIX.length);
+  const file = path.resolve(config.uploadDir, rel);
+  // Не выходим за пределы папки загрузок, даже если в базе окажется «../»
+  if (!file.startsWith(path.resolve(config.uploadDir) + path.sep)) return;
+  await fs.unlink(file).catch(() => undefined);
+}
+
+async function findOwnItem(req: Request, res: Response): Promise<any | null> {
+  const item = await menuService.getItemById(req.params.id);
+  const isSuper = req.userRole === 'super_admin';
+  if (!item || (!isSuper && item.enterprise_id && item.enterprise_id !== req.enterpriseId)) {
+    res.status(404).json({ error: 'Item not found' });
+    return null;
+  }
+  return item;
+}
+
+router.post('/menu-items/:id/image', express.json({ limit: '8mb' }), authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const { error, value } = imageUploadSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: 'Нужна картинка JPG, PNG или WebP' });
+    }
+    const item = await findOwnItem(req, res);
+    if (!item) return;
+
+    const [, mime, b64] = /^data:(image\/[a-z]+);base64,(.+)$/.exec(value.dataUrl) as RegExpExecArray;
+    const ext = IMAGE_TYPES[mime];
+    const buffer = Buffer.from(b64, 'base64');
+    if (!ext || buffer.length === 0) {
+      return res.status(400).json({ error: 'Validation error', message: 'Нужна картинка JPG, PNG или WebP' });
+    }
+    if (buffer.length > MAX_IMAGE_BYTES) {
+      return res.status(413).json({ error: 'Too large', message: 'Фото больше 5 МБ' });
+    }
+
+    const dir = path.join(config.uploadDir, 'menu');
+    await fs.mkdir(dir, { recursive: true });
+    const fileName = `${item.id}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    await fs.writeFile(path.join(dir, fileName), buffer);
+
+    const imageUrl = `${MEDIA_URL_PREFIX}menu/${fileName}`;
+    const updated = await menuService.updateItem(item.id, { imageUrl });
+    await removeLocalImage(item.image_url);
+    return res.json({ item: updated, imageUrl });
+  } catch (error) {
+    console.error('Upload image error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/menu-items/:id/image', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const item = await findOwnItem(req, res);
+    if (!item) return;
+    const updated = await menuService.updateItem(item.id, { imageUrl: null });
+    await removeLocalImage(item.image_url);
+    return res.json({ item: updated });
+  } catch (error) {
+    console.error('Delete image error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 const stopItemSchema = Joi.object({
   reason: Joi.string().min(1).max(500).required(),
@@ -286,9 +425,25 @@ router.post('/menu-items/:itemId/modifiers', authenticateUser, requireRole('admi
     if (error) {
       return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
+    // Источник расхода должен принадлежать своему предприятию, иначе продажа
+    // списала бы продукты с чужого склада.
+    if (req.enterpriseId && (value.inventoryItemId || value.techCardId)) {
+      const own = await menuService.modifierSourceBelongsTo(value, req.enterpriseId);
+      if (!own.ok) {
+        return res.status(400).json({ error: 'Validation error', message: own.reason });
+      }
+    }
     const modifier = await menuService.createModifier(req.params.itemId, value, req.enterpriseId);
     return res.status(201).json({ modifier });
-  } catch (error) {
+  } catch (error: any) {
+    // Нарушение CHECK'ов миграции 034 — ошибка ввода, а не сбой сервера:
+    // пользователь должен прочитать, что именно поправить.
+    if (error?.code === '23514') {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'Проверьте складскую связь: нужен один источник расхода и количество больше нуля'
+      });
+    }
     console.error('Create modifier error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -300,12 +455,24 @@ router.put('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'ma
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
+    if (req.enterpriseId && (req.body.inventoryItemId || req.body.techCardId)) {
+      const own = await menuService.modifierSourceBelongsTo(req.body, req.enterpriseId);
+      if (!own.ok) {
+        return res.status(400).json({ error: 'Validation error', message: own.reason });
+      }
+    }
     const modifier = await menuService.updateModifier(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!modifier) {
       return res.status(404).json({ error: 'Modifier not found' });
     }
     return res.json({ modifier });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === '23514') {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'Проверьте складскую связь: нужен один источник расхода и количество больше нуля'
+      });
+    }
     console.error('Update modifier error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }

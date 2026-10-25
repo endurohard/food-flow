@@ -12,7 +12,11 @@ export interface CreateMenuItemInput {
   name: string;
   description?: string;
   price: number;
-  imageUrl?: string;
+  imageUrl?: string | null;
+  /** Значок, пока нет фото: pizza | burger | roll | soup | salad | coffee | cake | drink */
+  icon?: string | null;
+  /** Цвет плашки значка: green | tomato | yellow | cream */
+  iconColor?: string | null;
   isVegetarian?: boolean;
   isVegan?: boolean;
   isGlutenFree?: boolean;
@@ -30,6 +34,11 @@ export interface CreateModifierInput {
   modifierGroup?: string;
   priceAdjustment?: number;
   isDefault?: boolean;
+  // Складской учёт модификатора (миграция 034). Способы взаимоисключающи:
+  // либо прямая позиция склада, либо техкарта своего полуфабриката.
+  inventoryItemId?: string | null;
+  techCardId?: string | null;
+  quantity?: number | null;
 }
 
 export class MenuService {
@@ -129,8 +138,8 @@ export class MenuService {
       `INSERT INTO menu_items (
         restaurant_id, category_id, name, description, price, image_url,
         is_vegetarian, is_vegan, is_gluten_free, calories, preparation_time,
-        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id, icon, icon_color
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         restaurantId,
@@ -149,7 +158,9 @@ export class MenuService {
         data.taxRate || 0,
         data.unit || 'piece',
         data.weightGrams || null,
-        enterpriseId || null
+        enterpriseId || null,
+        data.icon || null,
+        data.iconColor || null
       ]
     );
     return result.rows[0];
@@ -162,7 +173,8 @@ export class MenuService {
       isVegetarian: 'is_vegetarian', isVegan: 'is_vegan', isGlutenFree: 'is_gluten_free',
       calories: 'calories', preparationTime: 'preparation_time',
       sku: 'sku', costPrice: 'cost_price', taxRate: 'tax_rate',
-      unit: 'unit', weightGrams: 'weight_grams'
+      unit: 'unit', weightGrams: 'weight_grams',
+      icon: 'icon', iconColor: 'icon_color'
     };
 
     const fields: string[] = [];
@@ -202,10 +214,18 @@ export class MenuService {
   // ========== MODIFIERS ==========
 
   async getModifiers(menuItemId: string): Promise<any[]> {
+    // Имена источника расхода нужны, чтобы экран показывал «что списывается»,
+    // а не голый UUID: иначе настроенный учёт невозможно проверить глазами.
     const result = await this.pool.query(
-      `SELECT * FROM menu_item_modifiers
-       WHERE menu_item_id = $1 AND is_available = true
-       ORDER BY modifier_group ASC, display_order ASC`,
+      `SELECT m.*,
+              ii.name AS inventory_item_name,
+              ii.unit AS inventory_item_unit,
+              tc.name AS tech_card_name
+         FROM menu_item_modifiers m
+         LEFT JOIN inventory_items ii ON ii.id = m.inventory_item_id
+         LEFT JOIN tech_cards tc ON tc.id = m.tech_card_id
+        WHERE m.menu_item_id = $1 AND m.is_available = true
+        ORDER BY m.modifier_group ASC, m.display_order ASC`,
       [menuItemId]
     );
     return result.rows;
@@ -213,10 +233,16 @@ export class MenuService {
 
   async createModifier(menuItemId: string, data: CreateModifierInput, enterpriseId?: string): Promise<any> {
     const result = await this.pool.query(
-      `INSERT INTO menu_item_modifiers (menu_item_id, name, modifier_group, price_adjustment, is_default, enterprise_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO menu_item_modifiers (menu_item_id, name, modifier_group, price_adjustment, is_default, enterprise_id,
+         inventory_item_id, tech_card_id, quantity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [menuItemId, data.name, data.modifierGroup || null, data.priceAdjustment || 0, data.isDefault || false, enterpriseId || null]
+      [
+        menuItemId, data.name, data.modifierGroup || null, data.priceAdjustment || 0,
+        data.isDefault || false, enterpriseId || null,
+        data.inventoryItemId || null, data.techCardId || null,
+        data.quantity ?? null
+      ]
     );
     return result.rows[0];
   }
@@ -231,6 +257,18 @@ export class MenuService {
     if (data.priceAdjustment !== undefined) { fields.push(`price_adjustment = $${p++}`); values.push(data.priceAdjustment); }
     if (data.isDefault !== undefined) { fields.push(`is_default = $${p++}`); values.push(data.isDefault); }
     if (data.isAvailable !== undefined) { fields.push(`is_available = $${p++}`); values.push(data.isAvailable); }
+    // Складская связь. Присвоение одного источника обнуляет другой: без этого
+    // переключение «позиция склада → техкарта» упёрлось бы в CHECK, который
+    // запрещает оба источника разом.
+    if (data.inventoryItemId !== undefined) {
+      fields.push(`inventory_item_id = $${p++}`); values.push(data.inventoryItemId || null);
+      if (data.techCardId === undefined && data.inventoryItemId) fields.push(`tech_card_id = NULL`);
+    }
+    if (data.techCardId !== undefined) {
+      fields.push(`tech_card_id = $${p++}`); values.push(data.techCardId || null);
+      if (data.inventoryItemId === undefined && data.techCardId) fields.push(`inventory_item_id = NULL`);
+    }
+    if (data.quantity !== undefined) { fields.push(`quantity = $${p++}`); values.push(data.quantity ?? null); }
 
     if (fields.length === 0) return null;
 
@@ -242,6 +280,30 @@ export class MenuService {
       values
     );
     return result.rows[0] || null;
+  }
+
+  // Проверка, что указанный источник расхода принадлежит тому же предприятию.
+  // Без неё модификатор можно привязать к складу или техкарте ЧУЖОЙ
+  // организации: при продаже списание ушло бы с чужого склада.
+  async modifierSourceBelongsTo(
+    source: { inventoryItemId?: string | null; techCardId?: string | null },
+    enterpriseId: string
+  ): Promise<{ ok: boolean; reason?: string }> {
+    if (source.inventoryItemId) {
+      const r = await this.pool.query(
+        `SELECT 1 FROM inventory_items WHERE id = $1 AND enterprise_id = $2`,
+        [source.inventoryItemId, enterpriseId]
+      );
+      if (r.rowCount === 0) return { ok: false, reason: 'Позиция склада не найдена в этом предприятии' };
+    }
+    if (source.techCardId) {
+      const r = await this.pool.query(
+        `SELECT 1 FROM tech_cards WHERE id = $1 AND enterprise_id = $2`,
+        [source.techCardId, enterpriseId]
+      );
+      if (r.rowCount === 0) return { ok: false, reason: 'Техкарта не найдена в этом предприятии' };
+    }
+    return { ok: true };
   }
 
   async deleteModifier(modifierId: string, enterpriseId?: string): Promise<boolean> {
