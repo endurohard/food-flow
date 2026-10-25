@@ -1927,6 +1927,13 @@ AUTH.requireAuth();
         </div>
 
         <div class="form-group">
+          <label class="form-label">Склад прихода:</label>
+          <select class="form-select" id="orderWarehouse" required>
+            <option value="">Загрузка...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Товар:</label>
           <select class="form-select" id="orderItem" required>
             <option value="">Выберите товар</option>
@@ -1971,11 +1978,19 @@ AUTH.requireAuth();
   <script>
     let inventory = [];
     let suppliers = [];
-    let purchaseOrders = [];
-    let productions = [];
-    let shipments = [];
     let currentFilter = 'all';
     let editingItemId = null;
+    // Загрузка со сервера удалась? Пока false — сохранять нельзя: запись
+    // ушла бы в localStorage и пропала при перезагрузке браузера.
+    let dataSourceOk = false;
+    // Склады предприятия: без них движение товара записать некуда,
+    // а подставной id «1» давал ошибку уже после «успешного» сохранения.
+    let warehouses = [];
+    // Удаление и необратимые операции подтверждаются вторым нажатием:
+    // confirm() заблокирован во встроенном браузере VS Code.
+    let pendingItemDelete = null;
+    let pendingProductionCancel = null;
+    let pendingInvoiceConfirm = null;
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1992,125 +2007,133 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Initialize with API data, fallback to localStorage
+    // Разбор ошибки ответа API в читаемый текст: молча глотать нельзя,
+    // иначе пользователь не узнает, почему данные не пришли.
+    async function apiError(res) {
+      const data = await res.json().catch(() => ({}));
+      return data.error || data.message || ('HTTP ' + res.status);
+    }
+
+    // Экран ошибки вместо подмены демо-данными. Inline-блок, не alert():
+    // во встроенном браузере VS Code модальные диалоги заблокированы.
+    function showDataError(message) {
+      const tbody = document.getElementById('inventoryTableBody');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="10" style="padding:28px;text-align:left;'
+          + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
+          + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
+          + '⚠️ Склад не загружен — сохранение отключено</div>'
+          + '<div style="color:var(--color-text-primary);line-height:1.5;">' + message + '</div>'
+          + '<button class="btn btn-primary" style="margin-top:16px;" onclick="initializeData().then(()=>{'
+          + 'renderInventory();updateMovementItemOptions();})">🔄 Повторить</button>'
+          + '</td></tr>';
+      }
+      showNotification('⚠️ ' + message);
+    }
+
+    // Единый сторож записи: без подтверждённой связи с сервером любое
+    // сохранение потерялось бы вместе с localStorage.
+    function requireServer(action) {
+      if (!dataSourceOk) {
+        showNotification('⚠️ Нет связи с сервером — ' + action
+          + ' не сохранится. Обновите страницу.');
+        return false;
+      }
+      return true;
+    }
+
+    // Источник истины — API. localStorage для склада НЕ используется.
+    // Почему так: раньше при любой заминке (нет точки у предприятия, упавший
+    // сервис, истёкший токен, сетевая ошибка) экран молча переключался на
+    // localStorage и подставлял демо-список «Помидоры/Говядина/Молоко».
+    // Пользователь видел рабочий интерфейс, добавлял товар — он ложился в
+    // браузер, а не в базу. После перезагрузки, смены браузера или очистки
+    // кэша всё исчезало, и никакой ошибки при этом не показывалось.
     async function initializeData() {
-      // Try loading from API
+      const tbody = document.getElementById('inventoryTableBody');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+      }
+
+      inventory = [];
+      suppliers = [];
+      warehouses = [];
+      dataSourceOk = false;
+
       try {
-        const suppRes = await AUTH.fetch('/api/suppliers');
-        if (suppRes.ok) {
-          const suppData = await suppRes.json();
-          if (suppData.suppliers && suppData.suppliers.length > 0) {
-            suppliers = suppData.suppliers.map(s => ({
-              id: s.id, name: s.name, contact: s.contact_person || '',
-              phone: s.phone || '', email: s.email || '',
-              address: s.address || '', categories: '', rating: 5,
-              balance: parseFloat(s.balance) || 0
-            }));
-          }
+        // Нет ни одной точки — складу некуда привязываться. Это и был главный
+        // источник потери: сохранение молча уходило в localStorage.
+        const restRes = await AUTH.fetch('/api/restaurants');
+        if (!restRes.ok) throw new Error(await apiError(restRes));
+        const restData = await restRes.json();
+        if (!restData.restaurants || restData.restaurants.length === 0) {
+          showDataError(
+            'У предприятия нет ни одной точки (ресторана). Склад привязывается к точке, '
+            + 'поэтому сохранять товары и движения некуда. Создайте точку в разделе «Рестораны» — '
+            + 'до этого данные не сохранятся.'
+          );
+          updateSupplierOptions();
+          updateOrderItemOptions();
+          return;
         }
+
+        const suppRes = await AUTH.fetch('/api/suppliers');
+        if (!suppRes.ok) throw new Error(await apiError(suppRes));
+        const suppData = await suppRes.json();
+        suppliers = (suppData.suppliers || []).map(s => ({
+          id: s.id, name: s.name, contact: s.contact_person || '',
+          phone: s.phone || '', email: s.email || '',
+          address: s.address || '', categories: '', rating: 5,
+          balance: parseFloat(s.balance) || 0
+        }));
 
         const invRes = await AUTH.fetch('/api/inventory/items');
-        if (invRes.ok) {
-          const invData = await invRes.json();
-          if (invData.items && invData.items.length > 0) {
-            inventory = invData.items.map(i => ({
-              id: i.id, name: i.name, category: i.category || 'other',
-              quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
-              minQuantity: parseFloat(i.min_stock) || 0,
-              costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
-            }));
-          }
+        if (!invRes.ok) throw new Error(await apiError(invRes));
+        const invData = await invRes.json();
+        inventory = (invData.items || []).map(i => ({
+          id: i.id, name: i.name, category: i.category || 'other',
+          quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
+          minQuantity: parseFloat(i.min_stock) || 0,
+          costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
+        }));
+
+        // Склад нужен для движений; его отсутствие — тоже причина не включать
+        // запись, иначе форма движения отправит пустой warehouseId.
+        const whRes = await AUTH.fetch('/api/inventory/warehouses');
+        if (!whRes.ok) throw new Error(await apiError(whRes));
+        const whData = await whRes.json();
+        warehouses = whData.warehouses || [];
+        if (warehouses.length === 0) {
+          showDataError(
+            'У предприятия нет ни одного склада. Приход, списание и выпуск продукции '
+            + 'записываются на склад, поэтому сохранять движения некуда. Создайте склад — '
+            + 'до этого данные не сохранятся.'
+          );
+          updateSupplierOptions();
+          updateOrderItemOptions();
+          return;
         }
+
+        dataSourceOk = true;
       } catch (e) {
-        console.log('API unavailable, using localStorage fallback:', e.message);
+        showDataError(
+          'Не удалось загрузить склад с сервера: ' + e.message
+          + '. Данные НЕ показаны, чтобы вы не работали с пустым экраном как с реальным. '
+          + 'Обновите страницу или войдите заново.'
+        );
+        updateSupplierOptions();
+        updateOrderItemOptions();
+        return;
       }
 
-      // Fallback to localStorage
-      if (suppliers.length === 0) {
-        const savedSuppliers = localStorage.getItem('restaurantSuppliers');
-        if (savedSuppliers) {
-          suppliers = JSON.parse(savedSuppliers);
-        } else {
-          suppliers = [
-            { id: 1, name: 'Эко Ферма', contact: 'Иван Петров', phone: '+7 999 111-11-11', email: 'info@ecofarm.ru', address: 'г. Москва, ул. Садовая, 15', categories: 'Овощи, Фрукты', rating: 4.8 },
-            { id: 2, name: 'Мясной Дом', contact: 'Сергей Смирнов', phone: '+7 999 222-22-22', email: 'sales@meathouse.ru', address: 'г. Москва, ул. Промышленная, 42', categories: 'Мясо, Птица', rating: 4.5 },
-            { id: 3, name: 'Молочная Лавка', contact: 'Анна Кузнецова', phone: '+7 999 333-33-33', email: 'info@milkshop.ru', address: 'г. Москва, пр. Фермерский, 8', categories: 'Молочные продукты', rating: 4.9 }
-          ];
-        }
-      }
-
-      if (inventory.length === 0) {
-        const savedInventory = localStorage.getItem('inventory');
-        if (savedInventory) {
-          inventory = JSON.parse(savedInventory);
-          inventory = inventory.map(item => {
-            if (item.price !== undefined && item.costPrice === undefined) {
-              return { ...item, costPrice: item.price };
-            }
-            return item;
-          });
-        } else {
-        inventory = [
-          { id: 1, name: 'Помидоры', category: 'produce', quantity: 45, unit: 'кг', minQuantity: 20, costPrice: 150, supplierId: 1 },
-          { id: 2, name: 'Огурцы', category: 'produce', quantity: 8, unit: 'кг', minQuantity: 15, costPrice: 120, supplierId: 1 },
-          { id: 3, name: 'Куриная грудка', category: 'meat', quantity: 25, unit: 'кг', minQuantity: 10, costPrice: 350, supplierId: 2 },
-          { id: 4, name: 'Говядина', category: 'meat', quantity: 5, unit: 'кг', minQuantity: 12, costPrice: 650, supplierId: 2 },
-          { id: 5, name: 'Молоко', category: 'dairy', quantity: 0, unit: 'л', minQuantity: 30, costPrice: 65, supplierId: 3 },
-          { id: 6, name: 'Сыр Моцарелла', category: 'dairy', quantity: 18, unit: 'кг', minQuantity: 8, costPrice: 450, supplierId: 3 },
-          { id: 7, name: 'Картофель', category: 'produce', quantity: 75, unit: 'кг', minQuantity: 40, costPrice: 45, supplierId: 1 },
-          { id: 8, name: 'Лук репчатый', category: 'produce', quantity: 30, unit: 'кг', minQuantity: 15, costPrice: 35, supplierId: 1 }
-        ];
-        }
-      }
-
-      const savedOrders = localStorage.getItem('restaurantPurchaseOrders');
-      if (savedOrders) {
-        purchaseOrders = JSON.parse(savedOrders);
-      } else {
-        purchaseOrders = [
-          { id: 1, supplierId: 1, itemId: 1, date: '2024-11-01', status: 'completed', items: [{ name: 'Помидоры', quantity: 50, unit: 'кг', price: 150 }], total: 7500 },
-          { id: 2, supplierId: 2, itemId: 4, date: '2024-11-03', status: 'pending', items: [{ name: 'Говядина', quantity: 20, unit: 'кг', price: 650 }], total: 13000 }
-        ];
-      }
-
-      // Initialize production data
-      const savedProductions = localStorage.getItem('restaurantProductions');
-      if (savedProductions) {
-        productions = JSON.parse(savedProductions);
-      } else {
-        productions = [
-          { id: 1, date: '2024-11-05', product: 'Пицца Маргарита (заготовки)', quantity: 50, unit: 'шт', materialsCost: 12500, totalCost: 15000, responsible: 'Иванов И.П.', status: 'completed' },
-          { id: 2, date: '2024-11-08', product: 'Соус томатный (домашний)', quantity: 20, unit: 'л', materialsCost: 3000, totalCost: 4200, responsible: 'Петрова А.С.', status: 'completed' },
-          { id: 3, date: '2024-11-10', product: 'Тесто для пиццы', quantity: 100, unit: 'кг', materialsCost: 8500, totalCost: 10000, responsible: 'Сидоров П.К.', status: 'in-progress' },
-          { id: 4, date: '2024-11-12', product: 'Котлеты (полуфабрикат)', quantity: 200, unit: 'шт', materialsCost: 15000, totalCost: 18500, responsible: 'Иванов И.П.', status: 'planned' }
-        ];
-      }
-
-      // Initialize shipments data
-      const savedShipments = localStorage.getItem('restaurantShipments');
-      if (savedShipments) {
-        shipments = JSON.parse(savedShipments);
-      } else {
-        shipments = [
-          { id: 1, orderNumber: 'OPT-2024-001', date: '2024-11-01', client: 'Кафе "Уют"', clientPhone: '+7 999 444-44-44', items: ['Пицца Маргарита', 'Соус томатный'], totalQuantity: 30, totalAmount: 45000, waybillNumber: 'ПЛ-110124', status: 'delivered' },
-          { id: 2, orderNumber: 'OPT-2024-002', date: '2024-11-05', client: 'Ресторан "Вкус"', clientPhone: '+7 999 555-55-55', items: ['Пицца 4 сыра', 'Пицца Пепперони', 'Котлеты'], totalQuantity: 75, totalAmount: 98500, waybillNumber: 'ПЛ-110524', status: 'in-transit' },
-          { id: 3, orderNumber: 'OPT-2024-003', date: '2024-11-08', client: 'Столовая №5', clientPhone: '+7 999 666-66-66', items: ['Котлеты', 'Тесто для пиццы'], totalQuantity: 120, totalAmount: 62000, waybillNumber: null, status: 'pending' },
-          { id: 4, orderNumber: 'OPT-2024-004', date: '2024-11-10', client: 'Кафе "Завтрак"', clientPhone: '+7 999 777-77-77', items: ['Соус томатный', 'Сыр Моцарелла'], totalQuantity: 45, totalAmount: 35000, waybillNumber: 'ПЛ-111024', status: 'delivered' }
-        ];
-      }
-
-      saveData();
       updateSupplierOptions();
       updateOrderItemOptions();
     }
 
-    function saveData() {
-      localStorage.setItem('inventory', JSON.stringify(inventory));
-      localStorage.setItem('restaurantSuppliers', JSON.stringify(suppliers));
-      localStorage.setItem('restaurantPurchaseOrders', JSON.stringify(purchaseOrders));
-      localStorage.setItem('restaurantProductions', JSON.stringify(productions));
-      localStorage.setItem('restaurantShipments', JSON.stringify(shipments));
-    }
+    // saveData удалён вместе с localStorage-режимом: товары, поставщики,
+    // приходы и выпуски живут только на сервере. Кэш в браузере был
+    // источником «пропавших» данных — он подменял серверный ответ и
+    // принимал записи, которые до базы не доходили.
 
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2120,8 +2143,8 @@ AUTH.requireAuth();
       document.getElementById(tab + 'Tab').classList.add('active');
 
       if (tab === 'suppliers') renderSuppliers();
-      else if (tab === 'orders') renderOrders();
-      else if (tab === 'reports') renderReports();
+      else if (tab === 'orders') loadReceiptMovements();
+      else if (tab === 'reports') { loadReceiptMovements().then(renderReports); }
       else if (tab === 'production') loadProductionRuns();
       else if (tab === 'invoices') loadSupplierInvoices();
     }
@@ -2154,8 +2177,17 @@ AUTH.requireAuth();
       return names[category] || category;
     }
 
+    // id товаров и поставщиков — UUID-строки, их нельзя вставлять в onclick
+    // как есть: без кавычек браузер прочитает их как выражение JS.
+    function jsArg(id) {
+      return "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    }
+
     function renderInventory() {
       const tbody = document.getElementById('inventoryTableBody');
+      // Без подтверждённой загрузки в tbody уже нарисован блок ошибки —
+      // перерисовка пустым списком выглядела бы как «на складе ничего нет».
+      if (!dataSourceOk) return;
       const search = document.getElementById('searchInput').value.toLowerCase();
 
       let filteredItems = inventory.filter(item => {
@@ -2191,8 +2223,8 @@ AUTH.requireAuth();
             <td style="font-weight: 700; color: var(--color-primary);">${totalValue.toFixed(2)} ₽</td>
             <td>${supplier ? supplier.name : '-'}</td>
             <td>
-              <button class="btn btn-secondary btn-small" onclick="editItem(${item.id})">✏️</button>
-              <button class="btn btn-danger btn-small" onclick="deleteItem(${item.id})" style="margin-left:4px;">🗑</button>
+              <button class="btn btn-secondary btn-small" onclick="editItem(${jsArg(item.id)})">✏️</button>
+              <button class="btn btn-danger btn-small" onclick="deleteItem(${jsArg(item.id)})" style="margin-left:4px;">🗑</button>
             </td>
           </tr>
         `;
@@ -2233,6 +2265,7 @@ AUTH.requireAuth();
     }
 
     function openAddItemModal() {
+      if (!requireServer('товар')) return;
       editingItemId = null;
       document.getElementById('itemModalTitle').textContent = 'Добавить товар';
       document.getElementById('itemForm').reset();
@@ -2257,6 +2290,7 @@ AUTH.requireAuth();
 
     async function saveItem(event) {
       event.preventDefault();
+      if (!requireServer('товар')) return;
 
       const formData = {
         name: document.getElementById('itemName').value,
@@ -2281,67 +2315,65 @@ AUTH.requireAuth();
             body: JSON.stringify(formData)
           });
         }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || 'HTTP ' + res.status);
-        }
+        if (!res.ok) throw new Error(await apiError(res));
         showNotification(editingItemId ? '✅ Товар обновлён' : '✅ Товар добавлен');
         closeItemModal();
-        // Reload from API
         await reloadInventoryFromAPI();
       } catch (e) {
-        showNotification('❌ Ошибка: ' + e.message);
-        // Fallback: local update
-        if (editingItemId) {
-          const idx = inventory.findIndex(i => i.id === editingItemId);
-          if (idx > -1) inventory[idx] = { ...inventory[idx], ...formData };
-        } else {
-          const newId = inventory.length > 0 ? Math.max(...inventory.map(i => i.id)) + 1 : 1;
-          inventory.push({ id: newId, quantity: 0, ...formData });
-        }
-        saveData();
-        renderInventory();
-        closeItemModal();
+        // Локальной копии больше нет: показать ошибку и оставить форму
+        // открытой честнее, чем «сохранить» товар в браузер.
+        showNotification('❌ Не сохранено: ' + e.message);
       }
     }
 
     async function deleteItem(id) {
-      if (!confirm('Удалить этот товар?')) return;
+      if (!requireServer('удаление товара')) return;
+      // Подтверждение вторым нажатием вместо confirm()
+      if (pendingItemDelete !== id) {
+        pendingItemDelete = id;
+        showNotification('⚠️ Нажмите 🗑 ещё раз, чтобы удалить товар');
+        setTimeout(() => { if (pendingItemDelete === id) pendingItemDelete = null; }, 5000);
+        return;
+      }
+      pendingItemDelete = null;
       try {
         const res = await AUTH.fetch('/api/inventory/items/' + id, { method: 'DELETE' });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error(await apiError(res));
         showNotification('✅ Товар удалён');
         await reloadInventoryFromAPI();
       } catch (e) {
-        showNotification('❌ Ошибка удаления: ' + e.message);
-        // Fallback: local delete
-        inventory = inventory.filter(i => i.id !== id);
-        saveData();
-        renderInventory();
+        // Из списка не убираем: товар в базе остался, иначе экран врал бы
+        showNotification('❌ Не удалено: ' + e.message);
       }
     }
 
     async function reloadInventoryFromAPI() {
       try {
         const res = await AUTH.fetch('/api/inventory/items');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.items) {
-            inventory = data.items.map(i => ({
-              id: i.id, name: i.name, category: i.category || 'other',
-              quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
-              minQuantity: parseFloat(i.min_stock) || 0,
-              costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
-            }));
-            updateMovementItemOptions();
-          }
-        }
-      } catch (e) { /* use existing data */ }
-      renderInventory();
+        if (!res.ok) throw new Error(await apiError(res));
+        const data = await res.json();
+        inventory = (data.items || []).map(i => ({
+          id: i.id, name: i.name, category: i.category || 'other',
+          quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
+          minQuantity: parseFloat(i.min_stock) || 0,
+          costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
+        }));
+        dataSourceOk = true;
+        updateMovementItemOptions();
+        updateOrderItemOptions();
+        renderInventory();
+      } catch (e) {
+        // Показанный список больше не соответствует базе — гасим запись,
+        // чтобы следующая правка не ушла «в никуда».
+        dataSourceOk = false;
+        showDataError('Список товаров устарел: ' + e.message
+          + '. Сохранение отключено, чтобы правки не потерялись.');
+      }
     }
 
     async function saveMovement(event) {
       event.preventDefault();
+      if (!requireServer('движение товара')) return;
       const warehouseId = document.getElementById('movementWarehouse').value;
       const itemId = document.getElementById('movementItem').value;
       const movementType = document.getElementById('movementType').value;
@@ -2375,20 +2407,14 @@ AUTH.requireAuth();
       }
     }
 
-    async function loadWarehouses() {
-      try {
-        const res = await AUTH.fetch('/api/inventory/warehouses');
-        if (res.ok) {
-          const data = await res.json();
-          const sel = document.getElementById('movementWarehouse');
-          const whs = data.warehouses || [];
-          sel.innerHTML = whs.length
-            ? whs.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
-            : '<option value="1">Основной склад</option>';
-        }
-      } catch (e) {
-        document.getElementById('movementWarehouse').innerHTML = '<option value="1">Основной склад</option>';
-      }
+    // Склады уже загружены в initializeData — подставной «Основной склад»
+    // с id=1 убран: он выглядел рабочим, а запись движения отвергалась.
+    function loadWarehouses() {
+      const sel = document.getElementById('movementWarehouse');
+      if (!sel) return;
+      sel.innerHTML = warehouses.length
+        ? warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
+        : '<option value="">Складов нет — движение записать некуда</option>';
     }
 
     function updateMovementItemOptions() {
@@ -2427,11 +2453,29 @@ AUTH.requireAuth();
         select.innerHTML = '<option value="">Выберите товар</option>' +
           inventory.map(item => `<option value="${item.id}">${item.name} (${item.unit})</option>`).join('');
       }
+      const whSelect = document.getElementById('orderWarehouse');
+      if (whSelect) {
+        whSelect.innerHTML = warehouses.length
+          ? warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
+          : '<option value="">Складов нет — приход оформить некуда</option>';
+      }
     }
 
     // Suppliers
     function renderSuppliers() {
       const container = document.getElementById('suppliersList');
+      // Без связи с сервером список поставщиков пуст — честно сказать об этом,
+      // иначе пустой экран читается как «поставщиков нет».
+      if (!dataSourceOk) {
+        container.innerHTML = '<div style="padding:24px;color:var(--color-danger);">'
+          + '⚠️ Поставщики не загружены — сохранение отключено. Обновите страницу.</div>';
+        return;
+      }
+      if (!suppliers.length) {
+        container.innerHTML = '<div style="padding:24px;color:var(--color-grey-5);">'
+          + 'Поставщиков пока нет — добавьте первого.</div>';
+        return;
+      }
 
       container.innerHTML = suppliers.map(s => `
         <div class="supplier-card">
@@ -2454,48 +2498,76 @@ AUTH.requireAuth();
               : '<span style="background:var(--color-success-light);color:var(--color-success);border-radius:8px;padding:4px 10px;font-weight:600;">Долгов нет</span>'}
           </div>
           <div class="supplier-actions">
-            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
-            <button class="btn btn-primary btn-small" onclick="paySupplier('${s.id}', ${s.balance || 0})">💸 Оплатить</button>
+            <button class="btn btn-primary btn-small" onclick="toggleSupplierPayForm(${jsArg(s.id)})">💸 Оплатить</button>
+          </div>
+          <div id="payForm-${s.id}" style="display:none;margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="number" step="0.01" min="0.01" class="form-input" style="max-width:160px;display:inline-block;"
+                   id="payAmount-${s.id}" value="${(s.balance || 0) > 0 ? s.balance : ''}" placeholder="Сумма, ₽">
+            <button class="btn btn-success btn-small" onclick="paySupplier(${jsArg(s.id)})">✅ Провести</button>
+            <button class="btn btn-secondary btn-small" onclick="toggleSupplierPayForm(${jsArg(s.id)})">Отмена</button>
+            <span id="payError-${s.id}" style="color:var(--color-danger);font-size:13px;"></span>
           </div>
         </div>
       `).join('');
     }
 
-    async function paySupplier(supplierId, debt) {
-      const raw = prompt('Сумма оплаты поставщику, ₽' + (debt > 0 ? ' (долг: ' + debt.toLocaleString('ru-RU') + ' ₽)' : ''), debt > 0 ? debt : '');
-      if (raw === null) return;
-      const amount = parseFloat(String(raw).replace(',', '.'));
-      if (!amount || amount <= 0) { alert('Некорректная сумма'); return; }
+    // Форма оплаты раскрывается прямо в карточке: prompt() во встроенном
+    // браузере VS Code заблокирован и кнопка выглядела мёртвой.
+    function toggleSupplierPayForm(supplierId) {
+      const el = document.getElementById('payForm-' + supplierId);
+      if (!el) return;
+      el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    async function paySupplier(supplierId) {
+      if (!requireServer('оплата поставщику')) return;
+      const errEl = document.getElementById('payError-' + supplierId);
+      if (errEl) errEl.textContent = '';
+      const raw = (document.getElementById('payAmount-' + supplierId) || {}).value;
+      const amount = parseFloat(String(raw || '').replace(',', '.'));
+      if (!(amount > 0)) {
+        if (errEl) errEl.textContent = 'Укажите сумму больше нуля';
+        return;
+      }
       try {
         const res = await AUTH.fetch('/api/suppliers/' + supplierId + '/payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount, method: 'transfer' })
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        if (!res.ok) throw new Error(await apiError(res));
         showNotification('💸 Оплачено ' + amount.toLocaleString('ru-RU') + ' ₽');
         await reloadSuppliersFromAPI();
-      } catch (e) { alert('Ошибка оплаты: ' + e.message); }
+      } catch (e) {
+        // Платёж в браузере не «запоминаем»: баланс поставщика живёт в базе
+        if (errEl) errEl.textContent = 'Не проведено: ' + e.message;
+        showNotification('❌ Не проведено: ' + e.message);
+      }
     }
 
     async function reloadSuppliersFromAPI() {
       try {
         const res = await AUTH.fetch('/api/suppliers');
-        if (res.ok) {
-          const data = await res.json();
-          suppliers = (data.suppliers || []).map(s => ({
-            id: s.id, name: s.name, contact: s.contact_person || '',
-            phone: s.phone || '', email: s.email || '',
-            address: s.address || '', categories: '', rating: 5,
-            balance: parseFloat(s.balance) || 0
-          }));
-          renderSuppliers();
-        }
-      } catch (e) { /* not fatal */ }
+        if (!res.ok) throw new Error(await apiError(res));
+        const data = await res.json();
+        suppliers = (data.suppliers || []).map(s => ({
+          id: s.id, name: s.name, contact: s.contact_person || '',
+          phone: s.phone || '', email: s.email || '',
+          address: s.address || '', categories: '', rating: 5,
+          balance: parseFloat(s.balance) || 0
+        }));
+        renderSuppliers();
+        updateSupplierOptions();
+      } catch (e) {
+        // Список поставщиков устарел — запись гасим, чтобы правка не пропала
+        dataSourceOk = false;
+        renderSuppliers();
+        showNotification('⚠️ Список поставщиков не обновлён: ' + e.message);
+      }
     }
 
     function openAddSupplierModal() {
+      if (!requireServer('поставщик')) return;
       document.getElementById('supplierModal').classList.add('active');
     }
 
@@ -2503,52 +2575,87 @@ AUTH.requireAuth();
       document.getElementById('supplierModal').classList.remove('active');
     }
 
-    function saveSupplier(event) {
+    // Поля — по схеме POST /api/suppliers (contactPerson, а не contact)
+    async function saveSupplier(event) {
       event.preventDefault();
+      if (!requireServer('поставщик')) return;
 
-      const formData = {
-        name: document.getElementById('supplierName').value,
-        contact: document.getElementById('supplierContact').value,
-        phone: document.getElementById('supplierPhone').value,
-        email: document.getElementById('supplierEmail').value,
-        address: document.getElementById('supplierAddress').value,
-        categories: document.getElementById('supplierCategories').value,
-        rating: 0
+      const payload = {
+        name: document.getElementById('supplierName').value.trim(),
+        contactPerson: document.getElementById('supplierContact').value.trim() || undefined,
+        phone: document.getElementById('supplierPhone').value.trim() || undefined,
+        email: document.getElementById('supplierEmail').value.trim() || undefined,
+        address: document.getElementById('supplierAddress').value.trim() || undefined
       };
 
-      const newId = suppliers.length > 0 ? Math.max(...suppliers.map(s => s.id)) + 1 : 1;
-      suppliers.push({ id: newId, ...formData });
-
-      saveData();
-      updateSupplierOptions();
-      renderSuppliers();
-      closeSupplierModal();
-      showNotification('✅ Поставщик добавлен');
+      try {
+        const res = await AUTH.fetch('/api/suppliers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        closeSupplierModal();
+        document.getElementById('supplierForm').reset();
+        showNotification('✅ Поставщик добавлен');
+        await reloadSuppliersFromAPI();
+      } catch (e) {
+        // В локальный массив не пишем: поставщик без записи в базе через
+        // перезагрузку исчезал, а накладные на него ссылаться не могли.
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
-    // Orders
+    // ── История приходов (реальные движения склада) ──
+    // Раньше вкладка жила на localStorage и демо-заказах, поэтому «история»
+    // у каждого браузера была своя и пропадала вместе с кэшем.
+    let receiptMovements = [];
+
+    async function loadReceiptMovements() {
+      const container = document.getElementById('ordersList');
+      try {
+        const res = await AUTH.fetch('/api/inventory/movements?movementType=receipt&limit=200');
+        if (!res.ok) throw new Error(await apiError(res));
+        const data = await res.json();
+        receiptMovements = data.movements || [];
+        renderOrders();
+      } catch (e) {
+        receiptMovements = [];
+        container.innerHTML = '<div style="padding:24px;color:var(--color-danger);">'
+          + '⚠️ История приходов не загружена: ' + e.message + '</div>';
+      }
+    }
+
     function renderOrders() {
       const container = document.getElementById('ordersList');
+      if (!receiptMovements.length) {
+        container.innerHTML = '<div style="padding:24px;color:var(--color-grey-5);">'
+          + 'Приходов пока нет — оформите приход или примите накладную.</div>';
+        return;
+      }
 
-      container.innerHTML = purchaseOrders.map(order => {
-        const supplier = suppliers.find(s => s.id === order.supplierId);
+      container.innerHTML = receiptMovements.map(m => {
+        const qty = parseFloat(m.quantity) || 0;
+        const price = parseFloat(m.cost_price) || 0;
+        const who = [m.first_name, m.last_name].filter(Boolean).join(' ');
         return `
           <div class="order-history-item">
             <div class="order-header">
               <div>
-                <span class="order-number">Заказ #${order.id}</span>
-                <span style="color: var(--color-text-secondary); margin-left: 12px;">${new Date(order.date).toLocaleDateString('ru-RU')}</span>
+                <span class="order-number">${m.item_name || '—'}</span>
+                <span style="color: var(--color-text-secondary); margin-left: 12px;">${new Date(m.created_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
               </div>
-              <span class="order-status ${order.status}">${order.status === 'completed' ? 'Завершён' : 'В обработке'}</span>
+              <span class="order-status completed">Оприходовано</span>
             </div>
             <div style="color: var(--color-text-secondary); margin-bottom: 8px;">
-              <strong>Поставщик:</strong> ${supplier ? supplier.name : '-'}
+              <strong>Склад:</strong> ${m.warehouse_name || '—'}${who ? ' · <strong>Принял:</strong> ' + who : ''}
             </div>
             <div style="color: var(--color-text-primary);">
-              <strong>Товары:</strong> ${order.items.map(i => `${i.name} (${i.quantity} ${i.unit || 'шт'})`).join(', ')}
+              ${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${m.unit || ''} × ${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽
             </div>
+            ${m.notes ? `<div style="color: var(--color-text-secondary); font-size: 13px; margin-top: 6px;">${m.notes}</div>` : ''}
             <div style="color: var(--color-primary); font-size: 18px; font-weight: 700; margin-top: 8px;">
-              Сумма: ${order.total.toLocaleString('ru-RU')} ₽
+              Сумма: ${(qty * price).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽
             </div>
           </div>
         `;
@@ -2556,7 +2663,9 @@ AUTH.requireAuth();
     }
 
     function openNewOrderModal() {
+      if (!requireServer('приход товара')) return;
       document.getElementById('purchaseOrderForm').reset();
+      updateOrderItemOptions();
       document.getElementById('orderTotalDisplay').textContent = '0 ₽';
       document.getElementById('purchaseOrderModal').classList.add('active');
     }
@@ -2565,52 +2674,50 @@ AUTH.requireAuth();
       document.getElementById('purchaseOrderModal').classList.remove('active');
     }
 
-    function savePurchaseOrder(event) {
+    // Приход пишется движением склада (movement_type = receipt): остаток и
+    // FIFO-партия считаются на сервере, а не правкой массива в браузере.
+    async function savePurchaseOrder(event) {
       event.preventDefault();
+      if (!requireServer('приход товара')) return;
 
-      const itemId = parseInt(document.getElementById('orderItem').value);
-      const supplierId = parseInt(document.getElementById('orderSupplier').value);
+      const itemId = document.getElementById('orderItem').value;
+      const supplierId = document.getElementById('orderSupplier').value;
+      const warehouseId = document.getElementById('orderWarehouse').value;
       const quantity = parseFloat(document.getElementById('orderQuantity').value);
       const purchasePrice = parseFloat(document.getElementById('orderPurchasePrice').value);
-      const notes = document.getElementById('orderNotes').value;
+      const notes = document.getElementById('orderNotes').value.trim();
 
+      // id — UUID, сравнение без parseInt: число дало бы NaN и «товар не найден»
       const item = inventory.find(i => i.id === itemId);
-      if (!item) {
-        showNotification('❌ Товар не найден');
-        return;
+      if (!item) { showNotification('❌ Выберите товар из списка'); return; }
+      if (!warehouseId) { showNotification('❌ Выберите склад прихода'); return; }
+      if (!(quantity > 0)) { showNotification('❌ Количество должно быть больше нуля'); return; }
+      if (!(purchasePrice >= 0)) { showNotification('❌ Укажите корректную цену закупки'); return; }
+
+      try {
+        const res = await AUTH.fetch('/api/inventory/movements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            warehouseId,
+            inventoryItemId: itemId,
+            movementType: 'receipt',
+            quantity,
+            costPrice: purchasePrice,
+            supplierId: supplierId || undefined,
+            notes: notes || undefined
+          })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        closePurchaseOrderModal();
+        showNotification(`✅ Приход оформлен: ${quantity} ${item.unit} «${item.name}»`);
+        await reloadInventoryFromAPI();
+        await loadReceiptMovements();
+      } catch (e) {
+        // Остаток локально не увеличиваем: иначе экран показывал бы товар,
+        // которого в базе нет.
+        showNotification('❌ Не сохранено: ' + e.message);
       }
-
-      const total = quantity * purchasePrice;
-
-      // Create purchase order
-      const newOrderId = purchaseOrders.length > 0 ? Math.max(...purchaseOrders.map(o => o.id)) + 1 : 1;
-      const newOrder = {
-        id: newOrderId,
-        supplierId: supplierId,
-        itemId: itemId,
-        date: new Date().toISOString().split('T')[0],
-        status: 'completed',
-        items: [{
-          name: item.name,
-          quantity: quantity,
-          unit: item.unit,
-          price: purchasePrice
-        }],
-        total: total,
-        notes: notes
-      };
-
-      purchaseOrders.push(newOrder);
-
-      // Update inventory: add quantity and update cost price
-      item.quantity += quantity;
-      item.costPrice = purchasePrice;
-
-      saveData();
-      renderInventory();
-      renderOrders();
-      closePurchaseOrderModal();
-      showNotification(`✅ Заказ создан. ${quantity} ${item.unit} "${item.name}" добавлено на склад`);
     }
 
     // Update order total when quantity or price changes
@@ -2632,8 +2739,8 @@ AUTH.requireAuth();
       // Auto-fill purchase price when item is selected
       if (itemSelect) {
         itemSelect.addEventListener('change', function() {
-          const itemId = parseInt(this.value);
-          const item = inventory.find(i => i.id === itemId);
+          // id товара — UUID: parseInt дал бы NaN и подсказка цены не работала
+          const item = inventory.find(i => i.id === this.value);
           if (item && item.costPrice) {
             priceInput.value = item.costPrice;
             updateOrderTotal();
@@ -2679,12 +2786,19 @@ AUTH.requireAuth();
     function renderReports() {
       loadAnalysisReports();
       const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
-      const monthlyPurchases = purchaseOrders
-        .filter(o => new Date(o.date).getMonth() === new Date().getMonth())
-        .reduce((sum, o) => sum + o.total, 0);
+      // Закупки за месяц считаем по реальным приходам склада, а не по
+      // локальным «заказам»: прежняя цифра жила в localStorage браузера.
+      const now = new Date();
+      const monthlyPurchases = receiptMovements
+        .filter(m => {
+          const d = new Date(m.created_at);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        })
+        .reduce((sum, m) => sum + (parseFloat(m.quantity) || 0) * (parseFloat(m.cost_price) || 0), 0);
 
       document.getElementById('totalInventoryValue').textContent = totalValue.toLocaleString('ru-RU') + ' ₽';
-      document.getElementById('monthlyPurchases').textContent = monthlyPurchases.toLocaleString('ru-RU') + ' ₽';
+      document.getElementById('monthlyPurchases').textContent =
+        monthlyPurchases.toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
 
       const criticalItems = inventory.filter(i => getItemStatus(i) !== 'in-stock');
       const tbody = document.getElementById('criticalItemsBody');
@@ -2701,7 +2815,7 @@ AUTH.requireAuth();
             <td style="color: var(--color-warning); font-weight: 700;">${needed.toFixed(1)} ${item.unit}</td>
             <td>${supplier ? supplier.name : '-'}</td>
             <td>
-              <button class="btn btn-warning btn-small" onclick="quickRestock(${item.id})">📦 Заказать</button>
+              <button class="btn btn-warning btn-small" onclick="quickRestock(${jsArg(item.id)})">📦 Заказать</button>
             </td>
           </tr>
         `;
@@ -2757,6 +2871,7 @@ AUTH.requireAuth();
     }
 
     async function openNewProductionModal() {
+      if (!requireServer('выпуск продукции')) return;
       document.getElementById('productionError').textContent = '';
       document.getElementById('productionCostPreview').textContent = '';
       document.getElementById('productionForm').reset();
@@ -2809,6 +2924,8 @@ AUTH.requireAuth();
     async function submitProduction(event) {
       event.preventDefault();
       const errEl = document.getElementById('productionError');
+      // Выпуск меняет остатки склада — без связи с сервером он не состоится
+      if (!requireServer('выпуск продукции')) { errEl.textContent = 'Нет связи с сервером — выпуск не сохранится. Обновите страницу.'; return; }
       errEl.textContent = '';
       try {
         const res = await AUTH.fetch('/api/inventory/production', {
@@ -2832,16 +2949,23 @@ AUTH.requireAuth();
     }
 
     async function cancelProductionRun(id) {
-      if (!confirm('Отменить выпуск? Продукция будет списана, ингредиенты вернутся на склад.')) return;
+      if (!requireServer('отмена выпуска')) return;
+      // Подтверждение вторым нажатием вместо confirm()
+      if (pendingProductionCancel !== id) {
+        pendingProductionCancel = id;
+        showNotification('⚠️ Нажмите «Отменить» ещё раз: продукция будет списана, ингредиенты вернутся на склад');
+        setTimeout(() => { if (pendingProductionCancel === id) pendingProductionCancel = null; }, 5000);
+        return;
+      }
+      pendingProductionCancel = null;
       try {
         const res = await AUTH.fetch('/api/inventory/production/' + id + '/cancel', { method: 'POST' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        if (!res.ok) throw new Error(await apiError(res));
         showNotification('↩️ Выпуск отменён');
         await loadProductionRuns();
         await reloadInventoryFromAPI();
       } catch (e) {
-        alert('Ошибка: ' + e.message);
+        showNotification('❌ Не отменено: ' + e.message);
       }
     }
 
@@ -2940,6 +3064,7 @@ AUTH.requireAuth();
     // ── Создание накладной ──
 
     async function openNewInvoiceModal() {
+      if (!requireServer('накладная')) return;
       document.getElementById('invoiceError').textContent = '';
       document.getElementById('invoiceForm').reset();
       // По умолчанию — сегодняшняя дата
@@ -2979,6 +3104,7 @@ AUTH.requireAuth();
     async function submitInvoice(event) {
       event.preventDefault();
       const errEl = document.getElementById('invoiceError');
+      if (!requireServer('накладная')) { errEl.textContent = 'Нет связи с сервером — накладная не сохранится. Обновите страницу.'; return; }
       errEl.textContent = '';
       try {
         // Имена полей — по схеме createInvoice в supplier.service.ts
@@ -3127,6 +3253,7 @@ AUTH.requireAuth();
     async function submitInvoiceItem(event) {
       event.preventDefault();
       const errEl = document.getElementById('invoiceItemError');
+      if (!requireServer('позиция накладной')) { errEl.textContent = 'Нет связи с сервером — позиция не сохранится. Обновите страницу.'; return; }
       errEl.textContent = '';
       if (!currentInvoice) { errEl.textContent = 'Накладная не выбрана'; return; }
 
@@ -3170,19 +3297,25 @@ AUTH.requireAuth();
     }
 
     async function confirmSupplierInvoice(invoiceId, fromModal) {
+      if (!requireServer('приёмка накладной')) return;
       const inv = supplierInvoices.find(i => i.id === invoiceId);
       const label = inv && inv.invoice_number ? ' № ' + inv.invoice_number : '';
       const amount = inv ? (parseFloat(inv.total_amount) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2}) : '0';
 
-      // Операция необратима — обязательное подтверждение
-      if (!confirm(
-        'Принять накладную' + label + ' на склад?\n\n'
-        + 'Это действие НЕОБРАТИМО:\n'
-        + '• товары из позиций придут на склад (FIFO-партии по цене закупки);\n'
-        + '• долг поставщику вырастет на ' + amount + ' ₽;\n'
-        + '• в финансах появится расход.\n\n'
-        + 'Повторная приёмка невозможна. Продолжить?'
-      )) return;
+      // Операция необратима — подтверждение вторым нажатием вместо confirm()
+      if (pendingInvoiceConfirm !== invoiceId) {
+        pendingInvoiceConfirm = invoiceId;
+        const warn = 'Нажмите «Принять» ещё раз: накладная' + label
+          + ' придёт на склад НЕОБРАТИМО, долг поставщику вырастет на ' + amount + ' ₽';
+        if (fromModal) {
+          document.getElementById('invoiceItemError').textContent = '⚠️ ' + warn;
+        }
+        showNotification('⚠️ ' + warn);
+        setTimeout(() => { if (pendingInvoiceConfirm === invoiceId) pendingInvoiceConfirm = null; }, 5000);
+        return;
+      }
+      pendingInvoiceConfirm = null;
+      if (fromModal) document.getElementById('invoiceItemError').textContent = '';
 
       try {
         const res = await AUTH.fetch('/api/suppliers/invoices/' + invoiceId + '/confirm', { method: 'POST' });
@@ -3211,7 +3344,8 @@ AUTH.requireAuth();
       }, 3000);
     }
 
-    // Initialize
+    // Инициализация: при неудачной загрузке initializeData уже показал
+    // блок ошибки и оставил dataSourceOk = false, так что запись выключена.
     initializeData().then(() => {
       renderInventory();
       loadWarehouses();

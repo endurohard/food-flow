@@ -836,6 +836,27 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Тосты вместо alert(): во встроенном браузере VS Code модальные
+           диалоги заблокированы и кнопка выглядит мёртвой */
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: var(--admin-card-bg);
+            border: 1px solid var(--admin-border);
+            border-radius: 12px;
+            padding: 12px 20px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            z-index: 2000;
+            display: none;
+            max-width: calc(100% - 40px);
+            color: var(--color-text-primary);
+        }
+
+        .notification.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -1112,26 +1133,28 @@ AUTH.requireAuth();
                     <h2>Основная информация</h2>
                 </div>
                 <div class="card-body">
+                    <!-- Блок ошибки загрузки: без данных с сервера сохранять нельзя -->
+                    <div id="generalDataError"></div>
                     <form id="generalForm">
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Название предприятия</label>
-                                <input type="text" class="form-control" id="restaurantName" value="Pizza Paradise">
+                                <input type="text" class="form-control" id="restaurantName" placeholder="Загрузка...">
                             </div>
                             <div class="form-group">
                                 <label>Юридическое название</label>
-                                <input type="text" class="form-control" id="legalName" value="ООО 'Pizza Paradise'">
+                                <input type="text" class="form-control" id="legalName" placeholder="Загрузка...">
                             </div>
                         </div>
 
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Адрес</label>
-                                <input type="text" class="form-control" id="address" value="ул. Ленина, 123">
+                                <input type="text" class="form-control" id="address" placeholder="Загрузка...">
                             </div>
                             <div class="form-group">
                                 <label>Телефон</label>
-                                <input type="text" class="form-control" id="phone" value="+7 (999) 123-45-67">
+                                <input type="text" class="form-control" id="phone" placeholder="Загрузка...">
                             </div>
                         </div>
 
@@ -1145,7 +1168,7 @@ AUTH.requireAuth();
         <div id="features" class="tab-content">
             <div class="card" style="margin-bottom:24px;">
                 <div class="card-header">
-                    <h2>🏪 Тип заведения</h2>
+                    <h2>Тип заведения</h2>
                     <p style="margin: 8px 0 0 0; font-size: 14px; color: var(--color-text-secondary);">Выбор определяет набор разделов в меню. Сохраняется на предприятии.</p>
                 </div>
                 <div class="card-body">
@@ -1162,6 +1185,8 @@ AUTH.requireAuth();
                     <p style="margin: 8px 0 0 0; font-size: 14px; color: var(--color-text-secondary);">Включите или отключите модули системы</p>
                 </div>
                 <div class="card-body">
+                    <!-- Блок ошибки загрузки функционала -->
+                    <div id="featuresDataError"></div>
                     <form id="featuresForm">
                         <div class="features-grid">
                             <!-- Tables Management -->
@@ -1428,6 +1453,8 @@ AUTH.requireAuth();
                     </div>
 
                     <form id="pbxForm">
+                        <!-- Блок ошибки загрузки настроек АТС -->
+                        <div id="pbxDataError"></div>
                         <div class="checkbox-group">
                             <input type="checkbox" id="pbxEnabled">
                             <label for="pbxEnabled">Использовать телефонию PJSIP</label>
@@ -1593,6 +1620,9 @@ AUTH.requireAuth();
         </div>
     </div>
 
+    <!-- Тост-уведомления -->
+    <div class="notification" id="notification"></div>
+
     <script>
         // Sidebar toggle
         function toggleSidebar() {
@@ -1624,6 +1654,13 @@ AUTH.requireAuth();
             });
         });
 
+        // Ссылка вида settings.html#features (из плашки типа в сайдбаре) открывает нужную вкладку
+        (function openTabFromHash() {
+            const id = (location.hash || '').slice(1);
+            const btn = id && document.querySelector('.tab-button[data-tab="' + id + '"]');
+            if (btn) btn.click();
+        })();
+
         // Toggle between native and WebSocket connection types
         function toggleConnectionType() {
             const connectionType = document.getElementById('connectionType').value;
@@ -1639,6 +1676,78 @@ AUTH.requireAuth();
             }
         }
 
+        // ── Защита от «сохранения в браузер» ──
+        // Настройки предприятия обязаны жить в базе. Раньше страница при любой
+        // заминке (нет ресторана, упавший сервис, истёкший токен) молча писала
+        // их в localStorage и показывала «Сохранено»: пользователь был уверен,
+        // что система настроена, а на сервере не менялось ничего, и после
+        // очистки кэша или входа с другого браузера настройки исчезали.
+        // Поэтому у каждого блока свой флаг «данные пришли с сервера», и без
+        // него запись запрещена.
+        let generalDataOk = false;
+        let featuresDataOk = false;
+        let pbxDataOk = false;
+        let usersDataOk = false;
+
+        // Удаление/сброс подтверждается вторым нажатием: confirm() заблокирован
+        // во встроенном браузере VS Code и кнопка выглядит мёртвой.
+        let pendingFeaturesReset = false;
+
+        // Тост вместо alert(): модальные диалоги во встроенном браузере не работают
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            if (!notification) return;
+            notification.textContent = message;
+            notification.classList.add('show');
+            setTimeout(() => notification.classList.remove('show'), 4000);
+        }
+
+        // Разбор ошибки ответа API в читаемый текст
+        async function apiError(res) {
+            const data = await res.json().catch(() => ({}));
+            return data.message || data.error || ('HTTP ' + res.status);
+        }
+
+        // Inline-блок ошибки вместо тихой подмены демо-данными: пользователь
+        // должен видеть, что экран не связан с базой и сохранять нельзя.
+        function showDataError(containerId, title, message, retryCall) {
+            const box = document.getElementById(containerId);
+            if (box) {
+                box.innerHTML = '<div style="margin-bottom:20px;padding:20px;text-align:left;'
+                    + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
+                    + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
+                    + '⚠️ ' + title + ' — сохранение отключено</div>'
+                    + '<div style="color:var(--color-text-primary);line-height:1.5;">' + message + '</div>'
+                    + '<button type="button" class="btn btn-primary" style="margin-top:16px;" onclick="'
+                    + retryCall + '">🔄 Повторить</button>'
+                    + '</div>';
+            }
+            showNotification('⚠️ ' + message);
+        }
+
+        function clearDataError(containerId) {
+            const box = document.getElementById(containerId);
+            if (box) box.innerHTML = '';
+        }
+
+        // Единый сторож записи: без подтверждённой связи с сервером сохранение
+        // ушло бы «в никуда», а пользователь увидел бы «Сохранено».
+        function requireServer(action, ok) {
+            if (!ok) {
+                showNotification('⚠️ Нет связи с сервером — ' + action
+                    + ' не сохранится. Обновите страницу.');
+                return false;
+            }
+            return true;
+        }
+
+        // Предприятие берётся из токена, а не хардкодом: иначе экран правил бы
+        // настройки чужой организации.
+        function currentEnterpriseId() {
+            const user = AUTH.getUser();
+            return (user && user.enterpriseId) || null;
+        }
+
         // Заведение берётся из API предприятия, а не хардкодом:
         // иначе экран правил бы PBX чужого ресторана.
         let pbxRestaurantId = null;
@@ -1646,45 +1755,125 @@ AUTH.requireAuth();
         async function resolvePbxRestaurantId() {
             if (pbxRestaurantId) return pbxRestaurantId;
             const res = await AUTH.fetch('/api/restaurants');
-            if (!res.ok) throw new Error('Не удалось получить список заведений');
+            if (!res.ok) throw new Error(await apiError(res));
             const data = await res.json();
             const list = data.restaurants || data.data || [];
-            if (!list.length) throw new Error('У предприятия нет заведения');
+            if (!list.length) throw new Error('У предприятия нет ни одного заведения');
             pbxRestaurantId = list[0].id;
             return pbxRestaurantId;
         }
 
+        // ── Общие настройки предприятия (источник истины — API) ──
+        // Поля формы раньше были заполнены демо-значениями «Pizza Paradise» —
+        // пользователь принимал их за свои данные. Теперь пусто до ответа сервера.
+        let enterpriseMetadata = {};
+
+        async function loadGeneralSettings() {
+            generalDataOk = false;
+            clearDataError('generalDataError');
+
+            const enterpriseId = currentEnterpriseId();
+            if (!enterpriseId) {
+                showDataError('generalDataError', 'Предприятие не определено',
+                    'В текущей сессии нет предприятия, поэтому сохранять настройки некуда. Войдите заново.',
+                    'loadGeneralSettings()');
+                return;
+            }
+
+            try {
+                const res = await AUTH.fetch('/api/enterprises/' + enterpriseId);
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                const ent = data.enterprise || data;
+
+                enterpriseMetadata = ent.metadata || {};
+                document.getElementById('restaurantName').value = ent.name || '';
+                document.getElementById('legalName').value = ent.legal_name || '';
+                document.getElementById('phone').value = ent.phone || '';
+                // Адреса отдельной колонки у предприятия нет, он живёт в metadata
+                document.getElementById('address').value = enterpriseMetadata.address || '';
+
+                generalDataOk = true;
+            } catch (e) {
+                showDataError('generalDataError', 'Настройки предприятия не загружены',
+                    'Не удалось получить данные с сервера: ' + e.message
+                    + '. Поля оставлены пустыми, чтобы вы не приняли их за реальные настройки.',
+                    'loadGeneralSettings()');
+            }
+        }
+
+        document.getElementById('generalForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!requireServer('основная информация', generalDataOk)) return;
+
+            const enterpriseId = currentEnterpriseId();
+            const payload = {
+                name: document.getElementById('restaurantName').value.trim(),
+                legal_name: document.getElementById('legalName').value.trim(),
+                phone: document.getElementById('phone').value.trim(),
+                metadata: Object.assign({}, enterpriseMetadata, {
+                    address: document.getElementById('address').value.trim()
+                })
+            };
+
+            if (!payload.name) {
+                showNotification('⚠️ Название предприятия не может быть пустым');
+                return;
+            }
+
+            try {
+                const res = await AUTH.fetch('/api/enterprises/' + enterpriseId, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                const ent = (data && data.enterprise) || {};
+                enterpriseMetadata = ent.metadata || payload.metadata;
+                // «Сохранено» только после успешного ответа сервера
+                showNotification('✅ Основная информация сохранена');
+            } catch (e) {
+                showNotification('❌ Не сохранено: ' + e.message);
+            }
+        });
+
         // Load PBX settings
         async function loadPBXSettings() {
+            pbxDataOk = false;
+            clearDataError('pbxDataError');
+
             try {
                 const restaurantId = await resolvePbxRestaurantId();
                 const response = await AUTH.fetch('/api/restaurants/' + restaurantId + '/pbx-settings');
-                if (!response.ok) throw new Error('HTTP ' + response.status);
+                if (!response.ok) throw new Error(await apiError(response));
                 const data = await response.json();
+                const pbx = data.settings || data;
 
-                if (data) {
-                    document.getElementById('pbxEnabled').checked = data.pbx_enabled;
-                    document.getElementById('pbxServer').value = data.pbx_server || '';
-                    document.getElementById('pbxPort').value = data.pbx_port || 5060;
-                    document.getElementById('pbxTransport').value = data.pbx_transport || 'UDP';
-                    document.getElementById('rtpPortMin').value = data.pbx_rtp_port_min || 5700;
-                    document.getElementById('rtpPortMax').value = data.pbx_rtp_port_max || 5750;
-                    document.getElementById('pbxWebSocketUrl').value = data.pbx_websocket_url || '';
+                document.getElementById('pbxEnabled').checked = !!pbx.pbx_enabled;
+                document.getElementById('pbxServer').value = pbx.pbx_server || '';
+                document.getElementById('pbxPort').value = pbx.pbx_port || 5060;
+                document.getElementById('pbxTransport').value = pbx.pbx_transport || 'UDP';
+                document.getElementById('rtpPortMin').value = pbx.pbx_rtp_port_min || 5700;
+                document.getElementById('rtpPortMax').value = pbx.pbx_rtp_port_max || 5750;
+                document.getElementById('pbxWebSocketUrl').value = pbx.pbx_websocket_url || '';
 
-                    // Set connection type based on data
-                    if (data.pbx_use_websocket) {
-                        document.getElementById('connectionType').value = 'websocket';
-                        toggleConnectionType();
-                    }
-                }
+                // Set connection type based on data
+                document.getElementById('connectionType').value = pbx.pbx_use_websocket ? 'websocket' : 'native';
+                toggleConnectionType();
+
+                pbxDataOk = true;
             } catch (error) {
-                console.error('Failed to load PBX settings:', error);
+                showDataError('pbxDataError', 'Настройки АТС не загружены',
+                    'Не удалось получить настройки телефонии с сервера: ' + error.message
+                    + '. Показанные значения — не настройки вашей АТС, сохранять их нельзя.',
+                    'loadPBXSettings()');
             }
         }
 
         // Save PBX settings
         document.getElementById('pbxForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!requireServer('настройки АТС', pbxDataOk)) return;
 
             const connectionType = document.getElementById('connectionType').value;
             const useWebSocket = connectionType === 'websocket';
@@ -1692,10 +1881,10 @@ AUTH.requireAuth();
             const settings = {
                 pbx_enabled: document.getElementById('pbxEnabled').checked,
                 pbx_server: useWebSocket ? '' : document.getElementById('pbxServer').value,
-                pbx_port: useWebSocket ? null : parseInt(document.getElementById('pbxPort').value),
+                pbx_port: useWebSocket ? null : parseInt(document.getElementById('pbxPort').value, 10),
                 pbx_transport: useWebSocket ? '' : document.getElementById('pbxTransport').value,
-                pbx_rtp_port_min: parseInt(document.getElementById('rtpPortMin').value),
-                pbx_rtp_port_max: parseInt(document.getElementById('rtpPortMax').value),
+                pbx_rtp_port_min: parseInt(document.getElementById('rtpPortMin').value, 10),
+                pbx_rtp_port_max: parseInt(document.getElementById('rtpPortMax').value, 10),
                 pbx_websocket_url: useWebSocket ? document.getElementById('pbxWebSocketUrl').value : '',
                 pbx_use_websocket: useWebSocket
             };
@@ -1706,14 +1895,13 @@ AUTH.requireAuth();
                     method: 'PUT',
                     body: JSON.stringify(settings)
                 });
-
-                if (response.ok) {
-                    showAlert('success', 'Настройки успешно сохранены');
-                } else {
-                    showAlert('error', 'Ошибка при сохранении настроек');
-                }
+                if (!response.ok) throw new Error(await apiError(response));
+                // «Сохранено» только после подтверждения сервером
+                showAlert('success', 'Настройки успешно сохранены');
+                showNotification('✅ Настройки АТС сохранены');
             } catch (error) {
-                showAlert('error', 'Ошибка подключения к серверу');
+                showAlert('error', 'Не сохранено: ' + error.message);
+                showNotification('❌ Не сохранено: ' + error.message);
             }
         });
 
@@ -1726,30 +1914,35 @@ AUTH.requireAuth();
             const transport = document.getElementById('pbxTransport').value;
 
             try {
-                const response = await fetch('/api/pbx/test-connection', {
+                // Через AUTH.fetch: сырой fetch без Bearer-токена получает 401
+                const response = await AUTH.fetch('/api/pbx/test-connection', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ server, port, transport })
                 });
+                if (!response.ok) throw new Error(await apiError(response));
                 const data = await response.json();
 
                 if (data.success) {
-                    showAlert('success', data.message);
+                    showAlert('success', data.message || 'Подключение успешно');
                 } else {
                     showAlert('error', 'Не удалось подключиться к SIP серверу');
                 }
             } catch (error) {
-                showAlert('error', 'Ошибка при проверке подключения');
+                showAlert('error', 'Ошибка при проверке подключения: ' + error.message);
             }
         }
 
         // Load users for PBX configuration
         async function loadUsers() {
+            const tbody = document.getElementById('usersTableBody');
+            usersDataOk = false;
             try {
-                const response = await fetch('/api/users');
+                // Через AUTH.fetch: сырой fetch без Bearer-токена получает 401
+                // и таблица оставалась пустой без единой ошибки на экране
+                const response = await AUTH.fetch('/api/users');
+                if (!response.ok) throw new Error(await apiError(response));
                 const data = await response.json();
 
-                const tbody = document.getElementById('usersTableBody');
                 tbody.innerHTML = '';
 
                 // Переводим роли на русский
@@ -1760,9 +1953,9 @@ AUTH.requireAuth();
                     'delivery_driver': 'Водитель доставки'
                 };
 
-                data.users.forEach(user => {
+                (data.users || []).forEach(user => {
                     const row = document.createElement('tr');
-                    const fullName = `${user.first_name} ${user.last_name}`;
+                    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || '';
                     const roleName = roleNames[user.role] || user.role;
 
                     row.innerHTML = `
@@ -1795,22 +1988,34 @@ AUTH.requireAuth();
                                    title="Пароль для WebSocket">
                         </td>
                         <td>
-                            <button onclick="saveUserPBX('${user.id}')" class="btn btn-primary btn-sm">
+                            <button type="button" onclick="saveUserPBX('${user.id}')" class="btn btn-primary btn-sm">
                                 Сохранить
                             </button>
                         </td>
                     `;
                     tbody.appendChild(row);
                 });
+                usersDataOk = true;
             } catch (error) {
-                console.error('Failed to load users:', error);
-                showAlert('error', 'Ошибка загрузки списка пользователей');
+                // Пустая таблица без объяснения выглядела как «нет сотрудников»
+                tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;color:#e53935;">'
+                    + '⚠️ Список сотрудников не загружен — сохранение отключено: '
+                    + error.message
+                    + ' <button type="button" class="btn btn-primary" style="margin-left:12px;" onclick="loadUsers()">🔄 Повторить</button>'
+                    + '</td></tr>';
+                showAlert('error', 'Ошибка загрузки списка пользователей: ' + error.message);
             }
         }
 
         // Update user PBX settings
         async function saveUserPBX(userId) {
+            if (!requireServer('настройки сотрудника', usersDataOk)) return;
+            // userId — UUID: parseInt() здесь дал бы NaN и запрос ушёл бы в никуда
             const inputs = document.querySelectorAll(`[data-user-id="${userId}"]`);
+            if (!inputs.length) {
+                showNotification('⚠️ Строка сотрудника не найдена — обновите страницу');
+                return;
+            }
             const data = {};
 
             inputs.forEach(input => {
@@ -1819,19 +2024,18 @@ AUTH.requireAuth();
             });
 
             try {
-                const response = await fetch(`/api/users/${userId}/pbx-settings`, {
+                // Через AUTH.fetch: сырой fetch без Bearer-токена получает 401
+                const response = await AUTH.fetch(`/api/users/${userId}/pbx-settings`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-
-                if (response.ok) {
-                    showAlert('success', 'Настройки сотрудника сохранены');
-                } else {
-                    showAlert('error', 'Ошибка при сохранении');
-                }
+                if (!response.ok) throw new Error(await apiError(response));
+                // «Сохранено» только после подтверждения сервером
+                showAlert('success', 'Настройки сотрудника сохранены');
+                showNotification('✅ Настройки сотрудника сохранены');
             } catch (error) {
-                showAlert('error', 'Ошибка подключения к серверу');
+                showAlert('error', 'Не сохранено: ' + error.message);
+                showNotification('❌ Не сохранено: ' + error.message);
             }
         }
 
@@ -1847,114 +2051,157 @@ AUTH.requireAuth();
         }
 
         // Initialize
-        loadPBXSettings();
-        loadUsers();
-        loadFeatureSettings();
+        // Загрузку запускаем в конце скрипта (см. ниже): до объявления
+        // FEATURE_KEYS/DEFAULT_FEATURES вызов упал бы на TDZ-ошибке
+        // и экран остался бы с пустыми полями без объяснения.
 
         // ========== Feature Toggles Functions ==========
 
+        // Список переключателей держим в одном месте: иначе чтение и запись
+        // расходятся и часть флагов молча теряется при сохранении.
+        const FEATURE_KEYS = ['tables', 'kds', 'orders', 'menu', 'inventory',
+            'staff', 'loyalty', 'analytics', 'telephony', 'printers'];
+
+        // Значения по умолчанию нужны только для флагов, которых ещё нет
+        // в ответе сервера, — не как замена серверным данным.
+        const DEFAULT_FEATURES = {
+            tables: true,
+            kds: true,
+            orders: true,
+            menu: true,
+            inventory: false,
+            staff: false,
+            loyalty: false,
+            analytics: true,
+            telephony: false,
+            printers: true
+        };
+
+        // Последний подтверждённый сервером набор флагов.
+        // Источник истины — enterprises.features в базе, НЕ localStorage:
+        // раньше при недоступном бэкенде страница писала флаги только в браузер
+        // и показывала «Сохранено», поэтому на другом устройстве функционал
+        // оставался прежним, а пользователь считал систему настроенной.
+        let serverFeatures = {};
+
+        function applyFeaturesToForm(features) {
+            FEATURE_KEYS.forEach(key => {
+                const checkbox = document.getElementById('feature-' + key);
+                if (checkbox && !checkbox.disabled && typeof features[key] === 'boolean') {
+                    checkbox.checked = features[key];
+                }
+            });
+        }
+
+        function collectFeaturesFromForm() {
+            const features = {};
+            FEATURE_KEYS.forEach(key => {
+                const checkbox = document.getElementById('feature-' + key);
+                // disabled-флаг (обязательный модуль) отдаём как есть
+                if (checkbox) features[key] = checkbox.checked;
+            });
+            return features;
+        }
+
         // Load feature settings
-        function loadFeatureSettings() {
-            const savedSettings = localStorage.getItem('featureSettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                Object.keys(settings).forEach(key => {
-                    const checkbox = document.getElementById(`feature-${key}`);
-                    if (checkbox && !checkbox.disabled) {
-                        checkbox.checked = settings[key];
-                    }
-                });
+        async function loadFeatureSettings() {
+            featuresDataOk = false;
+            clearDataError('featuresDataError');
+
+            const enterpriseId = currentEnterpriseId();
+            if (!enterpriseId) {
+                showDataError('featuresDataError', 'Предприятие не определено',
+                    'В текущей сессии нет предприятия, поэтому включённый функционал некуда сохранять. Войдите заново.',
+                    'loadFeatureSettings()');
+                return;
+            }
+
+            try {
+                const res = await AUTH.fetch('/api/enterprises/' + enterpriseId);
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                const ent = data.enterprise || data;
+
+                serverFeatures = (ent && ent.features) || {};
+                applyFeaturesToForm(serverFeatures);
+                featuresDataOk = true;
+            } catch (e) {
+                showDataError('featuresDataError', 'Функционал не загружен',
+                    'Не удалось получить настройки функционала с сервера: ' + e.message
+                    + '. Переключатели показывают значения по умолчанию, а не настройки вашего предприятия.',
+                    'loadFeatureSettings()');
             }
         }
 
         // Save feature settings
         document.getElementById('featuresForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!requireServer('функционал', featuresDataOk)) return;
 
-            const features = {
-                tables: document.getElementById('feature-tables').checked,
-                kds: document.getElementById('feature-kds').checked,
-                orders: document.getElementById('feature-orders').checked,
-                menu: document.getElementById('feature-menu').checked,
-                inventory: document.getElementById('feature-inventory').checked,
-                staff: document.getElementById('feature-staff').checked,
-                loyalty: document.getElementById('feature-loyalty').checked,
-                analytics: document.getElementById('feature-analytics').checked,
-                telephony: document.getElementById('feature-telephony').checked,
-                printers: document.getElementById('feature-printers').checked
-            };
+            const features = collectFeaturesFromForm();
+            const enterpriseId = currentEnterpriseId();
 
-            // Save to localStorage
-            localStorage.setItem('featureSettings', JSON.stringify(features));
-
-            // Show success message
-            alert('✅ Настройки функционала сохранены!\n\nПерезагрузите страницу, чтобы изменения вступили в силу.');
-
-            // Optional: Send to backend API
             try {
-                const response = await fetch('/api/settings/features', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(features)
+                const response = await AUTH.fetch('/api/enterprises/' + enterpriseId, {
+                    method: 'PUT',
+                    // Сохраняем в enterprises.features: localStorage убран, иначе
+                    // настройка жила бы только в одном браузере
+                    body: JSON.stringify({ features })
                 });
-
-                if (response.ok) {
-                    console.log('Features saved to backend');
-                }
+                if (!response.ok) throw new Error(await apiError(response));
+                const data = await response.json();
+                const ent = (data && data.enterprise) || {};
+                serverFeatures = ent.features || features;
+                // «Сохранено» только после подтверждения сервером
+                showNotification('✅ Настройки функционала сохранены. Обновите страницу, чтобы изменения вступили в силу.');
             } catch (error) {
-                console.log('Backend not available, using localStorage only');
+                showNotification('❌ Не сохранено: ' + error.message);
             }
         });
 
         // Reset to default
-        function resetFeatures() {
-            if (!confirm('Сбросить все настройки функционала по умолчанию?')) return;
+        // Сброс — такая же запись в базу, как и сохранение: без связи с сервером
+        // он только «перекрасил» бы переключатели в браузере.
+        async function resetFeatures() {
+            if (!requireServer('сброс функционала', featuresDataOk)) return;
 
-            const defaultFeatures = {
-                tables: true,
-                kds: true,
-                orders: true,
-                menu: true,
-                inventory: false,
-                staff: false,
-                loyalty: false,
-                analytics: true,
-                telephony: false,
-                printers: true
-            };
+            // Подтверждение вторым нажатием вместо confirm()
+            if (!pendingFeaturesReset) {
+                pendingFeaturesReset = true;
+                showNotification('⚠️ Нажмите «Сбросить» ещё раз для подтверждения');
+                setTimeout(() => { pendingFeaturesReset = false; }, 5000);
+                return;
+            }
+            pendingFeaturesReset = false;
 
-            Object.keys(defaultFeatures).forEach(key => {
-                const checkbox = document.getElementById(`feature-${key}`);
-                if (checkbox && !checkbox.disabled) {
-                    checkbox.checked = defaultFeatures[key];
-                }
-            });
+            const enterpriseId = currentEnterpriseId();
 
-            localStorage.setItem('featureSettings', JSON.stringify(defaultFeatures));
-            alert('✅ Настройки сброшены к значениям по умолчанию');
+            try {
+                const response = await AUTH.fetch('/api/enterprises/' + enterpriseId, {
+                    method: 'PUT',
+                    body: JSON.stringify({ features: DEFAULT_FEATURES })
+                });
+                if (!response.ok) throw new Error(await apiError(response));
+                const data = await response.json();
+                const ent = (data && data.enterprise) || {};
+                serverFeatures = ent.features || DEFAULT_FEATURES;
+                applyFeaturesToForm(serverFeatures);
+                // Форму перекрашиваем только после подтверждения сервером
+                showNotification('✅ Настройки сброшены к значениям по умолчанию');
+            } catch (error) {
+                showNotification('❌ Не сброшено: ' + error.message);
+            }
         }
 
         // Check if feature is enabled
+        // Отвечает по данным, подтверждённым сервером. Пока загрузка не удалась,
+        // отдаём дефолты и НЕ читаем localStorage: иначе навигация строилась бы
+        // по флагам, которых в базе нет.
         function isFeatureEnabled(featureName) {
-            const savedSettings = localStorage.getItem('featureSettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                return settings[featureName] !== false;
+            if (featuresDataOk && typeof serverFeatures[featureName] === 'boolean') {
+                return serverFeatures[featureName];
             }
-            // Default values if not set
-            const defaults = {
-                tables: true,
-                kds: true,
-                orders: true,
-                menu: true,
-                inventory: false,
-                staff: false,
-                loyalty: false,
-                analytics: true,
-                telephony: false,
-                printers: true
-            };
-            return defaults[featureName] !== false;
+            return DEFAULT_FEATURES[featureName] !== false;
         }
 
         // Expose globally for navigation
@@ -1963,23 +2210,32 @@ AUTH.requireAuth();
         // ── Тип заведения ──
         const BT_DESCRIPTIONS = {
             restaurant:  'Полный набор: столы, зал, KDS, заказы, доставка, опт',
-            cafe:        'Столы и KDS без дизайнера зала',
-            coffee_shop: 'Заказы у стойки: без столов, зала и KDS',
-            production:  'Склад, производство, опт и логистика — без зала и заказов'
+            cafe:        'Зал со столами и KDS, без дизайнера зала',
+            coffee_shop: 'Касса у стойки и очередь напитков, без столов и зала',
+            delivery:    'Без зала: заказы с сайта, телефона и агрегаторов, KDS и звонки',
+            production:  'Склад, производство, опт и закупки — без зала и заказов'
         };
 
         function renderBusinessTypes() {
             const grid = document.getElementById('businessTypeGrid');
             if (!grid) return;
             const current = AUTH.getBusinessType();
+            grid.setAttribute('role', 'radiogroup');
+            grid.setAttribute('aria-label', 'Тип заведения');
             grid.innerHTML = Object.entries(BUSINESS_TYPES).map(([key, bt]) => {
                 const active = current === key;
-                return `<div onclick="selectBusinessType('${key}')" style="cursor:pointer;border:2px solid ${active ? 'var(--color-primary)' : 'var(--admin-border)'};background:${active ? 'var(--color-primary-light)' : 'var(--admin-card-bg)'};border-radius:14px;padding:18px;text-align:center;transition:all .15s;">
-                    <div style="font-size:34px;margin-bottom:8px;">${bt.emoji}</div>
-                    <div style="font-weight:700;">${bt.label}</div>
-                    <div style="font-size:12px;color:var(--color-text-secondary);margin-top:6px;min-height:32px;">${BT_DESCRIPTIONS[key]}</div>
-                    ${active ? '<div style="margin-top:8px;color:var(--color-primary);font-weight:700;">✓ Выбрано</div>' : ''}
-                </div>`;
+                const tone = BUSINESS_TONES[bt.tone] || BUSINESS_TONES.green;
+                return `<button type="button" role="radio" aria-checked="${active}" onclick="selectBusinessType('${key}')"
+                    style="font:inherit;color:inherit;text-align:left;cursor:pointer;border:${active ? '2px solid var(--color-primary)' : '1px solid var(--admin-border)'};background:var(--admin-card-bg);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s;">
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        <span style="width:44px;height:44px;border-radius:12px;background:${tone[0]};color:${tone[1]};display:flex;align-items:center;justify-content:center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${bt.icon}</svg>
+                        </span>
+                        <span style="margin-left:auto;width:22px;height:22px;border-radius:11px;box-sizing:border-box;${active ? 'border:7px solid var(--color-primary);background:var(--admin-card-bg);' : 'border:2px solid var(--color-grey-4);'}"></span>
+                    </span>
+                    <span style="font-family:var(--font-family-heading);font-size:18px;font-weight:700;">${bt.label}</span>
+                    <span style="font-size:13px;line-height:1.45;color:var(--color-text-secondary);">${BT_DESCRIPTIONS[key]}</span>
+                </button>`;
             }).join('');
             const hint = document.getElementById('businessTypeHint');
             if (hint) hint.textContent = current
@@ -1988,16 +2244,41 @@ AUTH.requireAuth();
         }
 
         async function selectBusinessType(type) {
+            // Тип заведения — настройка предприятия: пишем его на сервер сами
+            // и только после подтверждения синхронизируем локальный кэш.
+            // AUTH.setBusinessType сначала кладёт тип в localStorage и глушит
+            // ошибку сети, поэтому в одиночку он давал бы «настроено» при
+            // неизменившейся базе.
+            const enterpriseId = currentEnterpriseId();
+            if (!enterpriseId) {
+                showNotification('⚠️ Нет связи с сервером — тип заведения не сохранится. Обновите страницу.');
+                return;
+            }
+
             try {
+                const res = await AUTH.fetch('/api/enterprises/' + enterpriseId, {
+                    method: 'PUT',
+                    body: JSON.stringify({ business_type: type })
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                // Локальный кэш типа обновляем после ответа сервера —
+                // он лишь ускоряет фильтрацию разделов, а не хранит настройку
                 await AUTH.setBusinessType(type);
+                showNotification('✅ Тип заведения сохранён');
             } catch (e) {
-                alert('Ошибка: ' + e.message);
+                showNotification('❌ Не сохранено: ' + e.message);
                 return;
             }
             renderBusinessTypes();
         }
         window.selectBusinessType = selectBusinessType;
         renderBusinessTypes();
+
+        // Старт загрузки: все const/let выше уже объявлены
+        loadGeneralSettings();
+        loadFeatureSettings();
+        loadPBXSettings();
+        loadUsers();
     </script>
 </div><!-- /main-wrapper -->
 
@@ -2017,7 +2298,7 @@ function closeSidebarMobile() {
   if (sb) sb.classList.remove('mobile-open');
   if (ov) ov.style.display = 'none';
 }
-/* update sidebar user name from localStorage */
+/* Имя в сайдбаре — только отображение, никакие настройки тут не хранятся */
 (function() {
   try {
     var u = JSON.parse(localStorage.getItem('foodflow_user') || '{}');

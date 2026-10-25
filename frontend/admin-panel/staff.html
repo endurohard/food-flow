@@ -711,6 +711,13 @@
     .role-courier { background: rgba(67, 160, 71, 0.1); color: var(--color-success); }
     .role-manager { background: rgba(142, 36, 170, 0.1); color: #8e24aa; }
     .role-admin { background: rgba(229, 57, 53, 0.1); color: var(--color-danger); }
+    /* Роли названы так же, как их принимает бэкенд (ENTERPRISE_ROLES),
+       иначе создание сотрудника отвергается с 400 */
+    .role-chef { background: rgba(251, 140, 0, 0.1); color: var(--color-warning); }
+    .role-employee { background: rgba(67, 160, 71, 0.1); color: var(--color-success); }
+    .role-operator { background: rgba(2, 136, 209, 0.1); color: #0288d1; }
+    .role-cashier { background: rgba(0, 137, 123, 0.1); color: #00897b; }
+    .role-owner { background: rgba(229, 57, 53, 0.1); color: var(--color-danger); }
 
     .staff-details {
       margin: 16px 0;
@@ -1317,8 +1324,11 @@ AUTH.requireAuth();
         <!-- Main Content -->
   <div class="container">
     <!-- Header -->
-    <div class="header">
+    <div class="header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <h1 class="title">👥 Управление персоналом</h1>
+      <!-- Кнопки создания в разметке не было, а функция существовала —
+           добавить сотрудника через интерфейс было нельзя -->
+      <button class="btn btn-primary" onclick="openAddStaffModal()">➕ Добавить сотрудника</button>
     </div>
 
     <!-- Tabs -->
@@ -1342,7 +1352,9 @@ AUTH.requireAuth();
           <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);">✅</div>
           <div class="stat-info">
             <div class="stat-label">На смене</div>
-            <div class="stat-value" id="onShift">0</div>
+            <!-- Прочерк, а не 0: ноль выглядел бы как достоверный факт,
+                 пока график смен ещё не загружен с сервера -->
+            <div class="stat-value" id="onShift">—</div>
           </div>
         </div>
         <div class="stat-card">
@@ -1375,8 +1387,13 @@ AUTH.requireAuth();
             <span class="current-week" id="currentWeek"></span>
             <button onclick="nextWeek()">След. неделя ▶</button>
           </div>
-          <button class="btn btn-success" onclick="saveSchedule()">💾 Сохранить график</button>
+          <!-- Кнопки «сохранить график» больше нет: каждая смена уходит на сервер
+               сразу при изменении. Общая кнопка создавала ложное чувство сохранения,
+               когда запросы падали. -->
+          <button class="btn btn-secondary" onclick="reloadSchedule()">🔄 Обновить с сервера</button>
         </div>
+
+        <div id="scheduleNotice"></div>
 
         <table class="schedule-table">
           <thead>
@@ -1406,10 +1423,11 @@ AUTH.requireAuth();
           <thead>
             <tr>
               <th>Сотрудник</th>
+              <th>Период</th>
               <th>Отработано часов</th>
-              <th>Количество смен</th>
-              <th>Опоздания</th>
-              <th>Зарплата (₽)</th>
+              <th>Начислено</th>
+              <th>К выплате</th>
+              <th>Статус</th>
             </tr>
           </thead>
           <tbody id="timesheetBody">
@@ -1429,6 +1447,16 @@ AUTH.requireAuth();
       </div>
 
       <form id="staffForm" onsubmit="saveStaff(event)">
+        <!-- ФИО, email и телефон живут в user-service и при редактировании не
+             меняются — поля закрыты на чтение, чтобы правка не выглядела
+             сохранённой -->
+        <div id="staffEditHint" style="display:none;margin-bottom:16px;padding:12px;
+             background:rgba(251,140,0,0.08);border:1px solid rgba(251,140,0,0.3);
+             border-radius:10px;color:var(--color-text-primary);line-height:1.5;">
+          ФИО, email и телефон здесь не меняются — их правят в профиле пользователя.
+          Сохранятся только должность, ставка и дата приёма.
+        </div>
+
         <div class="form-group">
           <label class="form-label">ФИО:</label>
           <input type="text" class="form-input" id="staffName" required>
@@ -1438,10 +1466,12 @@ AUTH.requireAuth();
           <label class="form-label">Должность:</label>
           <select class="form-select" id="staffRole" required>
             <option value="waiter">Официант</option>
-            <option value="cook">Повар</option>
-            <option value="courier">Курьер</option>
+            <option value="chef">Повар</option>
+            <option value="cashier">Кассир</option>
+            <option value="operator">Оператор</option>
             <option value="manager">Менеджер</option>
             <option value="admin">Администратор</option>
+            <option value="employee">Сотрудник</option>
           </select>
         </div>
 
@@ -1455,9 +1485,16 @@ AUTH.requireAuth();
           <input type="email" class="form-input" id="staffEmail" required>
         </div>
 
+        <!-- Новому сотруднику нужен аккаунт для входа, иначе бэкенд отвергнет
+             создание с 400 -->
+        <div class="form-group" id="staffPasswordGroup">
+          <label class="form-label">Пароль для входа (минимум 8 символов):</label>
+          <input type="password" class="form-input" id="staffPassword" minlength="8" autocomplete="new-password">
+        </div>
+
         <div class="form-group">
-          <label class="form-label">Ставка (₽/час):</label>
-          <input type="number" class="form-input" id="staffRate" required>
+          <label class="form-label">Ставка (₽/час, можно оставить пустым):</label>
+          <input type="number" class="form-input" id="staffRate" step="0.01" min="0">
         </div>
 
         <div class="form-group">
@@ -1510,13 +1547,26 @@ AUTH.requireAuth();
   <div class="notification" id="notification"></div>
 
   <script>
+    // Источник истины — только API hr-service. localStorage для сотрудников,
+    // смен и зарплат НЕ используется: раньше при любой заминке (упавший сервис,
+    // истёкший токен, нет точки у предприятия) страница молча переключалась на
+    // localStorage, принимала новые записи в браузер и теряла их при
+    // перезагрузке — без единой ошибки на экране.
     let staff = [];
-    let schedule = {};
-    let apiSchedules = []; // raw API schedule entries
+    // userId -> { dayOffset: { type, id } }; id нужен, чтобы менять и удалять
+    // смену на сервере, а не только в памяти страницы
+    let scheduleEntries = {};
     let payroll = [];
+    let restaurants = [];
     let currentWeekStart = getWeekStart(new Date());
-    let editingStaffId = null;
+    let editingStaffId = null;   // user_id сотрудника (UUID), не номер строки
     let editingShift = null;
+    // Удаление/деактивация подтверждается вторым нажатием: confirm() заблокирован
+    // во встроенном браузере VS Code и кнопка выглядела бы мёртвой
+    let pendingStaffDeactivate = null;
+    // Загрузка с сервера удалась? Пока false — записывать нельзя
+    let staffSourceOk = false;
+    let scheduleSourceOk = false;
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1533,86 +1583,156 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Load data from API with localStorage fallback
+    // Разбор ошибки ответа API в читаемый текст
+    async function hrError(res) {
+      const data = await res.json().catch(() => ({}));
+      return data.message || data.error || ('HTTP ' + res.status);
+    }
+
+    // Дата в YYYY-MM-DD по местному календарю: toISOString() переводит в UTC и
+    // в Москве сдвигает смену на предыдущий день
+    function ymd(date) {
+      const d = new Date(date);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+    }
+
+    // id сотрудника — UUID-строка, в onclick его обязательно брать в кавычки,
+    // иначе дефисы превращают аргумент в невалидный JS
+    function jsArg(id) {
+      return "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    }
+
+    function escapeHtml(text) {
+      return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Блок ошибки вместо подмены демо-данными. Inline, не alert():
+    // модальные диалоги во встроенном браузере VS Code заблокированы.
+    function showStaffError(message) {
+      const grid = document.getElementById('staffGrid');
+      if (grid) {
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:left;'
+          + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
+          + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
+          + '⚠️ Сотрудники не загружены — сохранение отключено</div>'
+          + '<div style="color:var(--color-text-primary);line-height:1.5;">' + escapeHtml(message) + '</div>'
+          + '<button class="btn btn-primary" style="margin-top:16px;" onclick="initializeData().then(()=>renderStaff())">🔄 Повторить</button>'
+          + '</div>';
+      }
+      showNotification('⚠️ ' + message);
+    }
+
+    // Предупреждение по графику смен: это необязательный блок, он не должен
+    // гасить весь экран, но и не должен молча показывать пустую сетку как рабочую
+    function showScheduleNotice(message, isError) {
+      const box = document.getElementById('scheduleNotice');
+      if (!box) return;
+      if (!message) { box.innerHTML = ''; return; }
+      const color = isError ? '229,57,53' : '251,140,0';
+      box.innerHTML = '<div style="margin-bottom:16px;padding:16px;'
+        + 'background:rgba(' + color + ',0.08);border:1px solid rgba(' + color + ',0.35);border-radius:12px;">'
+        + '<div style="font-weight:700;color:rgb(' + color + ');margin-bottom:6px;">'
+        + (isError ? '⚠️ График смен не загружен — сохранение отключено' : '⚠️ Смены сохранять некуда')
+        + '</div><div style="color:var(--color-text-primary);line-height:1.5;">' + escapeHtml(message) + '</div>'
+        + '<button class="btn btn-primary" style="margin-top:12px;" onclick="reloadSchedule()">🔄 Повторить</button>'
+        + '</div>';
+    }
+
+    // Единый сторож записи по сотрудникам: без подтверждённой связи с сервером
+    // запись потерялась бы вместе с состоянием страницы
+    function requireServer(action) {
+      if (!staffSourceOk) {
+        showNotification('⚠️ Нет связи с сервером — ' + action
+          + ' не сохранится. Обновите страницу.');
+        return false;
+      }
+      return true;
+    }
+
+    // Отдельный сторож для смен: график может быть недоступен, когда список
+    // сотрудников загрузился нормально
+    function requireScheduleServer(action) {
+      if (!staffSourceOk || !scheduleSourceOk) {
+        showNotification('⚠️ Нет связи с сервером — ' + action
+          + ' не сохранится. Обновите страницу.');
+        return false;
+      }
+      return true;
+    }
+
+    // API — единственный источник. Ошибка ответа показывается на экране,
+    // пустой список — это нормальное пустое состояние, а не ошибка.
     async function initializeData() {
       document.getElementById('staffGrid').innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
 
-      // Load staff
+      staff = [];
+      scheduleEntries = {};
+      payroll = [];
+      restaurants = [];
+      staffSourceOk = false;
+      scheduleSourceOk = false;
+
       try {
         const res = await AUTH.fetch('/api/hr/staff');
-        if (res.ok) {
-          const data = await res.json();
-          staff = (data.staff || []).map(s => ({
-            id: s.id,
-            name: (s.first_name || '') + (s.last_name ? ' ' + s.last_name : '') || s.name || s.email || 'Сотрудник',
-            role: (s.position || s.role || 'employee').toLowerCase(),
-            phone: s.phone || '',
-            email: s.email || '',
-            rate: parseFloat(s.hourly_rate || s.rate || 0),
-            startDate: s.hire_date || s.start_date || new Date().toISOString().slice(0, 10),
-            status: s.is_active ? 'online' : 'offline'
-          }));
-        }
+        if (!res.ok) throw new Error(await hrError(res));
+        const data = await res.json();
+        staff = (data.staff || []).map(s => ({
+          // user_id — ключ и для PUT /api/hr/staff/:userId, и для смен
+          id: s.user_id || s.id,
+          name: [s.first_name, s.last_name].filter(Boolean).join(' ') || s.email || 'Сотрудник',
+          role: String(s.position || s.role || 'employee').toLowerCase(),
+          phone: s.phone || '',
+          email: s.email || '',
+          // Ставка — денежные данные: пустое поле остаётся пустым, нули не выдумываем
+          rate: s.hourly_rate != null ? parseFloat(s.hourly_rate) : null,
+          monthlySalary: s.monthly_salary != null ? parseFloat(s.monthly_salary) : null,
+          startDate: s.hire_date ? String(s.hire_date).slice(0, 10) : '',
+          isActive: s.is_active !== false
+        }));
+        staffSourceOk = true;
       } catch (e) {
-        console.log('API staff load failed:', e.message);
+        showStaffError(
+          'Не удалось загрузить сотрудников с сервера: ' + e.message
+          + '. Список НЕ показан, чтобы вы не работали с пустым экраном как с реальным. '
+          + 'Обновите страницу или войдите заново.'
+        );
+        return;
       }
 
-      if (staff.length === 0) {
-        const saved = localStorage.getItem('restaurantStaff');
-        if (saved) staff = JSON.parse(saved);
-        else staff = [];
-      }
-
-      // Load schedules for current week
+      // Точки нужны смене: без ресторана смена ни к чему не привязана
       try {
-        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
-        const dateTo = new Date(currentWeekStart.getTime() + 6 * 86400000).toISOString().slice(0, 10);
-        const res = await AUTH.fetch(`/api/hr/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`);
-        if (res.ok) {
-          const data = await res.json();
-          apiSchedules = data.schedules || [];
-          // Build local schedule map from API data
-          schedule = {};
-          staff.forEach(s => { schedule[s.id] = {}; });
-          apiSchedules.forEach(entry => {
-            const staffId = entry.user_id || entry.staff_id;
-            const shiftDate = new Date(entry.shift_date);
-            const dayOffset = Math.round((shiftDate - currentWeekStart) / 86400000);
-            if (dayOffset >= 0 && dayOffset <= 6 && schedule[staffId] !== undefined) {
-              // Map start/end time to shift type
-              const start = (entry.start_time || '').slice(0, 5);
-              let shiftType = 'day-off';
-              if (start === '08:00') shiftType = 'morning';
-              else if (start === '16:00') shiftType = 'evening';
-              else if (start) shiftType = 'full-day';
-              schedule[staffId][dayOffset] = shiftType;
-            }
-          });
-        }
+        const res = await AUTH.fetch('/api/restaurants');
+        if (!res.ok) throw new Error(await hrError(res));
+        const data = await res.json();
+        restaurants = data.restaurants || [];
       } catch (e) {
-        console.log('API schedules load failed:', e.message);
+        restaurants = [];
+        showNotification('⚠️ Не удалось загрузить точки: ' + e.message);
       }
 
-      if (Object.keys(schedule).length === 0) {
-        const saved = localStorage.getItem('restaurantSchedule');
-        if (saved) schedule = JSON.parse(saved);
-      }
-
-      // Load payroll
-      try {
-        const res = await AUTH.fetch('/api/hr/payroll');
-        if (res.ok) {
-          const data = await res.json();
-          payroll = data.payroll || [];
-        }
-      } catch (e) {
-        console.log('API payroll load failed:', e.message);
-      }
+      await loadWeekSchedules();
+      await loadPayroll();
     }
 
-    function saveData() {
-      localStorage.setItem('restaurantStaff', JSON.stringify(staff));
-      localStorage.setItem('restaurantSchedule', JSON.stringify(schedule));
+    // Табель и расчёт зарплаты — необязательный блок: его недоступность не
+    // должна гасить список сотрудников, но и подставлять свои числа нельзя
+    let payrollError = null;
+
+    async function loadPayroll() {
+      payrollError = null;
+      try {
+        const res = await AUTH.fetch('/api/hr/payroll');
+        if (!res.ok) throw new Error(await hrError(res));
+        const data = await res.json();
+        payroll = data.payroll || [];
+      } catch (e) {
+        payroll = [];
+        payrollError = e.message;
+      }
     }
 
     function switchTab(tab) {
@@ -1631,9 +1751,11 @@ AUTH.requireAuth();
 
     function renderStaff() {
       const grid = document.getElementById('staffGrid');
+      if (!staffSourceOk) return;   // на экране уже стоит блок ошибки
 
       if (staff.length === 0) {
-        grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Сотрудники не найдены</div>';
+        grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">'
+          + 'Сотрудников пока нет. Нажмите «Добавить сотрудника» — запись сразу уйдёт на сервер.</div>';
         updateStats();
         return;
       }
@@ -1641,44 +1763,45 @@ AUTH.requireAuth();
       grid.innerHTML = staff.map(s => `
         <div class="staff-card">
           <div class="staff-header">
-            <div class="staff-avatar">${s.name.split(' ').map(n => n[0]).join('')}</div>
+            <div class="staff-avatar">${escapeHtml(s.name.split(' ').map(n => n[0] || '').join(''))}</div>
             <div class="staff-info">
-              <div class="staff-name">${s.name}</div>
-              <span class="staff-role role-${s.role}">${getRoleName(s.role)}</span>
+              <div class="staff-name">${escapeHtml(s.name)}</div>
+              <span class="staff-role role-${escapeHtml(s.role)}">${escapeHtml(getRoleName(s.role))}</span>
             </div>
           </div>
 
           <div class="staff-details">
             <div class="detail-row">
               <span class="detail-label">📞 Телефон:</span>
-              <span class="detail-value">${s.phone}</span>
+              <span class="detail-value">${escapeHtml(s.phone) || '—'}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">📧 Email:</span>
-              <span class="detail-value">${s.email}</span>
+              <span class="detail-value">${escapeHtml(s.email) || '—'}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">💰 Ставка:</span>
-              <span class="detail-value">${s.rate} ₽/час</span>
+              <span class="detail-value">${s.rate != null ? s.rate.toLocaleString('ru-RU') + ' ₽/час'
+                : (s.monthlySalary != null ? s.monthlySalary.toLocaleString('ru-RU') + ' ₽/мес' : '—')}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">📅 Работает с:</span>
-              <span class="detail-value">${new Date(s.startDate).toLocaleDateString('ru-RU')}</span>
+              <span class="detail-value">${s.startDate ? new Date(s.startDate).toLocaleDateString('ru-RU') : '—'}</span>
             </div>
           </div>
 
-          <div class="staff-status ${s.status}">
-            <span>${s.status === 'online' ? '🟢' : '⚫'}</span>
-            <span>${s.status === 'online' ? 'На смене' : 'Не на смене'}</span>
+          <div class="staff-status ${s.isActive ? 'online' : 'offline'}">
+            <span>${s.isActive ? '🟢' : '⚫'}</span>
+            <span>${s.isActive ? 'Работает' : 'Деактивирован'}</span>
           </div>
 
           <div class="staff-actions">
-            <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="editStaff(${s.id})">
+            <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="editStaff(${jsArg(s.id)})">
               ✏️ Редактировать
             </button>
-            <button class="btn btn-danger btn-small" onclick="deleteStaff(${s.id})">
-              🗑️
-            </button>
+            ${s.isActive
+              ? `<button class="btn btn-danger btn-small" onclick="deactivateStaff(${jsArg(s.id)})" title="Деактивировать">⛔</button>`
+              : `<button class="btn btn-success btn-small" onclick="activateStaff(${jsArg(s.id)})" title="Вернуть в работу">↩️</button>`}
           </div>
         </div>
       `).join('');
@@ -1687,82 +1810,200 @@ AUTH.requireAuth();
     }
 
     function updateStats() {
-      document.getElementById('totalStaff').textContent = staff.length;
-      document.getElementById('onShift').textContent = staff.filter(s => s.status === 'online').length;
+      document.getElementById('totalStaff').textContent = staff.filter(s => s.isActive).length;
       document.getElementById('waitersCount').textContent = staff.filter(s => s.role === 'waiter').length;
-      document.getElementById('cooksCount').textContent = staff.filter(s => s.role === 'cook').length;
+      document.getElementById('cooksCount').textContent = staff.filter(s => s.role === 'chef' || s.role === 'cook').length;
+
+      // «На смене» считаем по настоящему графику на сегодня. Пока график не
+      // загружен или открыта другая неделя — прочерк, а не выдуманный ноль.
+      const onShiftEl = document.getElementById('onShift');
+      const today = new Date();
+      const dayOffset = Math.round((new Date(ymd(today)) - new Date(ymd(currentWeekStart))) / 86400000);
+      if (!scheduleSourceOk || dayOffset < 0 || dayOffset > 6) {
+        onShiftEl.textContent = '—';
+        return;
+      }
+      onShiftEl.textContent = Object.keys(scheduleEntries)
+        .filter(uid => scheduleEntries[uid] && scheduleEntries[uid][dayOffset]).length;
     }
 
     function getRoleName(role) {
       const names = {
         waiter: 'Официант',
+        chef: 'Повар',
         cook: 'Повар',
+        cashier: 'Кассир',
         courier: 'Курьер',
+        operator: 'Оператор',
         manager: 'Менеджер',
-        admin: 'Администратор'
+        admin: 'Администратор',
+        owner: 'Владелец',
+        employee: 'Сотрудник',
+        viewer: 'Наблюдатель'
       };
       return names[role] || role;
     }
 
     function openAddStaffModal() {
+      if (!requireServer('сотрудник')) return;
       editingStaffId = null;
       document.getElementById('modalTitle').textContent = 'Добавить сотрудника';
       document.getElementById('staffForm').reset();
+      // При создании нужен аккаунт: email, пароль и ФИО обязательны
+      setStaffAccountFieldsEnabled(true);
       document.getElementById('staffModal').classList.add('active');
     }
 
+    // hr-service умеет менять только должность, ставку и дату приёма. ФИО, email
+    // и телефон живут в user-service — чтобы не делать вид, что они сохранятся,
+    // при редактировании они показаны только для чтения.
+    function setStaffAccountFieldsEnabled(enabled) {
+      ['staffName', 'staffEmail', 'staffPhone'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.readOnly = !enabled; el.required = enabled; }
+      });
+      const pwdGroup = document.getElementById('staffPasswordGroup');
+      const pwd = document.getElementById('staffPassword');
+      if (pwdGroup) pwdGroup.style.display = enabled ? '' : 'none';
+      if (pwd) pwd.required = enabled;
+      const hint = document.getElementById('staffEditHint');
+      if (hint) hint.style.display = enabled ? 'none' : '';
+    }
+
     function editStaff(id) {
-      const s = staff.find(st => st.id === id);
+      const s = staff.find(st => String(st.id) === String(id));
       if (!s) return;
 
-      editingStaffId = id;
+      editingStaffId = s.id;
       document.getElementById('modalTitle').textContent = 'Редактировать сотрудника';
       document.getElementById('staffName').value = s.name;
       document.getElementById('staffRole').value = s.role;
       document.getElementById('staffPhone').value = s.phone;
       document.getElementById('staffEmail').value = s.email;
-      document.getElementById('staffRate').value = s.rate;
+      document.getElementById('staffRate').value = s.rate != null ? s.rate : '';
       document.getElementById('staffStartDate').value = s.startDate;
+      const pwd = document.getElementById('staffPassword');
+      if (pwd) pwd.value = '';
+      setStaffAccountFieldsEnabled(false);
       document.getElementById('staffModal').classList.add('active');
     }
 
-    function saveStaff(event) {
+    // Сохранение только через API. Ни локального массива, ни localStorage:
+    // запись, не дошедшая до базы, не должна выглядеть успешной.
+    async function saveStaff(event) {
       event.preventDefault();
+      if (!requireServer('сотрудник')) return;
 
-      const formData = {
-        name: document.getElementById('staffName').value,
-        role: document.getElementById('staffRole').value,
-        phone: document.getElementById('staffPhone').value,
-        email: document.getElementById('staffEmail').value,
-        rate: parseInt(document.getElementById('staffRate').value),
-        startDate: document.getElementById('staffStartDate').value,
-        status: 'offline'
-      };
-
-      if (editingStaffId) {
-        const index = staff.findIndex(s => s.id === editingStaffId);
-        staff[index] = { ...staff[index], ...formData };
-        showNotification('✅ Сотрудник обновлён');
-      } else {
-        const newId = staff.length > 0 ? Math.max(...staff.map(s => s.id)) + 1 : 1;
-        staff.push({ id: newId, ...formData });
-        schedule[newId] = { 0: 'day-off', 1: 'day-off', 2: 'day-off', 3: 'day-off', 4: 'day-off', 5: 'day-off', 6: 'day-off' };
-        showNotification('✅ Сотрудник добавлен');
+      const rateRaw = document.getElementById('staffRate').value.trim();
+      // Ставка — деньги: пустое поле отправляем как «не задано», а не как 0
+      const hourlyRate = rateRaw === '' ? null : parseFloat(rateRaw);
+      if (hourlyRate != null && !isFinite(hourlyRate)) {
+        showNotification('❌ Ставка должна быть числом');
+        return;
       }
+      const position = document.getElementById('staffRole').value;
+      const hireDate = document.getElementById('staffStartDate').value || null;
 
-      saveData();
-      renderStaff();
-      closeModal();
+      try {
+        if (editingStaffId) {
+          const body = { position, isActive: true };
+          if (hireDate) body.hireDate = hireDate;
+          if (hourlyRate != null) body.hourlyRate = hourlyRate;
+          const res = await AUTH.fetch(`/api/hr/staff/${editingStaffId}`, {
+            method: 'PUT',
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) throw new Error(await hrError(res));
+          showNotification('✅ Сотрудник обновлён на сервере');
+        } else {
+          const user = AUTH.getUser();
+          // enterprise_id берём из токена: хардкод увёл бы запись в чужую организацию
+          const enterpriseId = user && user.enterpriseId;
+          if (!enterpriseId) {
+            throw new Error('В токене нет организации — войдите заново');
+          }
+          const fullName = document.getElementById('staffName').value.trim();
+          const spaceAt = fullName.indexOf(' ');
+          const createRes = await AUTH.fetch(`/api/enterprises/${enterpriseId}/staff`, {
+            method: 'POST',
+            body: JSON.stringify({
+              email: document.getElementById('staffEmail').value.trim(),
+              password: document.getElementById('staffPassword').value,
+              firstName: spaceAt > 0 ? fullName.slice(0, spaceAt) : fullName,
+              lastName: spaceAt > 0 ? fullName.slice(spaceAt + 1) : '',
+              phone: document.getElementById('staffPhone').value.trim(),
+              role: position
+            })
+          });
+          if (!createRes.ok) throw new Error(await hrError(createRes));
+          const created = await createRes.json();
+          const userId = created.staff && created.staff.id;
+          if (!userId) throw new Error('Сервер не вернул id созданного сотрудника');
+
+          const profileBody = { userId, position };
+          if (hireDate) profileBody.hireDate = hireDate;
+          if (hourlyRate != null) profileBody.hourlyRate = hourlyRate;
+          const profRes = await AUTH.fetch('/api/hr/staff', {
+            method: 'POST',
+            body: JSON.stringify(profileBody)
+          });
+          if (!profRes.ok) {
+            // Аккаунт уже создан, а кадровая карточка нет — говорим прямо,
+            // чтобы пользователь не считал, что ставка сохранилась
+            throw new Error('Аккаунт создан, но кадровая карточка не сохранена: '
+              + await hrError(profRes));
+          }
+          showNotification('✅ Сотрудник создан на сервере');
+        }
+
+        closeModal();
+        await initializeData();
+        renderStaff();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
-    function deleteStaff(id) {
-      if (!confirm('Удалить сотрудника?')) return;
+    // Удаления сотрудника в hr-service нет — есть деактивация (is_active=false).
+    // Называем кнопку тем, что происходит на самом деле.
+    async function deactivateStaff(id) {
+      if (!requireServer('деактивация сотрудника')) return;
+      if (pendingStaffDeactivate !== id) {
+        pendingStaffDeactivate = id;
+        showNotification('⚠️ Нажмите ещё раз для подтверждения деактивации');
+        setTimeout(() => { if (pendingStaffDeactivate === id) pendingStaffDeactivate = null; }, 5000);
+        return;
+      }
+      pendingStaffDeactivate = null;
 
-      staff = staff.filter(s => s.id !== id);
-      delete schedule[id];
-      saveData();
-      renderStaff();
-      showNotification('🗑️ Сотрудник удалён');
+      try {
+        const res = await AUTH.fetch(`/api/hr/staff/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ isActive: false })
+        });
+        if (!res.ok) throw new Error(await hrError(res));
+        showNotification('⛔ Сотрудник деактивирован');
+        await initializeData();
+        renderStaff();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
+    }
+
+    async function activateStaff(id) {
+      if (!requireServer('возврат сотрудника в работу')) return;
+      try {
+        const res = await AUTH.fetch(`/api/hr/staff/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ isActive: true })
+        });
+        if (!res.ok) throw new Error(await hrError(res));
+        showNotification('✅ Сотрудник снова в работе');
+        await initializeData();
+        renderStaff();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
     function closeModal() {
@@ -1795,49 +2036,96 @@ AUTH.requireAuth();
       renderSchedule();
     }
 
+    async function reloadSchedule() {
+      await loadWeekSchedules();
+      renderSchedule();
+    }
+
+    // Смены грузим только с сервера. Пустой ответ — это «смен ещё нет»
+    // (нормальное состояние), а неуспешный ответ — поломка: тогда сетка
+    // помечается как нерабочая и запись блокируется.
     async function loadWeekSchedules() {
+      scheduleSourceOk = false;
+      scheduleEntries = {};
+
+      if (!staffSourceOk) {
+        showScheduleNotice('Список сотрудников не загружен, строить график не на кого.', true);
+        return;
+      }
+
+      // Смена привязывается к точке: без неё запись бессмысленна
+      if (restaurants.length === 0) {
+        showScheduleNotice(
+          'У предприятия нет ни одной точки (ресторана). Смена привязывается к точке, '
+          + 'поэтому сохранять график некуда. Создайте точку в разделе «Рестораны» — '
+          + 'до этого смены не сохранятся.',
+          false
+        );
+        return;
+      }
+
       try {
-        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
-        const dateTo = new Date(currentWeekStart.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+        const dateFrom = ymd(currentWeekStart);
+        const dateTo = ymd(new Date(currentWeekStart.getTime() + 6 * 86400000));
         const res = await AUTH.fetch(`/api/hr/schedules?dateFrom=${dateFrom}&dateTo=${dateTo}`);
-        if (res.ok) {
-          const data = await res.json();
-          apiSchedules = data.schedules || [];
-          schedule = {};
-          staff.forEach(s => { schedule[s.id] = {}; });
-          apiSchedules.forEach(entry => {
-            const staffId = entry.user_id || entry.staff_id;
-            const shiftDate = new Date(entry.shift_date);
-            const dayOffset = Math.round((shiftDate - currentWeekStart) / 86400000);
-            if (dayOffset >= 0 && dayOffset <= 6 && schedule[staffId] !== undefined) {
-              const start = (entry.start_time || '').slice(0, 5);
-              let shiftType = 'day-off';
-              if (start === '08:00') shiftType = 'morning';
-              else if (start === '16:00') shiftType = 'evening';
-              else if (start) shiftType = 'full-day';
-              schedule[staffId][dayOffset] = shiftType;
-            }
-          });
-        }
+        if (!res.ok) throw new Error(await hrError(res));
+        const data = await res.json();
+
+        staff.forEach(s => { scheduleEntries[s.id] = {}; });
+        (data.schedules || []).forEach(entry => {
+          const staffId = entry.user_id;
+          if (!scheduleEntries[staffId]) return;
+          const dayOffset = Math.round(
+            (new Date(ymd(entry.shift_date)) - new Date(ymd(currentWeekStart))) / 86400000
+          );
+          if (dayOffset < 0 || dayOffset > 6) return;
+          const start = String(entry.start_time || '').slice(0, 5);
+          let shiftType = 'full-day';
+          if (start === '08:00') shiftType = String(entry.end_time || '').slice(0, 5) === '20:00' ? 'full-day' : 'morning';
+          else if (start === '16:00') shiftType = 'evening';
+          scheduleEntries[staffId][dayOffset] = { type: shiftType, id: entry.id };
+        });
+
+        scheduleSourceOk = true;
+        showScheduleNotice(null);
       } catch (e) {
-        console.log('API week schedules load failed:', e.message);
+        scheduleEntries = {};
+        showScheduleNotice(
+          'Не удалось загрузить график с сервера: ' + e.message
+          + '. Сетка НЕ показана, чтобы вы не принимали пустые клетки за реальный график.',
+          true
+        );
       }
     }
 
     function renderSchedule() {
       document.getElementById('currentWeek').textContent = formatWeekRange(currentWeekStart);
-
       const tbody = document.getElementById('scheduleBody');
+
+      if (!scheduleSourceOk) {
+        // Причина уже выведена блоком showScheduleNotice — сетку не рисуем
+        tbody.innerHTML = '';
+        updateStats();
+        return;
+      }
+
+      if (staff.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--color-grey-5);">'
+          + 'Сотрудников пока нет — график строить не на кого.</td></tr>';
+        updateStats();
+        return;
+      }
+
       tbody.innerHTML = staff.map(s => {
-        const shifts = schedule[s.id] || {};
+        const shifts = scheduleEntries[s.id] || {};
         return `
           <tr>
-            <td><strong>${s.name}</strong><br><small class="staff-role role-${s.role}">${getRoleName(s.role)}</small></td>
+            <td><strong>${escapeHtml(s.name)}</strong><br><small class="staff-role role-${escapeHtml(s.role)}">${escapeHtml(getRoleName(s.role))}</small></td>
             ${[0, 1, 2, 3, 4, 5, 6].map(day => `
               <td>
                 <div class="shift-cell">
-                  <span class="shift-badge ${shifts[day] || 'day-off'}" onclick="editShift(${s.id}, ${day})">
-                    ${getShiftLabel(shifts[day])}
+                  <span class="shift-badge ${shifts[day] ? shifts[day].type : 'day-off'}" onclick="editShift(${jsArg(s.id)}, ${day})">
+                    ${getShiftLabel(shifts[day] ? shifts[day].type : 'day-off')}
                   </span>
                 </div>
               </td>
@@ -1845,6 +2133,8 @@ AUTH.requireAuth();
           </tr>
         `;
       }).join('');
+
+      updateStats();
     }
 
     function getShiftLabel(shift) {
@@ -1858,26 +2148,69 @@ AUTH.requireAuth();
     }
 
     function editShift(staffId, day) {
+      if (!requireScheduleServer('смена')) return;
       editingShift = { staffId, day };
-      document.getElementById('shiftType').value = schedule[staffId]?.[day] || 'day-off';
+      const current = (scheduleEntries[staffId] || {})[day];
+      document.getElementById('shiftType').value = current ? current.type : 'day-off';
       document.getElementById('shiftModal').classList.add('active');
     }
 
-    function saveShift() {
+    // Смена уходит на сервер сразу: отдельной кнопки «сохранить график» больше
+    // нет, потому что она создавала видимость сохранения при упавших запросах.
+    async function saveShift() {
       if (!editingShift) return;
+      if (!requireScheduleServer('смена')) return;
 
       const { staffId, day } = editingShift;
       const shiftType = document.getElementById('shiftType').value;
+      const existing = (scheduleEntries[staffId] || {})[day];
+      const shiftDate = ymd(new Date(currentWeekStart.getTime() + day * 86400000));
+      const timeMap = {
+        morning: ['08:00', '16:00'],
+        evening: ['16:00', '00:00'],
+        'full-day': ['08:00', '20:00']
+      };
 
-      if (!schedule[staffId]) {
-        schedule[staffId] = {};
+      try {
+        if (shiftType === 'day-off') {
+          if (!existing) {
+            showNotification('ℹ️ Смены на этот день и не было');
+            closeShiftModal();
+            return;
+          }
+          const res = await AUTH.fetch(`/api/hr/schedules/${existing.id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error(await hrError(res));
+        } else {
+          const times = timeMap[shiftType];
+          if (existing) {
+            const res = await AUTH.fetch(`/api/hr/schedules/${existing.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ startTime: times[0], endTime: times[1] })
+            });
+            if (!res.ok) throw new Error(await hrError(res));
+          } else {
+            const res = await AUTH.fetch('/api/hr/schedules', {
+              method: 'POST',
+              body: JSON.stringify({
+                userId: staffId,
+                restaurantId: restaurants[0].id,
+                shiftDate,
+                startTime: times[0],
+                endTime: times[1]
+              })
+            });
+            if (!res.ok) throw new Error(await hrError(res));
+          }
+        }
+
+        closeShiftModal();
+        // Перечитываем с сервера: показываем то, что реально лежит в базе
+        await loadWeekSchedules();
+        renderSchedule();
+        showNotification('✅ Смена сохранена на сервере');
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
       }
-      schedule[staffId][day] = shiftType;
-
-      saveData();
-      renderSchedule();
-      closeShiftModal();
-      showNotification('✅ Смена обновлена');
     }
 
     function closeShiftModal() {
@@ -1885,105 +2218,57 @@ AUTH.requireAuth();
       editingShift = null;
     }
 
-    async function saveSchedule() {
-      // Try to save new/changed shifts to API
-      let savedToApi = false;
-      try {
-        const dateFrom = currentWeekStart.toISOString().slice(0, 10);
-        // Build array of shifts to post
-        const shiftsToPost = [];
-        for (const staffId of Object.keys(schedule)) {
-          const staffMember = staff.find(s => String(s.id) === String(staffId));
-          if (!staffMember) continue;
-          for (let day = 0; day <= 6; day++) {
-            const shiftType = schedule[staffId][day];
-            if (!shiftType || shiftType === 'day-off') continue;
-            const shiftDate = new Date(currentWeekStart.getTime() + day * 86400000).toISOString().slice(0, 10);
-            const timeMap = { morning: ['08:00', '16:00'], evening: ['16:00', '00:00'], 'full-day': ['08:00', '20:00'] };
-            const times = timeMap[shiftType] || ['08:00', '16:00'];
-            shiftsToPost.push({
-              userId: staffId,
-              shiftDate,
-              startTime: times[0],
-              endTime: times[1],
-              restaurantId: null
-            });
-          }
-        }
-        if (shiftsToPost.length > 0) {
-          for (const shift of shiftsToPost) {
-            await AUTH.fetch('/api/hr/schedules', {
-              method: 'POST',
-              body: JSON.stringify(shift)
-            });
-          }
-          savedToApi = true;
-        }
-      } catch (e) {
-        console.log('API schedule save failed:', e.message);
-      }
-
-      saveData();
-      showNotification(savedToApi ? 'График сохранен' : 'График сохранен локально');
-    }
-
-    // Timesheet functions
+    // Табель: только расчёты из базы. Локального расчёта «часы × ставка» больше
+    // нет — он рисовал суммы, которых в базе никогда не было.
     async function renderTimesheet() {
       const tbody = document.getElementById('timesheetBody');
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--color-grey-5);">Загрузка...</td></tr>';
 
-      // Refresh payroll from API
-      if (payroll.length === 0) {
-        try {
-          const res = await AUTH.fetch('/api/hr/payroll');
-          if (res.ok) {
-            const data = await res.json();
-            payroll = data.payroll || [];
-          }
-        } catch (e) {
-          console.log('API payroll reload failed:', e.message);
-        }
-      }
+      await loadPayroll();
 
-      if (payroll.length > 0) {
-        // Render from API payroll data
-        tbody.innerHTML = payroll.map(p => {
-          const statusBadge = p.status === 'paid'
-            ? '<span style="background:rgba(67,160,71,0.1);color:var(--color-success);padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">Выплачено</span>'
-            : p.status === 'pending'
-            ? '<span style="background:rgba(251,140,0,0.1);color:var(--color-warning);padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">Ожидает</span>'
-            : '<span style="background:rgba(139,149,165,0.1);color:var(--color-grey-5);padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">' + (p.status || '') + '</span>';
-
-          const name = p.employee_name || p.name || (staff.find(s => String(s.id) === String(p.user_id || p.staff_id)) || {}).name || 'Сотрудник';
-          const role = (staff.find(s => String(s.id) === String(p.user_id || p.staff_id)) || {}).role || '';
-
-          return `
-            <tr>
-              <td><strong>${name}</strong>${role ? `<br><small class="staff-role role-${role}">${getRoleName(role)}</small>` : ''}</td>
-              <td>${p.hours_worked || p.hours || '—'} ч</td>
-              <td>${p.shifts_count || p.shifts || '—'}</td>
-              <td>${p.late_count || 0}</td>
-              <td><strong>${(parseFloat(p.amount || p.total || 0)).toLocaleString('ru-RU')} ₽</strong> ${statusBadge}</td>
-            </tr>
-          `;
-        }).join('');
+      if (payrollError) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;color:var(--color-text-primary);">'
+          + '<div style="font-weight:700;color:#e53935;margin-bottom:6px;">⚠️ Расчёт зарплаты не загружен — суммы не показаны</div>'
+          + escapeHtml(payrollError)
+          + '<div style="margin-top:12px;"><button class="btn btn-primary btn-small" onclick="renderTimesheet()">🔄 Повторить</button></div>'
+          + '</td></tr>';
         return;
       }
 
-      // Fallback: calculate from local schedule
-      tbody.innerHTML = staff.map(s => {
-        const shifts = schedule[s.id] || {};
-        const workDays = Object.values(shifts).filter(sh => sh !== 'day-off').length;
-        const hours = workDays * 8;
-        const salary = hours * (s.rate || 0);
+      if (payroll.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--color-grey-5);">'
+          + 'Расчётов зарплаты за период ещё нет. Они появятся после расчёта в hr-сервисе — '
+          + 'страница не считает суммы сама.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = payroll.map(p => {
+        const statusLabels = {
+          paid: ['Выплачено', '67,160,71', 'var(--color-success)'],
+          approved: ['Утверждено', '2,136,209', '#0288d1'],
+          draft: ['Черновик', '139,149,165', 'var(--color-grey-5)']
+        };
+        const st = statusLabels[p.status] || [p.status || '—', '139,149,165', 'var(--color-grey-5)'];
+        const badge = '<span style="background:rgba(' + st[1] + ',0.1);color:' + st[2]
+          + ';padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600;">' + escapeHtml(st[0]) + '</span>';
+
+        const name = [p.first_name, p.last_name].filter(Boolean).join(' ')
+          || (staff.find(s => String(s.id) === String(p.user_id)) || {}).name
+          || 'Сотрудник';
+        const period = p.period_start && p.period_end
+          ? new Date(p.period_start).toLocaleDateString('ru-RU') + ' — ' + new Date(p.period_end).toLocaleDateString('ru-RU')
+          : '—';
+        // Деньги: отсутствующее значение — прочерк, не ноль
+        const money = v => v == null ? '—' : parseFloat(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
 
         return `
           <tr>
-            <td><strong>${s.name}</strong><br><small class="staff-role role-${s.role}">${getRoleName(s.role)}</small></td>
-            <td>${hours} ч</td>
-            <td>${workDays}</td>
-            <td>0</td>
-            <td><strong>${salary.toLocaleString('ru-RU')} ₽</strong></td>
+            <td><strong>${escapeHtml(name)}</strong></td>
+            <td>${period}</td>
+            <td>${p.hours_worked != null ? parseFloat(p.hours_worked).toLocaleString('ru-RU') + ' ч' : '—'}</td>
+            <td>${money(p.gross_pay)}</td>
+            <td><strong>${money(p.net_pay)}</strong></td>
+            <td>${badge}</td>
           </tr>
         `;
       }).join('');

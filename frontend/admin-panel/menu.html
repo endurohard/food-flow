@@ -4,6 +4,7 @@
   <link rel="stylesheet" href="/css/tokens.css">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <script src="js/auth.js"></script>
+    <script src="js/dish-visual.js"></script>
   <style>
     /* ══ Sedap Layout Override ══ */
     *, *::before, *::after { box-sizing: border-box; }
@@ -740,7 +741,22 @@
       font-size: 48px;
       position: relative;
       flex-shrink: 0;
+      overflow: hidden;
     }
+
+    /* Фото и значок блюда в окне редактирования */
+    .dish-visual-editor { display: flex; flex-direction: column; gap: 14px; }
+    .dish-visual-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .dish-visual-preview { width: 96px; height: 96px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid var(--admin-border); }
+    .dish-visual-actions { display: flex; flex-direction: column; gap: 8px; }
+    .dish-visual-hint { font-size: 12px; color: var(--color-text-secondary); }
+    .dish-icon-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+    @media (max-width: 560px) { .dish-icon-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .dish-icon-btn { height: 48px; border-radius: 10px; border: 1px solid var(--admin-border); background: var(--admin-card-bg); color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .dish-icon-btn[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-light); color: var(--color-primary); }
+    .dish-tint-row { display: flex; align-items: center; gap: 10px; }
+    .dish-tint-btn { width: 32px; height: 32px; border-radius: 16px; border: 1px solid var(--color-grey-4); cursor: pointer; }
+    .dish-tint-btn[aria-pressed="true"] { border: 2px solid var(--color-text-primary); box-shadow: inset 0 0 0 2px var(--admin-card-bg); }
 
     @media (min-width: 768px) {
       .dish-image {
@@ -1492,6 +1508,26 @@ AUTH.requireAuth();
           <textarea class="form-textarea" id="dishDescription" required></textarea>
         </div>
 
+        <div class="form-group">
+          <span class="form-label">Фото или значок:</span>
+          <div class="dish-visual-editor">
+            <div class="dish-visual-row">
+              <div class="dish-visual-preview" id="dishVisualPreview"></div>
+              <div class="dish-visual-actions">
+                <label class="btn btn-secondary btn-small" style="cursor:pointer;position:relative;">
+                  Загрузить фото
+                  <input type="file" id="dishPhotoInput" accept="image/jpeg,image/png,image/webp" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDishPhotoPicked(event)">
+                </label>
+                <button type="button" class="btn btn-secondary btn-small" id="dishPhotoRemove" onclick="removeDishPhoto()">Убрать фото</button>
+                <span class="dish-visual-hint">JPG, PNG или WebP до 5 МБ, лучше квадрат от 800 px</span>
+              </div>
+            </div>
+            <span class="dish-visual-hint">Пока фото нет, гость увидит значок:</span>
+            <div class="dish-icon-grid" id="dishIconGrid" role="group" aria-label="Значок блюда"></div>
+            <div class="dish-tint-row" id="dishTintRow" role="group" aria-label="Цвет плашки"></div>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Категория:</label>
@@ -1524,10 +1560,6 @@ AUTH.requireAuth();
             <input type="number" class="form-input" id="dishCookTime" value="15">
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Иконка:</label>
-            <input type="text" class="form-input" id="dishIcon" placeholder="🍕" maxlength="2">
-          </div>
         </div>
 
         <div class="form-group">
@@ -1600,6 +1632,14 @@ AUTH.requireAuth();
 
       <form id="modifierForm" onsubmit="saveModifier(event)">
         <div class="form-group">
+          <label class="form-label">Блюдо:</label>
+          <select class="form-select" id="modifierDish" required></select>
+          <div style="font-size: 12px; color: #888; margin-top: 4px;">
+            Модификатор принадлежит блюду — он появится при его продаже в кассе.
+          </div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Название:</label>
           <input type="text" class="form-input" id="modifierName" required>
         </div>
@@ -1618,6 +1658,36 @@ AUTH.requireAuth();
             <option value="drink">Напиток</option>
             <option value="other">Другое</option>
           </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Списывать со склада:</label>
+          <select class="form-select" id="modifierSourceKind" onchange="onModifierSourceKindChange()">
+            <option value="none">Не списывать — только цена в чеке</option>
+            <option value="item">Позицию склада (напр. «доп. сыр»)</option>
+            <option value="techcard">По техкарте — свой полуфабрикат (напр. «соус Цезарь»)</option>
+          </select>
+          <div style="font-size: 12px; color: #888; margin-top: 4px;">
+            Без списания добавка не уходит со склада: деньги в кассе есть, а остаток не меняется.
+          </div>
+        </div>
+
+        <div class="form-group" id="modifierItemGroup" style="display: none;">
+          <label class="form-label">Позиция склада:</label>
+          <select class="form-select" id="modifierInventoryItem"></select>
+        </div>
+
+        <div class="form-group" id="modifierTechCardGroup" style="display: none;">
+          <label class="form-label">Техкарта:</label>
+          <select class="form-select" id="modifierTechCard"></select>
+        </div>
+
+        <div class="form-group" id="modifierQuantityGroup" style="display: none;">
+          <label class="form-label">Расход на один выбор:</label>
+          <input type="number" class="form-input" id="modifierQuantity" step="0.0001" min="0">
+          <div style="font-size: 12px; color: #888; margin-top: 4px;" id="modifierQuantityHint">
+            Брутто в единицах позиции склада. Умножается на количество блюд в строке заказа.
+          </div>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -1718,10 +1788,18 @@ AUTH.requireAuth();
     let dishes = [];
     let categories = [];
     let modifiers = [];
+    // Удаление подтверждается вторым нажатием: confirm() заблокирован
+    // во встроенном браузере VS Code.
+    let pendingModifierDelete = null;
+    let pendingDishDelete = null;
+    let pendingCategoryDelete = null;
+    let pendingRecipeDelete = null;
+    // Загрузка с сервера удалась? Пока false — сохранять нельзя: запись
+    // ушла бы в localStorage и пропала при перезагрузке.
+    let dataSourceOk = false;
     let priceSchemes = [];
     let stoplist = [];
     let recipes = [];
-    let inventory = [];
     let currentCategory = 'all';
     let editingDishId = null;
     let ingredientRowCounter = 0;
@@ -1742,152 +1820,126 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Load data from API with localStorage fallback
+    // Экран ошибки вместо подмены демо-данными. Inline-блок, не alert():
+    // во встроенном браузере VS Code модальные диалоги заблокированы.
+    function showDataError(message) {
+      const grid = document.getElementById('dishesGrid');
+      if (grid) {
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:left;'
+          + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
+          + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
+          + '⚠️ Меню не загружено — сохранение отключено</div>'
+          + '<div style="color:var(--color-text-primary);line-height:1.5;">' + message + '</div>'
+          + '<button class="btn btn-primary" style="margin-top:16px;" onclick="initializeData().then(()=>{'
+          + 'renderCategories();renderDishes();updateCategoryOptions();})">🔄 Повторить</button>'
+          + '</div>';
+      }
+      updateCategoryOptions();
+      showNotification('⚠️ ' + message);
+    }
+
+    // Единый сторож записи: без подтверждённой связи с сервером любое
+    // сохранение потерялось бы вместе с localStorage.
+    function requireServer(action) {
+      if (!dataSourceOk || !currentRestaurantId) {
+        showNotification('⚠️ Нет связи с сервером — ' + action
+          + ' не сохранится. Обновите страницу.');
+        return false;
+      }
+      return true;
+    }
+
+    // Источник истины — API. localStorage для меню НЕ используется.
+    // Почему так: раньше при любой заминке (нет точки у предприятия, упавший
+    // сервис, истёкший токен) экран молча переключался на localStorage и
+    // подставлял демо-список «Пицца/Суши/Бургеры». Пользователь видел рабочий
+    // интерфейс, добавлял категорию и блюдо — они ложились в браузер, а не в
+    // базу. После перезагрузки, смены браузера или очистки кэша всё исчезало,
+    // и никакой ошибки при этом не показывалось.
     async function initializeData() {
-      document.getElementById('dishesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
+      const grid = document.getElementById('dishesGrid');
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
+
+      categories = [];
+      dishes = [];
+      stoplist = [];
+      dataSourceOk = false;
+
       try {
-        // Get restaurant list and use first one
         const restRes = await AUTH.fetch('/api/restaurants');
-        if (restRes.ok) {
-          const restData = await restRes.json();
-          if (restData.restaurants && restData.restaurants.length > 0) {
-            currentRestaurantId = restData.restaurants[0].id;
+        if (!restRes.ok) throw new Error(await techCardError(restRes));
+        const restData = await restRes.json();
 
-            // Load categories from API
-            const catRes = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-categories`);
-            if (catRes.ok) {
-              const catData = await catRes.json();
-              if (catData.categories && catData.categories.length > 0) {
-                categories = catData.categories.map(c => ({
-                  id: c.id,
-                  name: c.name,
-                  icon: c.icon || '',
-                  order: c.display_order || 0
-                }));
-              }
-            }
+        // Нет ни одной точки — создавать меню некуда. Это и был главный
+        // источник потери: сохранение молча уходило в localStorage.
+        if (!restData.restaurants || restData.restaurants.length === 0) {
+          currentRestaurantId = null;
+          showDataError(
+            'У предприятия нет ни одной точки (ресторана). Меню привязывается к точке, '
+            + 'поэтому сохранять категории и блюда некуда. Создайте точку в разделе «Рестораны» — '
+            + 'до этого данные не сохранятся.'
+          );
+          return;
+        }
 
-            // Load menu items from API
-            const itemsRes = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-items`);
-            if (itemsRes.ok) {
-              const itemsData = await itemsRes.json();
-              if (itemsData.items && itemsData.items.length > 0) {
-                dishes = itemsData.items.map(i => ({
-                  id: i.id,
-                  name: i.name,
-                  category: i.category_id,
-                  categoryName: i.category_name,
-                  price: parseFloat(i.price),
-                  cost: i.cost_price ? parseFloat(i.cost_price) : 0,
-                  description: i.description || '',
-                  image: i.image_url || '',
-                  weight: i.weight_grams ? `${i.weight_grams}г` : '',
-                  calories: i.calories || 0,
-                  cookTime: i.preparation_time || 0,
-                  isAvailable: i.is_available !== false,
-                  isVegetarian: i.is_vegetarian || false,
-                  isVegan: i.is_vegan || false,
-                  isGlutenFree: i.is_gluten_free || false,
-                  isHot: i.is_popular || false,
-                  isNew: i.is_new || false,
-                  isSpicy: i.is_spicy || false,
-                  icon: i.icon || '🍽️'
-                }));
-              }
-            }
+        currentRestaurantId = restData.restaurants[0].id;
 
-            // Load stop-list from API
-            try {
-              const stopRes = await AUTH.fetch(`/api/menus/stop-list?restaurantId=${currentRestaurantId}`);
-              if (stopRes.ok) {
-                const stopData = await stopRes.json();
-                if (stopData.items && stopData.items.length > 0) {
-                  stoplist = stopData.items.map(i => i.menu_item_id || i.id);
-                }
-              }
-            } catch (e) { /* stop-list optional */ }
+        const catRes = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-categories`);
+        if (!catRes.ok) throw new Error(await techCardError(catRes));
+        const catData = await catRes.json();
+        categories = (catData.categories || []).map(c => ({
+          id: c.id,
+          name: c.name,
+          icon: c.icon || '',
+          order: c.display_order || 0
+        }));
+
+        const itemsRes = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-items`);
+        if (!itemsRes.ok) throw new Error(await techCardError(itemsRes));
+        const itemsData = await itemsRes.json();
+        dishes = (itemsData.items || []).map(i => ({
+          id: i.id,
+          name: i.name,
+          category: i.category_id,
+          categoryName: i.category_name,
+          price: parseFloat(i.price),
+          cost: i.cost_price ? parseFloat(i.cost_price) : 0,
+          description: i.description || '',
+          image: i.image_url || '',
+          weight: i.weight_grams ? `${i.weight_grams}г` : '',
+          calories: i.calories || 0,
+          cookTime: i.preparation_time || 0,
+          isAvailable: i.is_available !== false,
+          isVegetarian: i.is_vegetarian || false,
+          isVegan: i.is_vegan || false,
+          isGlutenFree: i.is_gluten_free || false,
+          isHot: i.is_popular || false,
+          isNew: i.is_new || false,
+          isSpicy: i.is_spicy || false,
+          icon: i.icon || null,
+          iconColor: i.icon_color || null
+        }));
+
+        // Стоп-лист необязателен: его отсутствие не повод гасить весь экран
+        try {
+          const stopRes = await AUTH.fetch(`/api/menus/stop-list?restaurantId=${currentRestaurantId}`);
+          if (stopRes.ok) {
+            const stopData = await stopRes.json();
+            stoplist = (stopData.items || []).map(i => i.menu_item_id || i.id);
           }
-        }
+        } catch (e) { /* stop-list optional */ }
+
+        await loadModifiers();
+
+        dataSourceOk = true;
       } catch (e) {
-        console.log('API unavailable, using localStorage fallback:', e.message);
-      }
-
-      // Fallback to localStorage if no API data
-      if (categories.length === 0) {
-        const savedCategories = localStorage.getItem('menuCategories');
-        if (savedCategories) {
-          categories = JSON.parse(savedCategories);
-        } else {
-          categories = [
-            { id: 1, name: 'Пицца', icon: '🍕', order: 1 },
-            { id: 2, name: 'Суши', icon: '🍣', order: 2 },
-            { id: 3, name: 'Бургеры', icon: '🍔', order: 3 },
-            { id: 4, name: 'Салаты', icon: '🥗', order: 4 },
-            { id: 5, name: 'Напитки', icon: '🥤', order: 5 },
-            { id: 6, name: 'Десерты', icon: '🍰', order: 6 }
-          ];
-        }
-      }
-
-      if (dishes.length === 0) {
-        const savedDishes = localStorage.getItem('menuDishes');
-        if (savedDishes) {
-          dishes = JSON.parse(savedDishes);
-        } else {
-          dishes = [
-          { id: 1, name: 'Маргарита', description: 'Классическая пицца с томатами, моцареллой и базиликом', category: 1, price: 450, weight: '500 г', calories: 890, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: true, isSpicy: false },
-          { id: 2, name: 'Пепперони', description: 'Пицца с острой салями', category: 1, price: 520, weight: '550 г', calories: 980, cookTime: 15, icon: '🍕', isNew: false, isHot: true, isVegetarian: false, isSpicy: true },
-          { id: 3, name: 'Филадельфия', description: 'Ролл с лососем и сливочным сыром', category: 2, price: 380, weight: '250 г', calories: 420, cookTime: 10, icon: '🍣', isNew: true, isHot: false, isVegetarian: false, isSpicy: false },
-          { id: 4, name: 'Калифорния', description: 'Ролл с крабом и икрой тобико', category: 2, price: 350, weight: '240 г', calories: 380, cookTime: 10, icon: '🍣', isNew: false, isHot: true, isVegetarian: false, isSpicy: false },
-          { id: 5, name: 'Чизбургер', description: 'Сочный бургер с говядиной', category: 3, price: 320, weight: '300 г', calories: 650, cookTime: 12, icon: '🍔', isNew: false, isHot: false, isVegetarian: false, isSpicy: false },
-          { id: 6, name: 'Цезарь', description: 'Салат с курицей гриль', category: 4, price: 280, weight: '250 г', calories: 340, cookTime: 8, icon: '🥗', isNew: false, isHot: true, isVegetarian: false, isSpicy: false }
-        ];
-        }
-      }
-
-      const savedModifiers = localStorage.getItem('menuModifiers');
-      if (savedModifiers) {
-        modifiers = JSON.parse(savedModifiers);
-      } else {
-        modifiers = [
-          { id: 1, name: 'Соус Цезарь', price: 50, type: 'sauce' },
-          { id: 2, name: 'Соус Барбекю', price: 50, type: 'sauce' },
-          { id: 3, name: 'Сырный соус', price: 70, type: 'sauce' },
-          { id: 4, name: 'Бекон', price: 80, type: 'topping' },
-          { id: 5, name: 'Грибы', price: 60, type: 'topping' },
-          { id: 6, name: 'Картофель фри', price: 120, type: 'side' }
-        ];
-      }
-
-      const savedStoplist = localStorage.getItem('menuStoplist');
-      if (savedStoplist) {
-        stoplist = JSON.parse(savedStoplist);
-      } else {
-        stoplist = [];
-      }
-
-      // Техкарты живут только в API (см. loadTechCards), localStorage для них не используется
-
-      const savedInventory = localStorage.getItem('inventory');
-      if (savedInventory) {
-        inventory = JSON.parse(savedInventory);
-      } else {
-        // Sample inventory items with cost prices (costPrice - цена за единицу измерения)
-        inventory = [
-          { id: 1, name: 'Тесто для пиццы', unit: 'г', quantity: 10000, minQuantity: 2000, costPrice: 0.15 },
-          { id: 2, name: 'Моцарелла', unit: 'г', quantity: 5000, minQuantity: 1000, costPrice: 0.85 },
-          { id: 3, name: 'Томатный соус', unit: 'мл', quantity: 3000, minQuantity: 500, costPrice: 0.12 },
-          { id: 4, name: 'Базилик', unit: 'г', quantity: 200, minQuantity: 50, costPrice: 1.2 },
-          { id: 5, name: 'Салями Пепперони', unit: 'г', quantity: 3000, minQuantity: 500, costPrice: 1.5 },
-          { id: 6, name: 'Лосось свежий', unit: 'г', quantity: 2000, minQuantity: 300, costPrice: 2.8 },
-          { id: 7, name: 'Рис для суши', unit: 'г', quantity: 5000, minQuantity: 1000, costPrice: 0.08 },
-          { id: 8, name: 'Нори', unit: 'шт', quantity: 100, minQuantity: 20, costPrice: 15 },
-          { id: 9, name: 'Сливочный сыр', unit: 'г', quantity: 2000, minQuantity: 300, costPrice: 0.95 },
-          { id: 10, name: 'Говяжья котлета', unit: 'шт', quantity: 50, minQuantity: 10, costPrice: 35 },
-          { id: 11, name: 'Булочка для бургера', unit: 'шт', quantity: 60, minQuantity: 15, costPrice: 12 },
-          { id: 12, name: 'Салат Айсберг', unit: 'г', quantity: 1500, minQuantity: 300, costPrice: 0.25 },
-          { id: 13, name: 'Куриное филе', unit: 'г', quantity: 3000, minQuantity: 500, costPrice: 0.65 }
-        ];
+        currentRestaurantId = null;
+        showDataError(
+          'Не удалось загрузить меню с сервера: ' + e.message
+          + '. Данные НЕ показаны, чтобы вы не работали с пустым экраном как с реальным. '
+          + 'Обновите страницу или войдите заново.'
+        );
+        return;
       }
 
       priceSchemes = [
@@ -1896,17 +1948,13 @@ AUTH.requireAuth();
         { id: 3, name: 'VIP зал +15%', description: 'Наценка VIP', isActive: false, multiplier: 1.15 }
       ];
 
-      saveData();
       updateCategoryOptions();
     }
 
-    function saveData() {
-      localStorage.setItem('menuDishes', JSON.stringify(dishes));
-      localStorage.setItem('menuCategories', JSON.stringify(categories));
-      localStorage.setItem('menuModifiers', JSON.stringify(modifiers));
-      localStorage.setItem('menuStoplist', JSON.stringify(stoplist));
-      localStorage.setItem('inventory', JSON.stringify(inventory));
-    }
+    // saveData удалён вместе с localStorage-режимом: меню, категории,
+    // модификаторы и техкарты живут только на сервере. Кэш в браузере был
+    // источником «пропавших» данных — он подменял серверный ответ и
+    // принимал записи, которые до базы не доходили.
 
     // ── Цены и маржа (реальный API) ──
     let marginRows = [];
@@ -2037,13 +2085,13 @@ AUTH.requireAuth();
         return `
           <div class="dish-card">
             <div class="dish-image">
-              <span>${dish.icon || '🍽️'}</span>
+              ${FFDish.visual(dish)}
               ${dish.isNew ? '<div class="dish-badge badge-new">Новинка</div>' : ''}
               ${dish.isHot ? `<div class="dish-badge badge-hot" style="top: ${dish.isNew ? '45px' : '10px'};">Хит</div>` : ''}
               ${inStoplist ? `
                 <div class="stop-list-badge">
                   <div class="stop-list-text">🚫 СТОП-ЛИСТ</div>
-                  <button class="btn btn-success btn-small" onclick="removeFromStoplist(${dish.id})">Вернуть</button>
+                  <button class="btn btn-success btn-small" onclick="removeFromStoplist(${jsArg(dish.id)})">Вернуть</button>
                 </div>
               ` : ''}
             </div>
@@ -2072,9 +2120,9 @@ AUTH.requireAuth();
               <div class="dish-footer">
                 <div class="dish-price">${dish.price} ₽</div>
                 <div class="dish-actions">
-                  <button class="btn btn-secondary btn-small" onclick="editDish(${dish.id})">✏️</button>
-                  ${inStoplist ? '' : `<button class="btn btn-warning btn-small" onclick="addToStoplist(${dish.id})">🚫</button>`}
-                  <button class="btn btn-danger btn-small" onclick="deleteDish(${dish.id})">🗑️</button>
+                  <button class="btn btn-secondary btn-small" onclick="editDish(${jsArg(dish.id)})">✏️</button>
+                  ${inStoplist ? '' : `<button class="btn btn-warning btn-small" onclick="addToStoplist(${jsArg(dish.id)})">🚫</button>`}
+                  <button class="btn btn-danger btn-small" onclick="deleteDish(${jsArg(dish.id)})">🗑️</button>
                 </div>
               </div>
             </div>
@@ -2100,14 +2148,90 @@ AUTH.requireAuth();
       editingDishId = null;
       document.getElementById('dishModalTitle').textContent = 'Добавить блюдо';
       document.getElementById('dishForm').reset();
+      resetDishVisual({});
       document.getElementById('dishModal').classList.add('active');
     }
 
+    // id из API — UUID-строка, у локальных черновиков — число
+    function jsArg(id) {
+      return typeof id === 'number' ? String(id) : "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    }
+
+    // ── Фото и значок в окне блюда ──
+    let dishVisual = { icon: null, iconColor: 'green', image: '', pendingPhoto: null, removePhoto: false };
+
+    function resetDishVisual(dish) {
+      dishVisual = {
+        icon: dish.icon && FFDish.ICONS[dish.icon] ? dish.icon : null,
+        iconColor: dish.iconColor && FFDish.COLORS[dish.iconColor] ? dish.iconColor : 'green',
+        image: dish.image || '',
+        pendingPhoto: null,
+        removePhoto: false
+      };
+      const input = document.getElementById('dishPhotoInput');
+      if (input) input.value = '';
+      renderDishVisualEditor();
+    }
+
+    function renderDishVisualEditor() {
+      const shown = {
+        name: document.getElementById('dishName').value,
+        image: dishVisual.pendingPhoto || (dishVisual.removePhoto ? '' : dishVisual.image),
+        icon: dishVisual.icon,
+        iconColor: dishVisual.iconColor
+      };
+      document.getElementById('dishVisualPreview').innerHTML = FFDish.visual(shown, { iconSize: 44 });
+      document.getElementById('dishPhotoRemove').style.display = shown.image ? '' : 'none';
+      document.getElementById('dishIconGrid').innerHTML = Object.entries(FFDish.ICONS).map(([key, ic]) =>
+        `<button type="button" class="dish-icon-btn" aria-label="${ic.label}" aria-pressed="${dishVisual.icon === key}" onclick="pickDishIcon('${key}')">${FFDish.iconSvg(key, 26)}</button>`
+      ).join('');
+      document.getElementById('dishTintRow').innerHTML = '<span class="dish-visual-hint">Плашка</span>' +
+        Object.entries(FFDish.COLORS).map(([key, c]) =>
+          `<button type="button" class="dish-tint-btn" aria-label="${c.label}" aria-pressed="${dishVisual.iconColor === key}" style="background:${c.bg};" onclick="pickDishTint('${key}')"></button>`
+        ).join('');
+    }
+
+    function pickDishIcon(key) { dishVisual.icon = key; renderDishVisualEditor(); }
+    function pickDishTint(key) { dishVisual.iconColor = key; renderDishVisualEditor(); }
+
+    function onDishPhotoPicked(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { showNotification('Нужна картинка JPG, PNG или WebP'); return; }
+      if (file.size > 5 * 1024 * 1024) { showNotification('Фото больше 5 МБ'); return; }
+      const reader = new FileReader();
+      reader.onload = () => { dishVisual.pendingPhoto = reader.result; dishVisual.removePhoto = false; renderDishVisualEditor(); };
+      reader.readAsDataURL(file);
+    }
+
+    function removeDishPhoto() {
+      dishVisual.pendingPhoto = null;
+      dishVisual.removePhoto = true;
+      document.getElementById('dishPhotoInput').value = '';
+      renderDishVisualEditor();
+    }
+
+    // Фото уходит отдельным запросом, когда у блюда уже есть id
+    async function syncDishPhoto(itemId) {
+      if (dishVisual.pendingPhoto) {
+        const res = await AUTH.fetch(`/api/menus/menu-items/${itemId}/image`, {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl: dishVisual.pendingPhoto })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showNotification('Фото не загрузилось: ' + (err.message || res.status));
+        }
+      } else if (dishVisual.removePhoto && dishVisual.image) {
+        await AUTH.fetch(`/api/menus/menu-items/${itemId}/image`, { method: 'DELETE' });
+      }
+    }
+
     function editDish(id) {
-      const dish = dishes.find(d => d.id === id);
+      const dish = dishes.find(d => String(d.id) === String(id));
       if (!dish) return;
 
-      editingDishId = id;
+      editingDishId = dish.id;
       document.getElementById('dishModalTitle').textContent = 'Редактировать';
       document.getElementById('dishName').value = dish.name;
       document.getElementById('dishDescription').value = dish.description;
@@ -2116,7 +2240,7 @@ AUTH.requireAuth();
       document.getElementById('dishWeight').value = dish.weight || '';
       document.getElementById('dishCalories').value = dish.calories || '';
       document.getElementById('dishCookTime').value = dish.cookTime || 15;
-      document.getElementById('dishIcon').value = dish.icon || '';
+      resetDishVisual(dish);
       document.getElementById('dishIsNew').checked = dish.isNew || false;
       document.getElementById('dishIsHot').checked = dish.isHot || false;
       document.getElementById('dishIsVegetarian').checked = dish.isVegetarian || false;
@@ -2130,96 +2254,89 @@ AUTH.requireAuth();
       const formData = {
         name: document.getElementById('dishName').value,
         description: document.getElementById('dishDescription').value,
-        category: parseInt(document.getElementById('dishCategory').value),
+        // Категория всегда UUID из API: локальных черновиков с числовыми id
+        // больше не бывает, parseInt превратил бы UUID в NaN.
+        category: document.getElementById('dishCategory').value,
         price: parseFloat(document.getElementById('dishPrice').value),
         weight: document.getElementById('dishWeight').value,
         calories: parseInt(document.getElementById('dishCalories').value) || null,
         cookTime: parseInt(document.getElementById('dishCookTime').value) || 15,
-        icon: document.getElementById('dishIcon').value || '',
+        icon: dishVisual.icon,
+        iconColor: dishVisual.iconColor,
+        image: dishVisual.pendingPhoto || (dishVisual.removePhoto ? '' : dishVisual.image),
         isNew: document.getElementById('dishIsNew').checked,
         isHot: document.getElementById('dishIsHot').checked,
         isVegetarian: document.getElementById('dishIsVegetarian').checked,
         isSpicy: document.getElementById('dishIsSpicy').checked
       };
 
-      // Try API first
-      if (currentRestaurantId) {
-        try {
-          const apiData = {
-            name: formData.name,
-            description: formData.description,
-            categoryId: formData.category || undefined,
-            price: formData.price,
-            calories: formData.calories,
-            preparationTime: formData.cookTime,
-            isVegetarian: formData.isVegetarian,
-            weightGrams: formData.weight ? parseInt(formData.weight) : undefined
-          };
+      // Без подтверждённой связи с сервером не сохраняем вообще: раньше
+      // здесь был молчаливый откат в localStorage — именно так терялись
+      // созданные вручную категории и блюда.
+      if (!requireServer('блюдо')) return;
 
-          if (editingDishId) {
-            const res = await AUTH.fetch(`/api/menus/items/${editingDishId}`, {
-              method: 'PUT',
-              body: JSON.stringify(apiData)
-            });
-            if (res.ok) {
-              showNotification('Блюдо обновлено');
-              await initializeData();
-              closeDishModal();
-              return;
-            }
-          } else {
-            const res = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-items`, {
-              method: 'POST',
-              body: JSON.stringify(apiData)
-            });
-            if (res.ok) {
-              showNotification('Блюдо добавлено');
-              await initializeData();
-              closeDishModal();
-              return;
-            }
-          }
-        } catch (e) {
-          console.log('API save failed, using localStorage:', e.message);
+      try {
+        const apiData = {
+          name: formData.name,
+          description: formData.description,
+          categoryId: formData.category || undefined,
+          price: formData.price,
+          calories: formData.calories,
+          preparationTime: formData.cookTime,
+          isVegetarian: formData.isVegetarian,
+          weightGrams: formData.weight ? parseInt(formData.weight) : undefined,
+          icon: formData.icon,
+          iconColor: formData.icon ? formData.iconColor : null
+        };
+
+        if (editingDishId) {
+          const res = await AUTH.fetch(`/api/menus/menu-items/${editingDishId}`, {
+            method: 'PUT',
+            body: JSON.stringify(apiData)
+          });
+          if (!res.ok) throw new Error(await techCardError(res));
+          await syncDishPhoto(editingDishId);
+          showNotification('✅ Блюдо обновлено');
+        } else {
+          const res = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-items`, {
+            method: 'POST',
+            body: JSON.stringify(apiData)
+          });
+          if (!res.ok) throw new Error(await techCardError(res));
+          const created = await res.json().catch(() => ({}));
+          if (created.item && created.item.id) await syncDishPhoto(created.item.id);
+          showNotification('✅ Блюдо добавлено');
         }
+        await initializeData();
+        renderDishes();
+        renderCategories();
+        closeDishModal();
+      } catch (e) {
+        // Модалка остаётся открытой: введённое не теряется, можно повторить
+        showNotification('❌ Не сохранено: ' + e.message);
       }
-
-      if (editingDishId) {
-        const index = dishes.findIndex(d => d.id === editingDishId);
-        dishes[index] = { ...dishes[index], ...formData };
-        showNotification('Блюдо обновлено');
-      } else {
-        const newId = formData.id || (dishes.length > 0 ? Math.max(...dishes.map(d => typeof d.id === 'number' ? d.id : 0)) + 1 : 1);
-        dishes.push({ id: newId, ...formData });
-        showNotification('Блюдо добавлено');
-      }
-
-      saveData();
-      renderDishes();
-      renderCategories();
-      closeDishModal();
     }
 
     async function deleteDish(id) {
-      if (!confirm('Удалить блюдо?')) return;
+      if (!requireServer('удаление блюда')) return;
+      if (pendingDishDelete !== id) {
+        pendingDishDelete = id;
+        showNotification('⚠️ Нажмите удаление ещё раз для подтверждения');
+        setTimeout(() => { if (pendingDishDelete === id) pendingDishDelete = null; }, 5000);
+        return;
+      }
+      pendingDishDelete = null;
 
       try {
-        const res = await AUTH.fetch(`/api/menus/items/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          showNotification('Удалено');
-          await initializeData();
-          return;
-        }
+        const res = await AUTH.fetch(`/api/menus/menu-items/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await techCardError(res));
+        showNotification('🗑️ Удалено');
+        await initializeData();
+        renderDishes();
+        renderCategories();
       } catch (e) {
-        console.log('API delete failed:', e.message);
+        showNotification('❌ Не удалено: ' + e.message);
       }
-
-      dishes = dishes.filter(d => d.id !== id);
-      stoplist = stoplist.filter(sid => sid !== id);
-      saveData();
-      renderDishes();
-      renderCategories();
-      showNotification('Удалено');
     }
 
     function closeDishModal() {
@@ -2249,32 +2366,23 @@ AUTH.requireAuth();
       const icon = document.getElementById('categoryIcon').value || '📁';
       const order = parseInt(document.getElementById('categoryOrder').value) || 0;
 
-      if (currentRestaurantId) {
-        try {
-          const res = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-categories`, {
-            method: 'POST',
-            body: JSON.stringify({ name, icon })
-          });
-          if (res.ok) {
-            showNotification('Категория добавлена');
-            closeCategoryModal();
-            await initializeData();
-            return;
-          }
-        } catch (e) {
-          console.log('API category save failed:', e.message);
-        }
+      if (!requireServer('категория')) return;
+
+      try {
+        const res = await AUTH.fetch(`/api/restaurants/${currentRestaurantId}/menu-categories`, {
+          method: 'POST',
+          body: JSON.stringify({ name, icon })
+        });
+        if (!res.ok) throw new Error(await techCardError(res));
+        showNotification('✅ Категория добавлена');
+        closeCategoryModal();
+        await initializeData();
+        updateCategoryOptions();
+        renderCategories();
+        renderCategoriesManagement();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
       }
-
-      const newId = categories.length > 0 ? Math.max(...categories.map(c => typeof c.id === 'number' ? c.id : 0)) + 1 : 1;
-      categories.push({ id: newId, name, icon, order });
-
-      saveData();
-      updateCategoryOptions();
-      renderCategories();
-      renderCategoriesManagement();
-      closeCategoryModal();
-      showNotification('Категория добавлена');
     }
 
     function renderCategoriesManagement() {
@@ -2291,7 +2399,7 @@ AUTH.requireAuth();
                 <div style="color: var(--color-grey-5); font-size: 13px;">Блюд: ${dishes.filter(d => d.category === cat.id).length}</div>
               </div>
               <div style="display: flex; gap: 8px;">
-                <button class="btn btn-danger btn-small" onclick="deleteCategory(${cat.id})">🗑️</button>
+                <button class="btn btn-danger btn-small" onclick="deleteCategory(${jsArg(cat.id)})">🗑️</button>
               </div>
             </div>
           `).join('')}
@@ -2299,25 +2407,97 @@ AUTH.requireAuth();
       `;
     }
 
-    function deleteCategory(id) {
+    async function deleteCategory(id) {
       if (dishes.some(d => d.category === id)) {
         showNotification('⚠️ Нельзя удалить категорию с блюдами');
         return;
       }
+      if (!requireServer('удаление категории')) return;
 
-      if (!confirm('Удалить?')) return;
+      if (pendingCategoryDelete !== id) {
+        pendingCategoryDelete = id;
+        showNotification('⚠️ Нажмите удаление ещё раз для подтверждения');
+        setTimeout(() => { if (pendingCategoryDelete === id) pendingCategoryDelete = null; }, 5000);
+        return;
+      }
+      pendingCategoryDelete = null;
 
-      categories = categories.filter(c => c.id !== id);
-      saveData();
-      updateCategoryOptions();
-      renderCategories();
-      renderCategoriesManagement();
-      showNotification('🗑️ Удалено');
+      // Эндпоинт существовал, но фронт его не вызывал: категория исчезала
+      // только из localStorage и возвращалась после перезагрузки.
+      try {
+        const res = await AUTH.fetch(`/api/restaurants/menu-categories/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await techCardError(res));
+        showNotification('🗑️ Удалено');
+        await initializeData();
+        updateCategoryOptions();
+        renderCategories();
+        renderCategoriesManagement();
+      } catch (e) {
+        showNotification('❌ Не удалено: ' + e.message);
+      }
     }
 
     // Modifiers
-    function openAddModifierModal() {
+    // Раньше модификаторы жили ТОЛЬКО в localStorage: кнопка «Сохранить»
+    // ничего не отправляла на сервер, поэтому созданное пропадало при смене
+    // браузера и никогда не участвовало ни в кассе, ни в складском учёте.
+    // Теперь источник истины — API, localStorage не используется.
+    async function loadModifiers() {
+      modifiers = [];
+      // Модификатор принадлежит блюду, отдельного «списка всех» в API нет —
+      // собираем по блюдам меню.
+      for (const dish of dishes) {
+        try {
+          const res = await AUTH.fetch('/api/restaurants/menu-items/' + dish.id + '/modifiers');
+          if (!res.ok) continue;
+          const data = await res.json();
+          (data.modifiers || []).forEach(m => modifiers.push({
+            id: m.id,
+            menuItemId: dish.id,
+            dishName: dish.name,
+            name: m.name,
+            price: Number(m.price_adjustment) || 0,
+            type: m.modifier_group || 'other',
+            inventoryItemId: m.inventory_item_id || null,
+            inventoryItemName: m.inventory_item_name || null,
+            inventoryItemUnit: m.inventory_item_unit || '',
+            techCardId: m.tech_card_id || null,
+            techCardName: m.tech_card_name || null,
+            quantity: m.quantity !== null && m.quantity !== undefined ? Number(m.quantity) : null
+          }));
+        } catch (e) { /* блюдо без модификаторов — не ошибка */ }
+      }
+    }
+
+    function onModifierSourceKindChange() {
+      const kind = document.getElementById('modifierSourceKind').value;
+      document.getElementById('modifierItemGroup').style.display = kind === 'item' ? '' : 'none';
+      document.getElementById('modifierTechCardGroup').style.display = kind === 'techcard' ? '' : 'none';
+      document.getElementById('modifierQuantityGroup').style.display = kind === 'none' ? 'none' : '';
+      document.getElementById('modifierQuantityHint').textContent = kind === 'techcard'
+        ? 'Сколько порций/циклов техкарты уходит на один выбор. Обычно 1.'
+        : 'Брутто в единицах позиции склада. Умножается на количество блюд в строке заказа.';
+    }
+
+    async function openAddModifierModal() {
       document.getElementById('modifierForm').reset();
+
+      const dishSel = document.getElementById('modifierDish');
+      dishSel.innerHTML = dishes.map(d => `<option value="${d.id}">${d.name}</option>`).join('')
+        || '<option value="">Сначала создайте блюдо</option>';
+
+      // Склад и техкарты уже загружаются для вкладки техкарт — переиспользуем
+      if (!stockItems || stockItems.length === 0) await loadStockItems();
+      if (!recipes || recipes.length === 0) await loadTechCards();
+
+      document.getElementById('modifierInventoryItem').innerHTML =
+        (stockItems || []).map(i => `<option value="${i.id}">${i.name} (${i.unit || ''})</option>`).join('')
+        || '<option value="">Нет позиций склада</option>';
+      document.getElementById('modifierTechCard').innerHTML =
+        (recipes || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+        || '<option value="">Нет техкарт</option>';
+
+      onModifierSourceKindChange();
       document.getElementById('modifierModal').classList.add('active');
     }
 
@@ -2325,26 +2505,62 @@ AUTH.requireAuth();
       document.getElementById('modifierModal').classList.remove('active');
     }
 
-    function saveModifier(event) {
+    async function saveModifier(event) {
       event.preventDefault();
 
-      const formData = {
+      const menuItemId = document.getElementById('modifierDish').value;
+      if (!menuItemId) {
+        showNotification('⚠️ Сначала создайте блюдо');
+        return;
+      }
+
+      const payload = {
         name: document.getElementById('modifierName').value,
-        price: parseFloat(document.getElementById('modifierPrice').value),
-        type: document.getElementById('modifierType').value
+        priceAdjustment: parseFloat(document.getElementById('modifierPrice').value) || 0,
+        modifierGroup: document.getElementById('modifierType').value
       };
 
-      const newId = modifiers.length > 0 ? Math.max(...modifiers.map(m => m.id)) + 1 : 1;
-      modifiers.push({ id: newId, ...formData });
+      // Источник расхода: один или ни одного. Количество отправляется только
+      // вместе с источником — иначе сервер отклонит по CHECK в схеме.
+      const kind = document.getElementById('modifierSourceKind').value;
+      if (kind !== 'none') {
+        const qty = parseFloat(document.getElementById('modifierQuantity').value);
+        if (!(qty > 0)) {
+          showNotification('⚠️ Укажите расход больше нуля');
+          return;
+        }
+        payload.quantity = qty;
+        if (kind === 'item') payload.inventoryItemId = document.getElementById('modifierInventoryItem').value;
+        else payload.techCardId = document.getElementById('modifierTechCard').value;
+      }
 
-      saveData();
-      renderModifiersManagement();
-      closeModifierModal();
-      showNotification('✅ Добавлено');
+      try {
+        const res = await AUTH.fetch('/api/restaurants/menu-items/' + menuItemId + '/modifiers', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showNotification('❌ ' + (err.message || err.error || 'Не удалось сохранить'));
+          return;
+        }
+        await loadModifiers();
+        renderModifiersManagement();
+        closeModifierModal();
+        showNotification('✅ Добавлено');
+      } catch (e) {
+        showNotification('❌ Сервер недоступен: ' + e.message);
+      }
     }
 
     function renderModifiersManagement() {
       const container = document.getElementById('modifiersManagement');
+
+      if (!modifiers.length) {
+        container.innerHTML = '<div style="padding: 24px; color: var(--color-grey-5);">'
+          + 'Модификаторов пока нет. Добавьте — и выбор появится в кассе при продаже блюда.</div>';
+        return;
+      }
 
       const groupedModifiers = modifiers.reduce((acc, mod) => {
         if (!acc[mod.type]) acc[mod.type] = [];
@@ -2364,27 +2580,53 @@ AUTH.requireAuth();
         <div style="margin-bottom: 24px;">
           <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">${typeNames[type] || type}</h3>
           <div style="display: grid; gap: 10px;">
-            ${mods.map(mod => `
+            ${mods.map(mod => {
+              // Видно, что списывается: настроенный учёт надо проверять глазами
+              let src = '<span style="color:#e08b00;">⚠️ без списания со склада</span>';
+              if (mod.inventoryItemId) {
+                src = `📦 ${mod.inventoryItemName || '—'} · ${mod.quantity} ${mod.inventoryItemUnit || ''}`;
+              } else if (mod.techCardId) {
+                src = `📋 ${mod.techCardName || 'техкарта'} · ${mod.quantity}`;
+              }
+              return `
               <div class="modifier-item">
                 <div>
                   <div class="modifier-name">${mod.name}</div>
-                  <div class="modifier-price">+${mod.price} ₽</div>
+                  <div class="modifier-price">+${mod.price} ₽ · ${mod.dishName || ''}</div>
+                  <div style="font-size: 12px; color: var(--color-grey-5); margin-top: 2px;">${src}</div>
                 </div>
-                <button class="btn btn-danger btn-small" onclick="deleteModifier(${mod.id})">🗑️</button>
-              </div>
-            `).join('')}
+                <button class="btn btn-danger btn-small" onclick="deleteModifier('${mod.id}')">🗑️</button>
+              </div>`;
+            }).join('')}
           </div>
         </div>
       `).join('');
     }
 
-    function deleteModifier(id) {
-      if (!confirm('Удалить?')) return;
+    async function deleteModifier(id) {
+      // confirm() заблокирован во встроенном браузере VS Code — кнопка
+      // выглядела бы мёртвой. Подтверждение делаем вторым нажатием.
+      if (pendingModifierDelete !== id) {
+        pendingModifierDelete = id;
+        showNotification('⚠️ Нажмите удаление ещё раз для подтверждения');
+        setTimeout(() => { if (pendingModifierDelete === id) pendingModifierDelete = null; }, 5000);
+        return;
+      }
+      pendingModifierDelete = null;
 
-      modifiers = modifiers.filter(m => m.id !== id);
-      saveData();
-      renderModifiersManagement();
-      showNotification('🗑️ Удалено');
+      try {
+        const res = await AUTH.fetch('/api/restaurants/modifiers/' + id, { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showNotification('❌ ' + (err.message || err.error || 'Не удалось удалить'));
+          return;
+        }
+        await loadModifiers();
+        renderModifiersManagement();
+        showNotification('🗑️ Удалено');
+      } catch (e) {
+        showNotification('❌ Сервер недоступен: ' + e.message);
+      }
     }
 
     // Price Schemes
@@ -2421,52 +2663,41 @@ AUTH.requireAuth();
     // Stop-list
     async function addToStoplist(dishId) {
       if (stoplist.includes(dishId)) return;
+      if (!requireServer('стоп-лист')) return;
 
       try {
-        const res = await AUTH.fetch(`/api/menus/items/${dishId}/stop`, {
+        const res = await AUTH.fetch(`/api/menus/menu-items/${dishId}/stop`, {
           method: 'POST',
           body: JSON.stringify({ reason: 'Ручное добавление' })
         });
-        if (res.ok) {
-          showNotification('В стоп-лист');
-          stoplist.push(dishId);
-          renderDishes();
-          renderStoplist();
-          return;
-        }
+        if (!res.ok) throw new Error(await techCardError(res));
+        stoplist.push(dishId);
+        showNotification('✅ В стоп-лист');
+        renderDishes();
+        renderStoplist();
       } catch (e) {
-        console.log('API stop failed:', e.message);
+        // Локально не добавляем: экран показал бы блюдо в стопе, а касса
+        // продолжала бы его продавать.
+        showNotification('❌ Не удалось: ' + e.message);
       }
-
-      stoplist.push(dishId);
-      saveData();
-      renderDishes();
-      renderStoplist();
-      showNotification('В стоп-лист');
     }
 
     async function removeFromStoplist(dishId) {
+      if (!requireServer('возврат из стоп-листа')) return;
+
       try {
-        const res = await AUTH.fetch(`/api/menus/items/${dishId}/unstop`, {
+        const res = await AUTH.fetch(`/api/menus/menu-items/${dishId}/unstop`, {
           method: 'POST',
           body: JSON.stringify({})
         });
-        if (res.ok) {
-          showNotification('Возвращено');
-          stoplist = stoplist.filter(id => id !== dishId);
-          renderDishes();
-          renderStoplist();
-          return;
-        }
+        if (!res.ok) throw new Error(await techCardError(res));
+        stoplist = stoplist.filter(id => id !== dishId);
+        showNotification('✅ Возвращено');
+        renderDishes();
+        renderStoplist();
       } catch (e) {
-        console.log('API unstop failed:', e.message);
+        showNotification('❌ Не удалось: ' + e.message);
       }
-
-      stoplist = stoplist.filter(id => id !== dishId);
-      saveData();
-      renderDishes();
-      renderStoplist();
-      showNotification('Возвращено');
     }
 
     async function renderStoplist() {
@@ -2527,7 +2758,7 @@ AUTH.requireAuth();
                     <div style="color: var(--color-danger); font-size: 13px;">Недоступно</div>
                   </div>
                 </div>
-                <button class="btn btn-success btn-small" onclick="removeFromStoplist(${dish.id})">Вернуть</button>
+                <button class="btn btn-success btn-small" onclick="removeFromStoplist(${jsArg(dish.id)})">Вернуть</button>
               </div>
             `;
           }).join('')}
@@ -2863,7 +3094,15 @@ AUTH.requireAuth();
     }
 
     async function deleteRecipe(recipeId) {
-      if (!confirm('Удалить техкарту?')) return;
+      // confirm() заблокирован во встроенном браузере VS Code — кнопка
+      // выглядела бы мёртвой. Подтверждение вторым нажатием.
+      if (pendingRecipeDelete !== recipeId) {
+        pendingRecipeDelete = recipeId;
+        showNotification('⚠️ Нажмите удаление ещё раз для подтверждения');
+        setTimeout(() => { if (pendingRecipeDelete === recipeId) pendingRecipeDelete = null; }, 5000);
+        return;
+      }
+      pendingRecipeDelete = null;
       try {
         const res = await AUTH.fetch('/api/tech-cards/' + recipeId, { method: 'DELETE' });
         if (!res.ok) throw new Error(await techCardError(res));
@@ -3028,21 +3267,35 @@ AUTH.requireAuth();
         section('🍽️ Техкарты блюд меню', 'Списывают ингредиенты при продаже блюда', menuCards);
     }
 
-    // Cost Prices Management
-    function renderCostPrices() {
+    // Cost Prices Management — реальный склад из API.
+    // Раньше вкладка работала с демо-массивом inventory в localStorage:
+    // правка цены никуда не уходила, а себестоимость считалась от выдуманных
+    // чисел. Теперь позиции и цены берутся и сохраняются через API.
+    async function renderCostPrices() {
       const container = document.getElementById('costPricesManagement');
+      container.innerHTML = '<div style="padding:24px;color:var(--color-grey-5);">Загрузка склада...</div>';
+
+      if (!stockItems || stockItems.length === 0) await loadStockItems();
+
+      if (!stockItems || stockItems.length === 0) {
+        container.innerHTML = '<div style="padding:24px;color:var(--color-grey-5);">'
+          + 'На складе нет позиций. Добавьте номенклатуру в разделе «Склад» — '
+          + 'без неё себестоимость блюд посчитать нельзя.</div>';
+        return;
+      }
 
       container.innerHTML = `
         <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
           <div style="color: var(--color-text-secondary); font-size: 14px; margin-bottom: 16px;">
-            Укажите стоимость закупки для каждого ингредиента (цена за единицу измерения). Это необходимо для расчёта себестоимости блюд.
+            Справочная цена закупки за единицу. Себестоимость блюд считается по средневзвешенной
+            цене остатка на складе, а это значение — запасной вариант, когда остатка нет.
           </div>
           <div style="display: grid; gap: 12px;">
-            ${inventory.map(item => `
+            ${stockItems.map(item => `
               <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--admin-content-bg); border-radius: 8px; flex-wrap: wrap; gap: 12px;">
                 <div style="flex: 1; min-width: 200px;">
                   <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px;">${item.name}</div>
-                  <div style="color: var(--color-grey-5); font-size: 13px;">Единица: ${item.unit}</div>
+                  <div style="color: var(--color-grey-5); font-size: 13px;">Единица: ${item.unit || ''}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -3050,16 +3303,13 @@ AUTH.requireAuth();
                       type="number"
                       class="form-input"
                       style="width: 120px; padding: 8px 12px;"
-                      value="${item.costPrice || 0}"
+                      value="${item.cost_price !== null && item.cost_price !== undefined ? item.cost_price : 0}"
                       step="0.01"
                       min="0"
-                      onchange="updateIngredientCostPrice(${item.id}, this.value)"
+                      onchange="updateIngredientCostPrice(${jsArg(item.id)}, this.value)"
                       placeholder="0.00"
                     >
-                    <span style="color: var(--color-text-secondary); font-weight: 600;">₽/${item.unit}</span>
-                  </div>
-                  <div style="padding: 6px 12px; background: var(--admin-card-bg); border-radius: 6px; color: var(--color-primary); font-size: 13px; font-weight: 600; min-width: 80px; text-align: right;">
-                    ${item.costPrice ? (item.costPrice * (item.quantity || 0)).toFixed(2) + ' ₽' : '-'}
+                    <span style="color: var(--color-text-secondary); font-weight: 600;">₽/${item.unit || ''}</span>
                   </div>
                 </div>
               </div>
@@ -3069,14 +3319,25 @@ AUTH.requireAuth();
       `;
     }
 
-    function updateIngredientCostPrice(ingredientId, newPrice) {
-      const item = inventory.find(i => i.id === ingredientId);
-      if (item) {
-        item.costPrice = parseFloat(newPrice) || 0;
-        saveData();
-        renderRecipesManagement(); // Обновляем техкарты с новыми ценами
-        renderDishes(); // Обновляем карточки блюд
+    async function updateIngredientCostPrice(ingredientId, newPrice) {
+      const price = parseFloat(newPrice);
+      if (!(price >= 0)) {
+        showNotification('⚠️ Цена не может быть отрицательной');
+        return;
+      }
+      try {
+        const res = await AUTH.fetch('/api/inventory/items/' + ingredientId, {
+          method: 'PUT',
+          body: JSON.stringify({ costPrice: price })
+        });
+        if (!res.ok) throw new Error(await techCardError(res));
+        // Перечитываем склад: цена могла нормализоваться на сервере
+        await loadStockItems();
         showNotification('✅ Цена обновлена');
+        await loadTechCards();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+        await renderCostPrices();
       }
     }
 

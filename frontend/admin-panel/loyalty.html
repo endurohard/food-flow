@@ -1403,34 +1403,37 @@ AUTH.requireAuth();
       <div style="background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 16px; padding: 24px; max-width: 800px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);">
         <div class="form-group">
           <label class="form-label">Начисление баллов за каждый потраченный рубль:</label>
-          <input type="number" class="form-input" id="pointsPerRuble" value="1" min="0" step="0.1">
+          <input type="number" class="form-input" id="pointsPerRuble" min="0" step="0.1">
         </div>
 
         <div class="form-group">
           <label class="form-label">Стоимость 1 балла (в рублях):</label>
-          <input type="number" class="form-input" id="rublePerPoint" value="1" min="0" step="0.1">
+          <input type="number" class="form-input" id="rublePerPoint" min="0" step="0.01">
         </div>
 
-        <h3 style="margin: 24px 0 16px; color: var(--color-text-primary); font-size: 18px;">Уровни лояльности:</h3>
+        <div id="settingsSourceHint" style="color: var(--color-grey-5); font-size: 12px; margin-bottom: 8px;"></div>
 
-        <div class="form-group">
-          <label class="form-label">🥉 Bronze - минимум баллов для получения:</label>
-          <input type="number" class="form-input" id="bronzeThreshold" value="0">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">🥈 Silver - минимум баллов для получения:</label>
-          <input type="number" class="form-input" id="silverThreshold" value="500">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">🥇 Gold - минимум баллов для получения:</label>
-          <input type="number" class="form-input" id="goldThreshold" value="1500">
+        <h3 style="margin: 24px 0 8px; color: var(--color-text-primary); font-size: 18px;">Уровни лояльности:</h3>
+        <!-- Сервер определяет уровень по сумме покупок клиента (total_spent),
+             а не по остатку баллов — подписи должны совпадать с расчётом -->
+        <div style="color: var(--color-grey-5); font-size: 12px; margin-bottom: 16px;">
+          Порог — сумма покупок клиента в рублях. Пустое поле означает, что уровень не используется.
+          🥉 Bronze присваивается всем по умолчанию и порога не имеет.
         </div>
 
         <div class="form-group">
-          <label class="form-label">💎 Platinum - минимум баллов для получения:</label>
-          <input type="number" class="form-input" id="platinumThreshold" value="3000">
+          <label class="form-label">🥈 Silver — сумма покупок от, ₽:</label>
+          <input type="number" class="form-input" id="silverThreshold" min="0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">🥇 Gold — сумма покупок от, ₽:</label>
+          <input type="number" class="form-input" id="goldThreshold" min="0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">💎 Platinum — сумма покупок от, ₽:</label>
+          <input type="number" class="form-input" id="platinumThreshold" min="0">
         </div>
 
         <button class="btn btn-success" onclick="saveSettings()">💾 Сохранить настройки</button>
@@ -1469,9 +1472,14 @@ AUTH.requireAuth();
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Тип скидки:</label>
+            <!-- Значения совпадают с promo_type в сервисе CRM: иначе Joi
+                 отвечает 400 и акция не создаётся -->
             <select class="form-select" id="discountType" required>
               <option value="percentage">Процент</option>
-              <option value="fixed">Фиксированная сумма</option>
+              <option value="fixed_amount">Фиксированная сумма</option>
+              <option value="bogo">1+1</option>
+              <option value="combo">Комбо</option>
+              <option value="happy_hour">Счастливые часы</option>
             </select>
           </div>
 
@@ -1559,13 +1567,14 @@ AUTH.requireAuth();
         </div>
 
         <div class="form-group">
-          <label class="form-label">Тип акции:</label>
+          <label class="form-label">Тип программы:</label>
+          <!-- Значения совпадают с program_type в сервисе CRM: иначе Joi
+               отвечает 400 и программа не создаётся -->
           <select class="form-select" id="campaignType" required>
-            <option value="birthday">День рождения</option>
-            <option value="happy-hour">Счастливые часы</option>
-            <option value="seasonal">Сезонная</option>
-            <option value="new-customer">Для новых клиентов</option>
-            <option value="loyalty">Программа лояльности</option>
+            <option value="points">Баллы</option>
+            <option value="cashback">Кэшбэк</option>
+            <option value="discount">Скидка</option>
+            <option value="stamp_card">Накопительная карта</option>
           </select>
         </div>
 
@@ -1589,11 +1598,18 @@ AUTH.requireAuth();
     let customers = [];
     let discounts = [];
     let campaigns = [];
-    let loyaltySettings = {
-      pointsPerRuble: 1,
-      rublePerPoint: 1,
-      tiers: { bronze: 0, silver: 500, gold: 1500, platinum: 3000 }
-    };
+    // Настройки лояльности = активная программа типа points на сервере.
+    // Пустые значения до загрузки: нельзя показывать выдуманные пороги уровней,
+    // по ним считаются реальные обязательства перед клиентами.
+    let loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {} };
+    let pointsProgramId = null;
+    // Загрузка с сервера удалась? Пока false — сохранять нельзя: запись
+    // ушла бы в localStorage и пропала при перезагрузке браузера.
+    let dataSourceOk = false;
+    // Отключение подтверждается вторым нажатием: confirm() заблокирован
+    // во встроенном браузере VS Code и кнопка выглядит мёртвой.
+    let pendingDiscountDisable = null;
+    let pendingCampaignDisable = null;
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1610,101 +1626,206 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Initialize — load from API with localStorage fallback
+    // Текст ошибки берём из ответа сервера, а не заменяем общей фразой:
+    // «Требуется контекст предприятия» и «HTTP 500» требуют разных действий.
+    async function apiError(res) {
+      const data = await res.json().catch(() => ({}));
+      return data.error || data.message || ('HTTP ' + res.status);
+    }
+
+    // id клиентов, акций и программ — UUID. Без кавычек в onclick строка
+    // превращается в невалидный JS и кнопка молча не срабатывает.
+    function jsArg(id) {
+      return "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    }
+
+    // Экран ошибки вместо подмены демо-данными. Inline-блок, не alert():
+    // во встроенном браузере VS Code модальные диалоги заблокированы.
+    function showDataError(message) {
+      const block = '<div style="padding:32px;text-align:left;'
+        + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
+        + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
+        + '⚠️ Данные лояльности не загружены — сохранение отключено</div>'
+        + '<div style="color:var(--color-text-primary);line-height:1.5;">' + message + '</div>'
+        + '<button class="btn btn-primary" style="margin-top:16px;" onclick="reloadLoyalty()">🔄 Повторить</button>'
+        + '</div>';
+
+      const grid = document.getElementById('customersGrid');
+      if (grid) grid.innerHTML = '<div style="grid-column:1/-1;">' + block + '</div>';
+      const dl = document.getElementById('discountsList');
+      if (dl) dl.innerHTML = block;
+      const cl = document.getElementById('campaignsList');
+      if (cl) cl.innerHTML = block;
+
+      // Счётчики обнулять нельзя: ноль читается как «клиентов нет»,
+      // а мы не знаем, сколько их в базе.
+      ['totalCustomers', 'bronzeCustomers', 'silverCustomers', 'goldCustomers'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '—';
+      });
+
+      showNotification('⚠️ ' + message);
+    }
+
+    // Единый сторож записи: без подтверждённой связи с сервером любое
+    // сохранение потерялось бы вместе с localStorage.
+    function requireServer(action) {
+      if (!dataSourceOk) {
+        showNotification('⚠️ Нет связи с сервером — ' + action
+          + ' не сохранится. Обновите страницу.');
+        return false;
+      }
+      return true;
+    }
+
+    function reloadLoyalty() {
+      initializeData().then(() => renderCustomers());
+    }
+
+    // Источник истины — API. localStorage для клиентов, баллов, акций и
+    // программ НЕ используется.
+    // Почему так: раньше при любой заминке (нет точки у предприятия, упавший
+    // сервис, истёкший токен) экран молча переключался на localStorage.
+    // Пользователь видел рабочий интерфейс, начислял баллы и создавал акции —
+    // всё ложилось в браузер, а не в базу, и исчезало после перезагрузки или
+    // очистки кэша, без единой ошибки на экране. Для клиентской базы и баллов
+    // это особенно опасно: на экране были бы выдуманные балансы, то есть
+    // выдуманные обязательства перед клиентами.
     async function initializeData() {
-      document.getElementById('customersGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
+      const grid = document.getElementById('customersGrid');
+      if (grid) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</div>';
 
-      // Load customers
+      customers = [];
+      discounts = [];
+      campaigns = [];
+      loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {} };
+      pointsProgramId = null;
+      dataSourceOk = false;
+
       try {
-        const res = await AUTH.fetch('/api/crm/customers');
-        if (res.ok) {
-          const data = await res.json();
-          customers = (data.customers || []).map(c => ({
-            id: c.id,
-            name: (c.first_name || '') + (c.last_name ? ' ' + c.last_name : '') || c.name || c.phone || 'Клиент',
-            phone: c.phone || '',
-            email: c.email || '',
-            points: c.loyalty_points || c.points || 0,
-            tier: (c.loyalty_tier || c.tier || 'bronze').toLowerCase(),
-            joinDate: c.created_at || c.join_date || new Date().toISOString(),
-            totalSpent: parseFloat(c.total_spent || 0)
-          }));
+        // Без ни одной точки предприятию некуда применять акции и начислять
+        // баллы: это и был главный источник потери — запись молча уходила
+        // в localStorage вместо базы.
+        const restRes = await AUTH.fetch('/api/restaurants');
+        if (!restRes.ok) throw new Error(await apiError(restRes));
+        const restData = await restRes.json();
+        if (!restData.restaurants || restData.restaurants.length === 0) {
+          showDataError(
+            'У предприятия нет ни одной точки (ресторана). Баллы начисляются по заказам точки, '
+            + 'поэтому программу лояльности и акции сохранять некуда. Создайте точку в разделе '
+            + '«Рестораны» — до этого данные не сохранятся.'
+          );
+          return;
         }
-      } catch (e) {
-        console.log('API customers load failed:', e.message);
-      }
 
-      // Fallback to localStorage if no customers loaded
-      if (customers.length === 0) {
-        const saved = localStorage.getItem('loyaltyCustomers');
-        if (saved) customers = JSON.parse(saved);
-      }
+        const custRes = await AUTH.fetch('/api/crm/customers');
+        if (!custRes.ok) throw new Error(await apiError(custRes));
+        const custData = await custRes.json();
+        customers = (custData.customers || []).map(c => ({
+          // id профиля клиента: именно он нужен для баллов и транзакций
+          id: c.id,
+          userId: c.user_id,
+          name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.phone || c.email || 'Клиент',
+          phone: c.phone || '',
+          email: c.email || '',
+          points: c.loyalty_points || 0,
+          tier: (c.loyalty_tier || 'bronze').toLowerCase(),
+          joinDate: c.created_at || null,
+          totalSpent: parseFloat(c.total_spent || 0),
+          totalOrders: c.total_orders || 0
+        }));
 
-      // Load promotions as discounts
-      try {
-        const res = await AUTH.fetch('/api/crm/promotions');
-        if (res.ok) {
-          const data = await res.json();
-          discounts = (data.promotions || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            type: p.promo_type === 'percentage' ? 'percentage' : 'fixed',
-            value: parseFloat(p.discount_value || 0),
-            promoCode: p.promo_code || '',
-            appliesTo: 'all',
-            minOrder: parseFloat(p.min_order_amount || 0),
-            maxUses: p.usage_limit || 0,
-            startDate: p.start_date || new Date().toISOString().slice(0, 10),
-            endDate: p.end_date || new Date().toISOString().slice(0, 10),
-            description: p.description || '',
-            isActive: p.is_active !== false,
-            usedCount: p.usage_count || 0
-          }));
+        // Акции: сервис по умолчанию отдаёт только активные, поэтому
+        // отключённые запрашиваем отдельно — иначе выключенная акция
+        // исчезает из списка и выглядит удалённой.
+        const [activeRes, inactiveRes] = await Promise.all([
+          AUTH.fetch('/api/crm/promotions'),
+          AUTH.fetch('/api/crm/promotions?isActive=false')
+        ]);
+        if (!activeRes.ok) throw new Error(await apiError(activeRes));
+        if (!inactiveRes.ok) throw new Error(await apiError(inactiveRes));
+        const promoRows = ((await activeRes.json()).promotions || [])
+          .concat((await inactiveRes.json()).promotions || []);
+        discounts = promoRows.map(mapPromotion);
+
+        const progRes = await AUTH.fetch('/api/crm/loyalty-programs');
+        if (!progRes.ok) throw new Error(await apiError(progRes));
+        const progData = await progRes.json();
+        campaigns = (progData.programs || []).map(mapProgram);
+
+        // Настройки начисления живут в активной программе типа points
+        const pointsProgram = campaigns.find(p => p.programType === 'points' && p.isActive)
+          || campaigns.find(p => p.programType === 'points');
+        if (pointsProgram) {
+          pointsProgramId = pointsProgram.id;
+          loyaltySettings = {
+            pointsPerRuble: pointsProgram.pointsPerCurrency,
+            rublePerPoint: pointsProgram.redemptionRate,
+            tiers: pointsProgram.tierThresholds || {}
+          };
         }
+
+        dataSourceOk = true;
       } catch (e) {
-        console.log('API promotions load failed:', e.message);
+        showDataError(
+          'Не удалось загрузить данные лояльности с сервера: ' + e.message
+          + '. Клиенты, баллы и акции НЕ показаны, чтобы вы не принимали пустой экран '
+          + 'за реальную картину. Обновите страницу или войдите заново.'
+        );
+        return;
       }
 
-      if (discounts.length === 0) {
-        const saved = localStorage.getItem('loyaltyDiscounts');
-        if (saved) discounts = JSON.parse(saved);
-      }
-
-      // Load loyalty programs as campaigns
-      try {
-        const res = await AUTH.fetch('/api/crm/loyalty-programs');
-        if (res.ok) {
-          const data = await res.json();
-          campaigns = (data.programs || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description || '',
-            startDate: p.start_date || new Date().toISOString().slice(0, 10),
-            endDate: p.end_date || new Date().toISOString().slice(0, 10),
-            type: p.program_type || 'loyalty',
-            bonusPoints: p.bonus_points || 0,
-            isActive: p.is_active !== false
-          }));
-        }
-      } catch (e) {
-        console.log('API loyalty-programs load failed:', e.message);
-      }
-
-      if (campaigns.length === 0) {
-        const saved = localStorage.getItem('loyaltyCampaigns');
-        if (saved) campaigns = JSON.parse(saved);
-      }
-
-      const savedSettings = localStorage.getItem('loyaltySettings');
-      if (savedSettings) loyaltySettings = JSON.parse(savedSettings);
       loadSettings();
     }
 
-    function saveData() {
-      localStorage.setItem('loyaltyCustomers', JSON.stringify(customers));
-      localStorage.setItem('loyaltyDiscounts', JSON.stringify(discounts));
-      localStorage.setItem('loyaltyCampaigns', JSON.stringify(campaigns));
-      localStorage.setItem('loyaltySettings', JSON.stringify(loyaltySettings));
+    // Поля, которых нет в таблице promotions (минимальная сумма, описание,
+    // область применения), сервис хранит в JSONB conditions.
+    function promoConditions(p) {
+      const c = p.conditions;
+      if (!c) return {};
+      return typeof c === 'string' ? (JSON.parse(c) || {}) : c;
+    }
+
+    function mapPromotion(p) {
+      const cond = promoConditions(p);
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.promo_type,
+        value: parseFloat(p.discount_value || 0),
+        promoCode: p.promo_code || '',
+        appliesTo: cond.appliesTo || 'all',
+        minOrder: parseFloat(cond.minOrder || 0),
+        description: cond.description || '',
+        maxUses: p.usage_limit || 0,
+        usedCount: p.used_count || 0,
+        startDate: p.valid_from || null,
+        endDate: p.valid_until || null,
+        isActive: p.is_active !== false
+      };
+    }
+
+    // В таблице loyalty_programs нет описания, срока и бонусных баллов —
+    // сервис принимает их только внутри JSONB rules.
+    function mapProgram(p) {
+      const rules = typeof p.rules === 'string' ? (JSON.parse(p.rules) || {}) : (p.rules || {});
+      const thresholds = typeof p.tier_thresholds === 'string'
+        ? (JSON.parse(p.tier_thresholds) || {}) : (p.tier_thresholds || {});
+      return {
+        id: p.id,
+        name: p.name,
+        programType: p.program_type,
+        description: rules.description || '',
+        startDate: rules.startDate || null,
+        endDate: rules.endDate || null,
+        bonusPoints: rules.bonusPoints || 0,
+        pointsPerCurrency: p.points_per_currency === null || p.points_per_currency === undefined
+          ? null : parseFloat(p.points_per_currency),
+        redemptionRate: p.redemption_rate === null || p.redemption_rate === undefined
+          ? null : parseFloat(p.redemption_rate),
+        tierThresholds: thresholds,
+        isActive: p.is_active !== false
+      };
     }
 
     function switchTab(tab) {
@@ -1719,6 +1840,18 @@ AUTH.requireAuth();
       else if (tab === 'campaigns') renderCampaigns();
     }
 
+    function escapeHtml(value) {
+      return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ru-RU');
+    }
+
     function getTierName(tier) {
       const names = {
         bronze: '🥉 Bronze',
@@ -1729,72 +1862,100 @@ AUTH.requireAuth();
       return names[tier] || tier;
     }
 
-    function getTierProgress(points) {
-      const tiers = loyaltySettings.tiers;
-      if (points >= tiers.platinum) return { current: 'platinum', next: null, progress: 100 };
-      if (points >= tiers.gold) return { current: 'gold', next: 'platinum', progress: (points - tiers.gold) / (tiers.platinum - tiers.gold) * 100 };
-      if (points >= tiers.silver) return { current: 'silver', next: 'gold', progress: (points - tiers.silver) / (tiers.gold - tiers.silver) * 100 };
-      return { current: 'bronze', next: 'silver', progress: points / tiers.silver * 100 };
+    // Уровень на сервере считается по сумме покупок (total_spent) и порогам
+    // программы, а не по текущему остатку баллов. Прогресс считаем так же,
+    // иначе на экране была бы цифра, которой в базе не соответствует ничего.
+    function getTierProgress(customer) {
+      const t = loyaltySettings.tiers || {};
+      const spent = customer.totalSpent || 0;
+      const steps = [
+        { name: 'silver', at: Number(t.silver) },
+        { name: 'gold', at: Number(t.gold) },
+        { name: 'platinum', at: Number(t.platinum) }
+      ].filter(s => !isNaN(s.at) && s.at > 0).sort((a, b) => a.at - b.at);
+
+      if (steps.length === 0) return null;
+
+      let prevAt = 0;
+      for (const step of steps) {
+        if (spent < step.at) {
+          const span = step.at - prevAt;
+          return {
+            next: step.name,
+            remaining: step.at - spent,
+            progress: span > 0 ? Math.min(100, Math.max(0, (spent - prevAt) / span * 100)) : 0
+          };
+        }
+        prevAt = step.at;
+      }
+      return { next: null, remaining: 0, progress: 100 };
     }
 
     function renderCustomers() {
+      // Ошибку загрузки в контейнере не затираем: иначе вместо причины
+      // пользователь увидит «Клиентов пока нет» и решит, что база пуста.
+      if (!dataSourceOk) return;
+
       const grid = document.getElementById('customersGrid');
-      const search = document.getElementById('customerSearch').value.toLowerCase();
+      const search = (document.getElementById('customerSearch').value || '').toLowerCase();
 
       const filteredCustomers = customers.filter(c =>
         (c.name || '').toLowerCase().includes(search) || (c.phone || '').includes(search)
       );
 
+      updateCustomerStats();
+
+      if (customers.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">'
+          + 'Клиентов пока нет. Профиль появляется здесь после первого заказа клиента.</div>';
+        return;
+      }
+
       if (filteredCustomers.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Клиенты не найдены</div>';
-        updateCustomerStats();
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">По запросу ничего не найдено</div>';
         return;
       }
 
       grid.innerHTML = filteredCustomers.map(customer => {
-        const tierProgress = getTierProgress(customer.points);
+        const tierProgress = getTierProgress(customer);
 
         return `
-          <div class="customer-card ${customer.tier}">
+          <div class="customer-card ${escapeHtml(customer.tier)}">
             <div class="customer-header">
               <div>
-                <div class="customer-name">${customer.name}</div>
-                <div class="customer-info">${customer.phone}</div>
+                <div class="customer-name">${escapeHtml(customer.name)}</div>
+                <div class="customer-info">${escapeHtml(customer.phone)}</div>
               </div>
-              <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
+              <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierName(customer.tier)}</span>
             </div>
 
             <div class="points-section">
               <div class="points-value">${customer.points}</div>
               <div class="points-label">баллов</div>
-              ${tierProgress.next ? `
+              ${tierProgress && tierProgress.next ? `
                 <div style="color: var(--color-grey-5); font-size: 11px; margin-top: 8px;">
-                  До ${getTierName(tierProgress.next)}: ${loyaltySettings.tiers[tierProgress.next] - customer.points} баллов
+                  До ${getTierName(tierProgress.next)}: ${tierProgress.remaining.toLocaleString('ru-RU')} ₽ покупок
                 </div>
                 <div class="progress-bar">
                   <div class="progress-fill" style="width: ${tierProgress.progress}%"></div>
                 </div>
-              ` : '<div style="color: var(--color-success); font-size: 11px; margin-top: 8px;">🏆 Максимальный уровень</div>'}
+              ` : (tierProgress ? '<div style="color: var(--color-success); font-size: 11px; margin-top: 8px;">🏆 Максимальный уровень</div>' : '')}
             </div>
 
             <div class="customer-info">
               <div><strong>Всего потрачено:</strong> ${customer.totalSpent.toLocaleString('ru-RU')} ₽</div>
-              <div><strong>Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+              <div><strong>Заказов:</strong> ${customer.totalOrders}</div>
+              <div><strong>Клиент с:</strong> ${formatDate(customer.joinDate)}</div>
             </div>
 
             <div class="customer-actions">
-              <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="viewCustomer(${customer.id})">
+              <button class="btn btn-secondary btn-small" style="flex: 1;" onclick="viewCustomer(${jsArg(customer.id)})">
                 👁️ Подробнее
-              </button>
-              <button class="btn btn-success btn-small" onclick="addPoints(${customer.id})">
-                + Баллы
               </button>
             </div>
           </div>
         `;
       }).join('');
-
-      updateCustomerStats();
     }
 
     function updateCustomerStats() {
@@ -1809,7 +1970,7 @@ AUTH.requireAuth();
     }
 
     async function viewCustomer(id) {
-      const customer = customers.find(c => c.id === id);
+      const customer = customers.find(c => String(c.id) === String(id));
       if (!customer) return;
 
       const modal = document.getElementById('customerModal');
@@ -1819,9 +1980,9 @@ AUTH.requireAuth();
 
       body.innerHTML = `
         <div style="text-align: center; margin-bottom: 24px;">
-          <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${initials}</div>
-          <h2 style="margin-bottom: 8px; color: var(--color-text-primary);">${customer.name}</h2>
-          <span class="customer-tier ${customer.tier}">${getTierName(customer.tier)}</span>
+          <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${escapeHtml(initials)}</div>
+          <h2 style="margin-bottom: 8px; color: var(--color-text-primary);">${escapeHtml(customer.name)}</h2>
+          <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierName(customer.tier)}</span>
         </div>
 
         <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
@@ -1838,55 +1999,65 @@ AUTH.requireAuth();
         </div>
 
         <div style="color: var(--color-text-secondary); line-height: 2;">
-          ${customer.phone ? `<div><strong style="color: var(--color-text-primary);">Телефон:</strong> ${customer.phone}</div>` : ''}
-          ${customer.email ? `<div><strong style="color: var(--color-text-primary);">Email:</strong> ${customer.email}</div>` : ''}
-          <div><strong style="color: var(--color-text-primary);">Клиент с:</strong> ${new Date(customer.joinDate).toLocaleDateString('ru-RU')}</div>
+          ${customer.phone ? `<div><strong style="color: var(--color-text-primary);">Телефон:</strong> ${escapeHtml(customer.phone)}</div>` : ''}
+          ${customer.email ? `<div><strong style="color: var(--color-text-primary);">Email:</strong> ${escapeHtml(customer.email)}</div>` : ''}
+          <div><strong style="color: var(--color-text-primary);">Клиент с:</strong> ${formatDate(customer.joinDate)}</div>
+        </div>
+
+        <div style="margin-top:20px;padding:16px;background:var(--admin-content-bg);border:1px solid var(--admin-border);border-radius:12px;">
+          <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">Списание баллов</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="number" class="form-input" id="redeemPointsInput" min="1" step="1" style="max-width:160px;" placeholder="Сколько баллов">
+            <button class="btn btn-warning btn-small" onclick="deductPoints(${jsArg(customer.id)})">Списать баллы</button>
+          </div>
+          <div style="color:var(--color-grey-5);font-size:11px;margin-top:8px;">
+            Начисление баллов выполняется сервером автоматически по оплаченному заказу —
+            вручную начислить баллы нельзя.
+          </div>
         </div>
 
         <div id="transactionsList" style="margin-top:20px;">
           <div style="color:var(--color-grey-5);font-size:13px;">Загрузка транзакций...</div>
         </div>
-
-        <div style="display: flex; gap: 12px; margin-top: 24px;">
-          <button class="btn btn-success" style="flex: 1;" onclick="addPoints(${customer.id})">Начислить баллы</button>
-          <button class="btn btn-warning" style="flex: 1;" onclick="deductPoints(${customer.id})">Списать баллы</button>
-        </div>
       `;
 
       modal.classList.add('active');
+      await loadTransactions(id);
+    }
 
-      // Load transactions
+    // История баллов — только с сервера. Пустой ответ и ошибка загрузки
+    // должны выглядеть по-разному: иначе сбой читается как «операций не было».
+    async function loadTransactions(id) {
+      const txList = document.getElementById('transactionsList');
+      if (!txList) return;
       try {
-        const res = await AUTH.fetch(`/api/crm/transactions?customerId=${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          const txList = document.getElementById('transactionsList');
-          const txs = data.transactions || [];
-          if (txs.length === 0) {
-            txList.innerHTML = '<div style="color:var(--color-grey-5);font-size:13px;">Транзакций нет</div>';
-          } else {
-            txList.innerHTML = `
-              <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">История транзакций</div>
-              <div style="display:grid;gap:8px;">
-                ${txs.slice(0, 10).map(tx => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--admin-content-bg);border-radius:8px;font-size:13px;">
-                    <div>
-                      <div style="font-weight:600;color:var(--color-text-primary);">${tx.description || tx.type || 'Транзакция'}</div>
-                      <div style="color:var(--color-grey-5);font-size:11px;">${tx.created_at ? new Date(tx.created_at).toLocaleDateString('ru-RU') : ''}</div>
-                    </div>
-                    <div style="font-weight:700;color:${(tx.amount || tx.points_change || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">
-                      ${(tx.amount || tx.points_change || 0) >= 0 ? '+' : ''}${tx.amount || tx.points_change || 0} ${tx.currency || 'баллов'}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            `;
-          }
-        } else {
-          document.getElementById('transactionsList').innerHTML = '';
+        const res = await AUTH.fetch(`/api/crm/transactions?customerId=${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error(await apiError(res));
+        const txs = (await res.json()).transactions || [];
+        if (txs.length === 0) {
+          txList.innerHTML = '<div style="color:var(--color-grey-5);font-size:13px;">Операций с баллами ещё не было</div>';
+          return;
         }
+        txList.innerHTML = `
+          <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">История транзакций</div>
+          <div style="display:grid;gap:8px;">
+            ${txs.slice(0, 20).map(tx => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--admin-content-bg);border-radius:8px;font-size:13px;">
+                <div>
+                  <div style="font-weight:600;color:var(--color-text-primary);">${escapeHtml(tx.description || tx.transaction_type || 'Операция')}</div>
+                  <div style="color:var(--color-grey-5);font-size:11px;">${formatDate(tx.created_at)}</div>
+                </div>
+                <div style="font-weight:700;color:${(tx.points || 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)'};">
+                  ${(tx.points || 0) >= 0 ? '+' : ''}${tx.points || 0} баллов
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
       } catch (e) {
-        document.getElementById('transactionsList').innerHTML = '';
+        txList.innerHTML = '<div style="padding:12px;border:1px solid rgba(229,57,53,0.35);'
+          + 'background:rgba(229,57,53,0.08);border-radius:8px;color:#e53935;font-size:13px;">'
+          + '⚠️ История баллов не загружена: ' + escapeHtml(e.message) + '</div>';
       }
     }
 
@@ -1894,58 +2065,67 @@ AUTH.requireAuth();
       document.getElementById('customerModal').classList.remove('active');
     }
 
-    function addPoints(id) {
-      const customer = customers.find(c => c.id === id);
-      if (!customer) return;
+    // Списание баллов — это деньги клиента, поэтому только через сервер.
+    // Локальная правка массива customers создавала бы видимость списания,
+    // которого в базе не было.
+    async function deductPoints(id) {
+      if (!requireServer('списание баллов')) return;
 
-      const points = prompt(`Сколько баллов начислить клиенту "${customer.name}"?`, '100');
-      if (!points || isNaN(points)) return;
+      const input = document.getElementById('redeemPointsInput');
+      const points = parseInt(input ? input.value : '', 10);
+      if (!points || isNaN(points) || points < 1) {
+        showNotification('⚠️ Укажите целое число баллов больше нуля');
+        return;
+      }
 
-      customer.points += parseInt(points);
-      updateCustomerTier(customer);
-      saveData();
-      renderCustomers();
-      closeCustomerModal();
-      showNotification(`✅ Начислено ${points} баллов клиенту ${customer.name}`);
+      try {
+        const res = await AUTH.fetch('/api/crm/points/redeem', {
+          method: 'POST',
+          body: JSON.stringify({ customerId: id, points })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification(`✅ Списано ${points} баллов`);
+        await initializeData();
+        renderCustomers();
+        closeCustomerModal();
+      } catch (e) {
+        showNotification('❌ Не списано: ' + e.message);
+      }
     }
 
-    function deductPoints(id) {
-      const customer = customers.find(c => c.id === id);
-      if (!customer) return;
+    // ── Акции и промокоды ──
 
-      const points = prompt(`Сколько баллов списать у клиента "${customer.name}"?`, '100');
-      if (!points || isNaN(points)) return;
-
-      customer.points = Math.max(0, customer.points - parseInt(points));
-      updateCustomerTier(customer);
-      saveData();
-      renderCustomers();
-      closeCustomerModal();
-      showNotification(`✅ Списано ${points} баллов у клиента ${customer.name}`);
+    function promoTypeName(type) {
+      const names = {
+        percentage: 'Процент',
+        fixed_amount: 'Фиксированная сумма',
+        bogo: '1+1',
+        combo: 'Комбо',
+        happy_hour: 'Счастливые часы'
+      };
+      return names[type] || type;
     }
 
-    function updateCustomerTier(customer) {
-      const tiers = loyaltySettings.tiers;
-      if (customer.points >= tiers.platinum) customer.tier = 'platinum';
-      else if (customer.points >= tiers.gold) customer.tier = 'gold';
-      else if (customer.points >= tiers.silver) customer.tier = 'silver';
-      else customer.tier = 'bronze';
-    }
-
-    // Discounts
     function renderDiscounts() {
+      if (!dataSourceOk) return;
+
       const container = document.getElementById('discountsList');
+
+      if (discounts.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Акций пока нет</div>';
+        return;
+      }
 
       container.innerHTML = discounts.map(discount => `
         <div class="discount-card">
           <div class="discount-header">
             <div>
-              <div class="discount-name">${discount.name}</div>
-              <div style="color: var(--color-grey-5); margin-top: 8px; font-size: 13px;">${discount.description}</div>
+              <div class="discount-name">${escapeHtml(discount.name)}</div>
+              <div style="color: var(--color-grey-5); margin-top: 8px; font-size: 13px;">${escapeHtml(discount.description)}</div>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
               <div class="discount-badge">${discount.type === 'percentage' ? discount.value + '%' : discount.value + '₽'}</div>
-              <span class="status-toggle ${discount.isActive ? 'active' : 'inactive'}" onclick="toggleDiscount(${discount.id})">
+              <span class="status-toggle ${discount.isActive ? 'active' : 'inactive'}" onclick="toggleDiscount(${jsArg(discount.id)})">
                 ${discount.isActive ? '✅ Активна' : '⏸️ Неактивна'}
               </span>
             </div>
@@ -1953,32 +2133,32 @@ AUTH.requireAuth();
 
           <div class="discount-details">
             <div class="discount-detail">
+              <div class="detail-label">Тип</div>
+              <div class="detail-value">${escapeHtml(promoTypeName(discount.type))}</div>
+            </div>
+            <div class="discount-detail">
               <div class="detail-label">Минимальный заказ</div>
               <div class="detail-value">${discount.minOrder} ₽</div>
             </div>
             <div class="discount-detail">
               <div class="detail-label">Использований</div>
-              <div class="detail-value">${discount.usedCount} ${discount.maxUses > 0 ? '/ ' + discount.maxUses : ''}</div>
+              <div class="detail-value">${discount.usedCount}${discount.maxUses > 0 ? ' / ' + discount.maxUses : ''}</div>
             </div>
             <div class="discount-detail">
               <div class="detail-label">Действует с</div>
-              <div class="detail-value">${new Date(discount.startDate).toLocaleDateString('ru-RU')}</div>
+              <div class="detail-value">${formatDate(discount.startDate)}</div>
             </div>
             <div class="discount-detail">
               <div class="detail-label">Действует до</div>
-              <div class="detail-value">${new Date(discount.endDate).toLocaleDateString('ru-RU')}</div>
+              <div class="detail-value">${formatDate(discount.endDate)}</div>
             </div>
-          </div>
-
-          <div style="display: flex; gap: 8px; margin-top: 16px;">
-            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
-            <button class="btn btn-danger btn-small" onclick="deleteDiscount(${discount.id})">🗑️ Удалить</button>
           </div>
         </div>
       `).join('');
     }
 
     function openAddDiscountModal() {
+      if (!requireServer('создание акции')) return;
       document.getElementById('discountModal').classList.add('active');
     }
 
@@ -1986,111 +2166,122 @@ AUTH.requireAuth();
       document.getElementById('discountModal').classList.remove('active');
     }
 
+    // Дата из <input type="date"> приходит как YYYY-MM-DD, а сервис ждёт
+    // ISO-строку: без преобразования Joi отвечает 400 и акция не создаётся.
+    function isoDate(value) {
+      if (!value) return undefined;
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? undefined : d.toISOString();
+    }
+
     async function saveDiscount(event) {
       event.preventDefault();
+      if (!requireServer('акция')) return;
 
-      const formData = {
+      const minOrder = parseFloat(document.getElementById('discountMinOrder').value) || 0;
+      const maxUses = parseInt(document.getElementById('discountMaxUses').value, 10) || 0;
+
+      const payload = {
         name: document.getElementById('discountName').value,
-        type: document.getElementById('discountType').value,
-        value: parseFloat(document.getElementById('discountValue').value),
-        appliesTo: document.getElementById('discountAppliesTo').value,
-        minOrder: parseFloat(document.getElementById('discountMinOrder').value),
-        maxUses: parseInt(document.getElementById('discountMaxUses').value),
-        startDate: document.getElementById('discountStartDate').value,
-        endDate: document.getElementById('discountEndDate').value,
-        description: document.getElementById('discountDescription').value,
-        isActive: true,
-        usedCount: 0
+        promoType: document.getElementById('discountType').value,
+        discountValue: parseFloat(document.getElementById('discountValue').value) || 0,
+        // Таблица promotions не имеет колонок под описание, минимальную сумму
+        // и область применения — сервис принимает их только в conditions.
+        conditions: {
+          minOrder,
+          appliesTo: document.getElementById('discountAppliesTo').value,
+          description: document.getElementById('discountDescription').value
+        },
+        validFrom: isoDate(document.getElementById('discountStartDate').value),
+        validUntil: isoDate(document.getElementById('discountEndDate').value)
       };
+      // usageLimit в схеме минимум 1: ноль означает «без лимита» и не передаётся
+      if (maxUses > 0) payload.usageLimit = maxUses;
 
-      // Try API
       try {
         const res = await AUTH.fetch('/api/crm/promotions', {
           method: 'POST',
-          body: JSON.stringify({
-            name: formData.name,
-            promoType: formData.type,
-            discountValue: formData.value,
-            usageLimit: formData.maxUses || null,
-            minOrderAmount: formData.minOrder || null,
-            startDate: formData.startDate,
-            endDate: formData.endDate,
-            description: formData.description
-          })
+          body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          showNotification('Промокод создан');
-          closeDiscountModal();
-          await initializeData();
-          renderDiscounts();
-          return;
-        }
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification('✅ Акция создана');
+        closeDiscountModal();
+        document.getElementById('discountForm').reset();
+        await initializeData();
+        renderDiscounts();
       } catch (e) {
-        console.log('API promo create failed:', e.message);
+        // Модалка остаётся открытой: введённое не теряется, можно повторить
+        showNotification('❌ Не сохранено: ' + e.message);
       }
-
-      // Fallback
-      const newId = discounts.length > 0 ? Math.max(...discounts.map(d => typeof d.id === 'number' ? d.id : 0)) + 1 : 1;
-      discounts.push({ id: newId, ...formData });
-      saveData();
-      renderDiscounts();
-      closeDiscountModal();
-      showNotification('Скидка создана');
     }
 
-    function toggleDiscount(id) {
-      const discount = discounts.find(d => d.id === id);
+    // Выключение акции подтверждается вторым нажатием: DELETE у сервиса нет,
+    // отключение — единственный обратимый способ снять акцию с продажи.
+    async function toggleDiscount(id) {
+      if (!requireServer('изменение акции')) return;
+
+      const discount = discounts.find(d => String(d.id) === String(id));
       if (!discount) return;
 
-      discount.isActive = !discount.isActive;
-      saveData();
-      renderDiscounts();
-      showNotification(`✅ Скидка "${discount.name}" ${discount.isActive ? 'активирована' : 'деактивирована'}`);
+      if (discount.isActive && pendingDiscountDisable !== id) {
+        pendingDiscountDisable = id;
+        showNotification('⚠️ Нажмите ещё раз, чтобы отключить акцию');
+        setTimeout(() => { if (pendingDiscountDisable === id) pendingDiscountDisable = null; }, 5000);
+        return;
+      }
+      pendingDiscountDisable = null;
+
+      try {
+        const res = await AUTH.fetch(`/api/crm/promotions/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ isActive: !discount.isActive })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification(`✅ Акция «${discount.name}» ${discount.isActive ? 'отключена' : 'включена'}`);
+        await initializeData();
+        renderDiscounts();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
-    function deleteDiscount(id) {
-      if (!confirm('Удалить скидку?')) return;
+    // ── Программы лояльности ──
 
-      discounts = discounts.filter(d => d.id !== id);
-      saveData();
-      renderDiscounts();
-      showNotification('🗑️ Скидка удалена');
-    }
-
-    // Campaigns
     function renderCampaigns() {
+      if (!dataSourceOk) return;
+
       const container = document.getElementById('campaignsList');
+
+      if (campaigns.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--color-grey-5);background: var(--admin-card-bg);border:1px solid var(--admin-border);border-radius:16px;">Программ лояльности пока нет</div>';
+        return;
+      }
 
       container.innerHTML = campaigns.map(campaign => `
         <div class="campaign-card">
           <div class="campaign-header">
             <div>
-              <div class="campaign-title">${campaign.name}</div>
+              <div class="campaign-title">${escapeHtml(campaign.name)}</div>
               <div class="campaign-dates">
-                📅 ${new Date(campaign.startDate).toLocaleDateString('ru-RU')} - ${new Date(campaign.endDate).toLocaleDateString('ru-RU')}
+                📅 ${formatDate(campaign.startDate)} - ${formatDate(campaign.endDate)}
               </div>
             </div>
-            <span class="status-toggle ${campaign.isActive ? 'active' : 'inactive'}" onclick="toggleCampaign(${campaign.id})">
+            <span class="status-toggle ${campaign.isActive ? 'active' : 'inactive'}" onclick="toggleCampaign(${jsArg(campaign.id)})">
               ${campaign.isActive ? '✅ Активна' : '⏸️ Неактивна'}
             </span>
           </div>
 
-          <div style="color: var(--color-grey-5); margin-bottom: 16px; font-size: 14px;">${campaign.description}</div>
+          <div style="color: var(--color-grey-5); margin-bottom: 16px; font-size: 14px;">${escapeHtml(campaign.description)}</div>
 
-          <div style="display: flex; gap: 16px; margin-bottom: 16px;">
-            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1;">
-              <div style="color: var(--color-grey-5); font-size: 11px;">Тип акции</div>
-              <div style="color: var(--color-text-primary); font-weight: 600; font-size: 14px; margin-top: 4px;">${getCampaignTypeName(campaign.type)}</div>
+          <div style="display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Тип программы</div>
+              <div style="color: var(--color-text-primary); font-weight: 600; font-size: 14px; margin-top: 4px;">${getCampaignTypeName(campaign.programType)}</div>
             </div>
-            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1;">
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
               <div style="color: var(--color-grey-5); font-size: 11px;">Бонусные баллы</div>
               <div style="color: var(--color-primary); font-weight: 700; font-size: 18px; margin-top: 4px;">${campaign.bonusPoints}</div>
             </div>
-          </div>
-
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-secondary btn-small">✏️ Редактировать</button>
-            <button class="btn btn-danger btn-small" onclick="deleteCampaign(${campaign.id})">🗑️ Удалить</button>
           </div>
         </div>
       `).join('');
@@ -2098,16 +2289,16 @@ AUTH.requireAuth();
 
     function getCampaignTypeName(type) {
       const names = {
-        birthday: '🎂 День рождения',
-        'happy-hour': '⏰ Счастливые часы',
-        seasonal: '🍂 Сезонная',
-        'new-customer': '🆕 Для новых',
-        loyalty: '🎁 Лояльность'
+        points: '🎁 Баллы',
+        cashback: '💰 Кэшбэк',
+        discount: '🏷️ Скидка',
+        stamp_card: '🎟️ Накопительная карта'
       };
       return names[type] || type;
     }
 
     function openAddCampaignModal() {
+      if (!requireServer('создание программы лояльности')) return;
       document.getElementById('campaignModal').classList.add('active');
     }
 
@@ -2115,74 +2306,155 @@ AUTH.requireAuth();
       document.getElementById('campaignModal').classList.remove('active');
     }
 
-    function saveCampaign(event) {
+    async function saveCampaign(event) {
       event.preventDefault();
+      if (!requireServer('программа лояльности')) return;
 
-      const formData = {
+      const payload = {
         name: document.getElementById('campaignName').value,
-        description: document.getElementById('campaignDescription').value,
-        startDate: document.getElementById('campaignStartDate').value,
-        endDate: document.getElementById('campaignEndDate').value,
-        type: document.getElementById('campaignType').value,
-        bonusPoints: parseInt(document.getElementById('campaignBonusPoints').value),
+        programType: document.getElementById('campaignType').value,
+        // Описание, срок действия и бонусные баллы в таблице
+        // loyalty_programs отдельных колонок не имеют — только rules
+        rules: {
+          description: document.getElementById('campaignDescription').value,
+          startDate: document.getElementById('campaignStartDate').value || null,
+          endDate: document.getElementById('campaignEndDate').value || null,
+          bonusPoints: parseInt(document.getElementById('campaignBonusPoints').value, 10) || 0
+        },
         isActive: true
       };
 
-      const newId = campaigns.length > 0 ? Math.max(...campaigns.map(c => c.id)) + 1 : 1;
-      campaigns.push({ id: newId, ...formData });
-
-      saveData();
-      renderCampaigns();
-      closeCampaignModal();
-      showNotification('✅ Акция создана');
+      try {
+        const res = await AUTH.fetch('/api/crm/loyalty-programs', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification('✅ Программа лояльности создана');
+        closeCampaignModal();
+        document.getElementById('campaignForm').reset();
+        await initializeData();
+        renderCampaigns();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
-    function toggleCampaign(id) {
-      const campaign = campaigns.find(c => c.id === id);
+    // DELETE у сервиса нет, поэтому снятие программы — это её отключение.
+    // Подтверждение вторым нажатием вместо confirm().
+    async function toggleCampaign(id) {
+      if (!requireServer('изменение программы лояльности')) return;
+
+      const campaign = campaigns.find(c => String(c.id) === String(id));
       if (!campaign) return;
 
-      campaign.isActive = !campaign.isActive;
-      saveData();
-      renderCampaigns();
-      showNotification(`✅ Акция "${campaign.name}" ${campaign.isActive ? 'активирована' : 'деактивирована'}`);
+      if (campaign.isActive && pendingCampaignDisable !== id) {
+        pendingCampaignDisable = id;
+        showNotification('⚠️ Нажмите ещё раз, чтобы отключить программу');
+        setTimeout(() => { if (pendingCampaignDisable === id) pendingCampaignDisable = null; }, 5000);
+        return;
+      }
+      pendingCampaignDisable = null;
+
+      try {
+        const res = await AUTH.fetch(`/api/crm/loyalty-programs/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ isActive: !campaign.isActive })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification(`✅ Программа «${campaign.name}» ${campaign.isActive ? 'отключена' : 'включена'}`);
+        await initializeData();
+        renderCampaigns();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
-    function deleteCampaign(id) {
-      if (!confirm('Удалить акцию?')) return;
+    // ── Настройки начисления ──
 
-      campaigns = campaigns.filter(c => c.id !== id);
-      saveData();
-      renderCampaigns();
-      showNotification('🗑️ Акция удалена');
-    }
-
-    // Settings
     function loadSettings() {
-      document.getElementById('pointsPerRuble').value = loyaltySettings.pointsPerRuble;
-      document.getElementById('rublePerPoint').value = loyaltySettings.rublePerPoint;
-      document.getElementById('bronzeThreshold').value = loyaltySettings.tiers.bronze;
-      document.getElementById('silverThreshold').value = loyaltySettings.tiers.silver;
-      document.getElementById('goldThreshold').value = loyaltySettings.tiers.gold;
-      document.getElementById('platinumThreshold').value = loyaltySettings.tiers.platinum;
+      const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value === null || value === undefined ? '' : value;
+      };
+      const tiers = loyaltySettings.tiers || {};
+      set('pointsPerRuble', loyaltySettings.pointsPerRuble);
+      set('rublePerPoint', loyaltySettings.rublePerPoint);
+      set('silverThreshold', tiers.silver);
+      set('goldThreshold', tiers.gold);
+      set('platinumThreshold', tiers.platinum);
+
+      const hint = document.getElementById('settingsSourceHint');
+      if (hint) {
+        hint.textContent = pointsProgramId
+          ? 'Настройки загружены из программы лояльности на сервере.'
+          : 'Программы лояльности типа «Баллы» ещё нет — при сохранении она будет создана.';
+      }
     }
 
-    function saveSettings() {
-      loyaltySettings = {
-        pointsPerRuble: parseFloat(document.getElementById('pointsPerRuble').value),
-        rublePerPoint: parseFloat(document.getElementById('rublePerPoint').value),
-        tiers: {
-          bronze: parseInt(document.getElementById('bronzeThreshold').value),
-          silver: parseInt(document.getElementById('silverThreshold').value),
-          gold: parseInt(document.getElementById('goldThreshold').value),
-          platinum: parseInt(document.getElementById('platinumThreshold').value)
-        }
+    // Настройки — это курс начисления и пороги уровней, то есть обязательства
+    // перед клиентами. Пишем только на сервер: в localStorage они выглядели бы
+    // сохранёнными, а заказы считались бы по старому курсу.
+    async function saveSettings() {
+      if (!requireServer('изменение настроек лояльности')) return;
+
+      const num = (id) => {
+        const raw = document.getElementById(id).value;
+        if (raw === '' || raw === null) return null;
+        const v = parseFloat(raw);
+        return isNaN(v) ? null : v;
       };
 
-      // Update all customer tiers based on new settings
-      customers.forEach(customer => updateCustomerTier(customer));
+      const pointsPerRuble = num('pointsPerRuble');
+      const rublePerPoint = num('rublePerPoint');
+      if (pointsPerRuble === null || pointsPerRuble < 0 || rublePerPoint === null || rublePerPoint < 0) {
+        showNotification('⚠️ Укажите курс начисления и стоимость балла (неотрицательные числа)');
+        return;
+      }
 
-      saveData();
-      showNotification('✅ Настройки сохранены');
+      // Пороги уровней на сервере считаются по сумме покупок клиента.
+      // Пустое поле означает «уровень не используется», а не ноль.
+      const tierThresholds = {};
+      [['silver', 'silverThreshold'], ['gold', 'goldThreshold'], ['platinum', 'platinumThreshold']]
+        .forEach(([tier, id]) => {
+          const v = num(id);
+          if (v !== null && v > 0) tierThresholds[tier] = v;
+        });
+
+      const payload = {
+        name: 'Программа баллов',
+        programType: 'points',
+        pointsPerCurrency: pointsPerRuble,
+        redemptionRate: rublePerPoint,
+        tierThresholds,
+        isActive: true
+      };
+
+      try {
+        let res;
+        if (pointsProgramId) {
+          res = await AUTH.fetch(`/api/crm/loyalty-programs/${encodeURIComponent(pointsProgramId)}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              pointsPerCurrency: payload.pointsPerCurrency,
+              redemptionRate: payload.redemptionRate,
+              tierThresholds: payload.tierThresholds,
+              isActive: true
+            })
+          });
+        } else {
+          res = await AUTH.fetch('/api/crm/loyalty-programs', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+        }
+        if (!res.ok) throw new Error(await apiError(res));
+        showNotification('✅ Настройки сохранены на сервере');
+        await initializeData();
+        renderCustomers();
+      } catch (e) {
+        showNotification('❌ Не сохранено: ' + e.message);
+      }
     }
 
     function showNotification(message) {
