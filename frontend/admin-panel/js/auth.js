@@ -164,22 +164,38 @@ const AUTH = {
 // ресторан / кафе / кофейня / производство. Разделы, не указанные в карте,
 // доступны всем типам.
 const BUSINESS_TYPES = {
-  restaurant:  { label: 'Ресторан',     emoji: '🍽' },
-  cafe:        { label: 'Кафе',         emoji: '🥐' },
-  coffee_shop: { label: 'Кофейня',      emoji: '☕' },
-  production:  { label: 'Производство', emoji: '🏭' }
+  // icon — содержимое <svg viewBox="0 0 24 24">, рисуется обводкой currentColor
+  restaurant:  { label: 'Ресторан', tone: 'green',
+                 icon: '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 21V3c-2 1-3 4-3 8h3"/>' },
+  cafe:        { label: 'Кафе', tone: 'green',
+                 icon: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M6 12v8M18 12v8M9 4h6"/>' },
+  coffee_shop: { label: 'Кофейня', tone: 'cream',
+                 icon: '<path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/>' },
+  delivery:    { label: 'Доставка', tone: 'tomato',
+                 icon: '<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-8h5l3 8M9 6h3"/>' },
+  production:  { label: 'Производство', tone: 'yellow',
+                 icon: '<path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z"/><path d="M7 17h2M12 17h2"/>' }
+};
+
+// Цвета плашек — пары фон/текст с контрастом ≥4.5:1 на светлой теме
+const BUSINESS_TONES = {
+  green:  ['#E7F1E9', '#1F6B40'],
+  cream:  ['#EFE8D6', '#4F4838'],
+  tomato: ['#FBE9E3', '#B23F26'],
+  yellow: ['#FBF3D6', '#7A6118']
 };
 
 const MODULE_ACCESS = {
   'pos.html':           ['restaurant', 'cafe', 'coffee_shop'],
-  'orders.html':        ['restaurant', 'cafe', 'coffee_shop'],
+  'orders.html':        ['restaurant', 'cafe', 'coffee_shop', 'delivery'],
   'tables.html':        ['restaurant', 'cafe'],
   'hall-designer.html': ['restaurant'],
   // Кофейне экран очереди нужен не меньше кухни: бариста готовит напитки
   // по очереди и отмечает готовность. Бэкенд (kitchen-service) заказы
   // кофейни обрабатывает и так — закрыт был только экран.
-  'kds.html':           ['restaurant', 'cafe', 'coffee_shop'],
-  'loyalty.html':       ['restaurant', 'cafe', 'coffee_shop'],
+  'kds.html':           ['restaurant', 'cafe', 'coffee_shop', 'delivery'],
+  'loyalty.html':       ['restaurant', 'cafe', 'coffee_shop', 'delivery'],
+  'calls.html':         ['restaurant', 'cafe', 'delivery'],
   'wholesale.html':     ['production', 'restaurant']
 };
 
@@ -243,6 +259,32 @@ AUTH.applyBusinessType = function () {
       a.style.setProperty('display', 'none', 'important');
     }
   });
+  this.renderBusinessBadge(type);
+};
+
+// Плашка с типом заведения под логотипом: видно, под какой режим
+// отфильтровано меню, и по клику можно сменить тип в настройках
+AUTH.renderBusinessBadge = function (type) {
+  const brand = document.querySelector('.sidebar .sidebar-brand');
+  if (!brand) return;
+  let badge = document.getElementById('sidebarBusinessType');
+  const bt = type && BUSINESS_TYPES[type];
+  if (!bt) { if (badge) badge.remove(); return; }
+  if (!badge) {
+    badge = document.createElement('a');
+    badge.id = 'sidebarBusinessType';
+    badge.href = '/admin-panel/settings.html#features';
+    badge.title = 'Тип заведения — сменить в настройках';
+    badge.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin:10px 24px 0;' +
+      'padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;align-self:flex-start;';
+    brand.insertAdjacentElement('afterend', badge);
+  }
+  const tone = BUSINESS_TONES[bt.tone] || BUSINESS_TONES.green;
+  badge.style.background = tone[0];
+  badge.style.color = tone[1];
+  badge.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + bt.icon + '</svg>' +
+    '<span>' + bt.label + '</span>';
 };
 
 // Прячем недоступные разделы сразу после отрисовки сайдбара,

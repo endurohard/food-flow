@@ -21,7 +21,7 @@ const createEnterpriseSchema = Joi.object({
   phone: Joi.string().max(20).allow('', null),
   email: Joi.string().email().allow('', null),
   website: Joi.string().max(200).allow('', null),
-  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'production').default('restaurant'),
+  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'delivery', 'production').default('restaurant'),
   // DNS-метка организации: <subdomain>.food-flow.ru. Формат тот же, что в CHECK миграции 029
   subdomain: Joi.string().lowercase().min(2).max(63)
     .pattern(/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])$/)
@@ -58,7 +58,7 @@ const updateEnterpriseSchema = Joi.object({
   email: Joi.string().email().allow('', null),
   website: Joi.string().max(200).allow('', null),
   logo_url: Joi.string().max(500).allow('', null),
-  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'production'),
+  business_type: Joi.string().valid('restaurant', 'cafe', 'coffee_shop', 'delivery', 'production'),
   subdomain: subdomainRule.allow('', null),
   subscription_plan: Joi.string().max(50),
   currency: Joi.string().max(10),

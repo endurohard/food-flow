@@ -24,6 +24,9 @@ export const config = {
     url: process.env.REDIS_URL || 'redis://localhost:6379'
   },
 
+  // Загруженные фото блюд (docker-том menu_uploads)
+  uploadDir: process.env.UPLOAD_DIR || '/app/uploads',
+
   jwt: {
     secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production'
   }

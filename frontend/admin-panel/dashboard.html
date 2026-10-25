@@ -952,6 +952,11 @@
       <span>Дизайнер зала</span>
     </a>
 
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
     <div class="nav-section-label">Анализ</div>
 
     <a href="/admin-panel/analytics.html" class="nav-item">
@@ -1141,6 +1146,9 @@ AUTH.requireAuth();
         <span id="currentDate">15 апреля 2026</span>
       </div>
     </div>
+
+    <!-- ── БЛОК ПОД ТИП ЗАВЕДЕНИЯ (js/dashboard-focus.js) ── -->
+    <div class="bf" id="businessFocus" hidden></div>
 
     <!-- ── KPI CARDS ── -->
     <div class="kpi-grid">
@@ -1333,6 +1341,7 @@ AUTH.requireAuth();
   </main>
 </div><!-- /main-wrapper -->
 
+<script src="js/dashboard-focus.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
   /* ════════════════════════════════════

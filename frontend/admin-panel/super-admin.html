@@ -88,6 +88,7 @@
               <option value="restaurant">Ресторан</option>
               <option value="cafe">Кафе</option>
               <option value="coffee_shop">Кофейня</option>
+              <option value="delivery">Доставка</option>
               <option value="production">Производство</option>
             </select>
           </div>
@@ -148,6 +149,7 @@
             <option value="restaurant">Ресторан</option>
             <option value="cafe">Кафе</option>
             <option value="coffee_shop">Кофейня</option>
+            <option value="delivery">Доставка</option>
             <option value="production">Производство</option>
           </select>
         </div>
@@ -210,7 +212,7 @@
   <script>
     AUTH.requireAuth();
 
-    const BT = { restaurant: 'Ресторан', cafe: 'Кафе', coffee_shop: 'Кофейня', production: 'Производство' };
+    const BT = { restaurant: 'Ресторан', cafe: 'Кафе', coffee_shop: 'Кофейня', delivery: 'Доставка', production: 'Производство' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
     function showAlert(msg, ok) {

@@ -101,6 +101,10 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      # Фото блюд, загруженные из админки
+      - menu_uploads:/app/uploads
     expose:
       - "3002"
     networks:
@@ -570,6 +574,7 @@ volumes:
   grafana_data:
   elasticsearch_data:
   telegram_uploads:
+  menu_uploads:
   whatsapp_session:
 
 networks:

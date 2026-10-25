@@ -595,7 +595,6 @@
 
     .timer.warning {
       color: var(--color-warning);
-      animation: blink 1s infinite;
     }
 
     .timer.urgent {
@@ -1283,7 +1282,7 @@ AUTH.requireAuth();
     function renderOrderCard(order) {
       const isNew = !timers[order.id];
       const elapsed = getElapsedTime(order);
-      const elapsedClass = elapsed > 20 ? 'urgent' : elapsed > 10 ? 'warning' : '';
+      const elapsedClass = timerClass(order, elapsed);
 
       if (isNew) {
         timers[order.id] = new Date(order.createdAt).getTime();
@@ -1306,7 +1305,7 @@ AUTH.requireAuth();
             <div class="order-number">#${order.id}</div>
             <div class="order-time">
               <div class="timer ${elapsedClass}" id="timer-${order.id}">${formatTime(elapsed)}</div>
-              <div class="time-label">${order.status === 'preparing' ? 'В работе' : 'Готов'}</div>
+              <div class="time-label" id="timer-label-${order.id}">${timerLabel(order, elapsed)}</div>
             </div>
           </div>
 
@@ -1350,6 +1349,29 @@ AUTH.requireAuth();
       `;
     }
 
+    // Цель приготовления, мин. Меняется на устройстве:
+    // localStorage.setItem('ff_kds_target_min', '20')
+    function getTargetMinutes() {
+      const v = parseInt(localStorage.getItem('ff_kds_target_min'), 10);
+      return v > 0 ? v : 15;
+    }
+
+    // Цвет таймера считаем от цели, а не от абсолютных 10/20 минут.
+    // Готовый заказ кухню уже не касается — его таймер не подсвечиваем.
+    function timerClass(order, elapsed) {
+      if (order.status !== 'preparing') return '';
+      const target = getTargetMinutes();
+      if (elapsed > target) return 'urgent';
+      if (elapsed >= Math.ceil(target * 0.8)) return 'warning';
+      return '';
+    }
+
+    function timerLabel(order, elapsed) {
+      if (order.status !== 'preparing') return 'Готов';
+      const target = getTargetMinutes();
+      return elapsed > target ? `Дольше на ${elapsed - target} мин` : `Цель ${target} мин`;
+    }
+
     // Get elapsed time in minutes
     function getElapsedTime(order) {
       const now = Date.now();
@@ -1374,13 +1396,12 @@ AUTH.requireAuth();
           const elapsed = getElapsedTime(order);
           timerEl.textContent = formatTime(elapsed);
 
-          // Update class for warning/urgent
+          // Цвет — от цели приготовления (см. timerClass)
           timerEl.className = 'timer';
-          if (elapsed > 20) {
-            timerEl.classList.add('urgent');
-          } else if (elapsed > 10) {
-            timerEl.classList.add('warning');
-          }
+          const cls = timerClass(order, elapsed);
+          if (cls) timerEl.classList.add(cls);
+          const labelEl = document.getElementById(`timer-label-${order.id}`);
+          if (labelEl) labelEl.textContent = timerLabel(order, elapsed);
         }
       });
     }

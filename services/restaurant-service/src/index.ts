@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import crypto from 'crypto';
+import path from 'path';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { config } from './config';
@@ -18,7 +19,11 @@ const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
 // Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+// Загрузка фото блюда шлёт data URL и разбирает тело сама, с лимитом 8 МБ
+const defaultJson = express.json();
+app.use((req: Request, res: Response, next: NextFunction) =>
+  /\/menu-items\/[^/]+\/image$/.test(req.path) ? next() : defaultJson(req, res, next)
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Correlation ID middleware
@@ -50,9 +55,18 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // Routes
+// Фото блюд — публичные файлы; cross-origin, чтобы их видело и клиентское приложение
+app.use('/api/restaurants/media', express.static(path.resolve(config.uploadDir), {
+  maxAge: '30d',
+  fallthrough: true,
+  setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+}));
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/restaurants', menuRoutes);  // menu routes are nested under /api/restaurants/:id/...
 app.use('/api/restaurants', pbxRoutes);   // PBX settings (preserved from original)
+// Тот же роутер меню под /api/menus (Kong уже ведёт этот префикс сюда): здесь
+// одно-сегментные пути вроде /stop-list не перехватывает GET /api/restaurants/:id
+app.use('/api/menus', menuRoutes);
 app.use('/api/reservations', reservationRoutes);
 
 // 404 handler
