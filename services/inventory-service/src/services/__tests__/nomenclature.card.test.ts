@@ -47,11 +47,15 @@ function makePool(state: {
     if (/FROM inventory_batches b/.test(sql)) {
       return { rows: state.batches || [], rowCount: (state.batches || []).length };
     }
-    if (/FROM tech_cards/.test(sql)) {
-      return { rows: state.cards || [], rowCount: (state.cards || []).length };
-    }
+    // Порядок важен: запрос состава содержит подзапрос «FROM tech_cards t»
+    // для признака has_nested, поэтому правило по v_tech_card_ingredients
+    // обязано стоять ПЕРЕД общим правилом по tech_cards — иначе состав
+    // подменяется списком карт, и тест падает на ровном месте.
     if (/FROM v_tech_card_ingredients/.test(sql)) {
       return { rows: state.ingredients || [], rowCount: (state.ingredients || []).length };
+    }
+    if (/FROM tech_cards/.test(sql)) {
+      return { rows: state.cards || [], rowCount: (state.cards || []).length };
     }
     return { rows: [], rowCount: 0 };
   });

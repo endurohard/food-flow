@@ -1890,6 +1890,10 @@ AUTH.requireAuth();
   // ───────── карточка позиции (вкладки) ─────────
 
   let cardData = null;
+  // Раскрытые заготовки в составе техкарты: ключ — id строки, значение —
+  // ответ API либо 'loading'. Объявлено рядом с cardData, а не у функций
+  // раскрытия ниже: closeCard() сбрасывает его и обязан видеть переменную.
+  let expandedRows = {};
   let cardTab = 'main';
 
   function num(v, digits) {
@@ -1926,6 +1930,9 @@ AUTH.requireAuth();
 
   function closeCard() {
     cardData = null;
+    // Раскрытые ветки принадлежат конкретной позиции: без сброса следующая
+    // карточка открылась бы с чужим раскрытым составом.
+    expandedRows = {};
     document.getElementById('cardPanel').style.display = 'none';
     document.getElementById('cardPanel').innerHTML = '';
     document.getElementById('treeRoot').style.display = 'block';
@@ -2016,6 +2023,86 @@ AUTH.requireAuth();
     return html;
   }
 
+  // Раскрытые заготовки: см. объявление expandedRows выше, рядом с cardData.
+
+  async function toggleNested(rowId, itemId, qty) {
+    if (expandedRows[rowId]) {
+      delete expandedRows[rowId];
+      renderCard();
+      return;
+    }
+    expandedRows[rowId] = 'loading';
+    renderCard();
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items/inventory/' + itemId
+        + '/expand?quantity=' + encodeURIComponent(qty) + '&depth=3');
+      if (!res.ok) throw new Error(await apiError(res));
+      const data = await res.json();
+      // Раскрывать нечего — это не ошибка, показываем причину в строке.
+      expandedRows[rowId] = data.expanded || { empty: true, reason: data.reason };
+    } catch (e) {
+      expandedRows[rowId] = { error: e.message };
+    }
+    renderCard();
+  }
+
+  /** Строки раскрытого состава заготовки, с отступом по уровню. */
+  function nestedRows(node, level, colspan) {
+    if (!node) return '';
+    if (node === 'loading') {
+      return '<tr><td colspan="' + colspan + '" class="nm-empty">Загрузка состава…</td></tr>';
+    }
+    if (node.error) {
+      return '<tr><td colspan="' + colspan + '" style="color:#e53935">❌ '
+        + esc(node.error) + '</td></tr>';
+    }
+    if (node.empty || node.cycle) {
+      return '<tr><td colspan="' + colspan + '" class="nm-empty">'
+        + esc(node.reason || 'Раскрывать нечего') + '</td></tr>';
+    }
+
+    const pad = 16 + level * 18;
+    let html = '';
+    if (node.scaleNote) {
+      // Честно говорим, что цифры — за цикл производства, а не расход.
+      html += '<tr><td colspan="' + colspan + '" class="nm-empty" style="padding-left:'
+        + pad + 'px">⚠️ ' + esc(node.scaleNote) + '</td></tr>';
+    }
+    (node.ingredients || []).forEach(function (r, i) {
+      const childId = 'n' + level + '-' + i + '-' + (r.id || r.inventory_item_id);
+      const childOpen = !!expandedRows[childId];
+      const canExpand = !!r.nested;
+      html += '<tr style="background:rgba(0,0,0,0.02)">'
+        + '<td style="padding-left:' + pad + 'px">'
+        + (canExpand
+            ? '<span class="nm-caret' + (childOpen ? ' open' : '') + '" style="cursor:pointer" '
+              + 'onclick="toggleNestedLocal(' + jsArg(childId) + ')">▶</span> '
+            : '<span style="display:inline-block;width:14px"></span>')
+        + '↳ ' + esc(r.name || '—')
+        + (r.is_optional ? ' <span class="nm-type">необяз.</span>' : '')
+        + '</td>'
+        + '<td class="nm-sku">' + esc(r.sku || '—') + '</td>'
+        + '<td>' + (r.package_unit ? esc(r.package_unit) + ' по ' + num(r.package_size, 4) : '—') + '</td>'
+        + '<td>—</td>'
+        + '<td>' + num(r.gross, 4) + ' ' + esc(r.unit || '') + '</td>'
+        + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + num(r.net, 4) + '</td>'
+        + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + num(r.output_weight, 4) + '</td>'
+        + '<td>' + num(r.cost) + ' ₽</td></tr>';
+      // Вложенный уровень уже пришёл в ответе — отдельный запрос не нужен.
+      if (canExpand && childOpen) {
+        html += nestedRows(r.nested, level + 1, colspan);
+      }
+    });
+    return html;
+  }
+
+  /** Раскрытие уровня, который уже загружен: только переключение показа. */
+  function toggleNestedLocal(rowId) {
+    if (expandedRows[rowId]) delete expandedRows[rowId];
+    else expandedRows[rowId] = true;
+    renderCard();
+  }
+
   function cardCooking(c) {
     if (!c.applicable) return notApplicable(c.reason);
     if (!c.card) {
@@ -2037,7 +2124,7 @@ AUTH.requireAuth();
         + '<th>Фасовка</th><th>Упаковок</th><th>Брутто</th>'
         + '<th>Потери хол.</th><th>Нетто</th><th>Потери гор.</th><th>Выход</th>'
         + '<th>Себестоимость</th></tr></thead><tbody>'
-        + c.ingredients.map(function (r) {
+        + c.ingredients.map(function (r, idx) {
             // Нетто, выход и количество упаковок приходят уже посчитанными
             // из v_tech_card_ingredients: формула живёт в одном месте, иначе
             // экраны начинают спорить друг с другом о цифрах.
@@ -2046,7 +2133,18 @@ AUTH.requireAuth();
             const pack = r.package_unit
               ? esc(r.package_unit) + ' по ' + num(r.package_size, 4)
               : '—';
-            return '<tr><td>' + esc(r.name || '—') + (r.is_optional ? ' <span class="nm-type">необяз.</span>' : '')
+            // Шеврон рисуем только там, где есть что раскрыть: has_nested
+            // считает сервер (у заготовки должна быть действующая техкарта),
+            // иначе кнопка вела бы в пустоту.
+            const rowId = 'top-' + (r.id || idx);
+            const open = !!expandedRows[rowId];
+            const caret = r.has_nested
+              ? '<span class="nm-caret' + (open ? ' open' : '') + '" style="cursor:pointer" '
+                + 'onclick="toggleNested(' + jsArg(rowId) + ',' + jsArg(r.inventory_item_id)
+                + ',' + gross + ')" title="Показать состав заготовки">▶</span> '
+              : '<span style="display:inline-block;width:14px"></span>';
+            let out = '<tr><td>' + caret + esc(r.name || '—')
+              + (r.is_optional ? ' <span class="nm-type">необяз.</span>' : '')
               + '</td><td class="nm-sku">' + esc(r.sku || '—') + '</td>'
               + '<td>' + pack + '</td>'
               + '<td>' + (r.packages_count === null || r.packages_count === undefined ? '—' : num(r.packages_count, 4)) + '</td>'
@@ -2054,6 +2152,8 @@ AUTH.requireAuth();
               + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + num(r.net, 4) + '</td>'
               + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + num(r.output_weight, 4) + '</td>'
               + '<td>' + num(cost) + ' ₽</td></tr>';
+            if (open) out += nestedRows(expandedRows[rowId], 1, 10);
+            return out;
           }).join('') + '</tbody></table>'
       : '<div class="nm-empty">В техкарте нет ингредиентов</div>';
 

@@ -110,6 +110,38 @@ router.get('/items/:source/:id/card', authenticateUser, async (req: Request, res
   }
 });
 
+/** Раскрытие вложенной заготовки в строке техкарты. */
+router.get('/items/inventory/:id/expand', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const eid = enterpriseOf(req, res);
+    if (!eid) return;
+    // Расход, под который пересчитывается состав. Без него показали бы
+    // количества за целый цикл производства — это другие цифры.
+    const qtyRaw = Number(req.query.quantity);
+    if (!Number.isFinite(qtyRaw) || qtyRaw <= 0) {
+      return res.status(400).json({ error: 'Укажите расход (quantity) больше нуля' });
+    }
+    const depthRaw = Number(req.query.depth);
+    const depth = Number.isFinite(depthRaw) && depthRaw > 0 ? Math.floor(depthRaw) : 1;
+
+    // Позицию проверяем на принадлежность предприятию отдельно: иначе по
+    // чужому id можно было бы прочитать состав чужой техкарты.
+    const item = await service.getItem(req.params.id, 'inventory', eid);
+    if (!item) return res.status(404).json({ error: 'Позиция не найдена' });
+
+    const expanded = await service.expandNested(req.params.id, eid, qtyRaw, depth);
+    if (!expanded) {
+      // Не заготовка или у неё нет действующей карты — это не ошибка,
+      // просто раскрывать нечего. Пустой ответ с причиной, а не 404.
+      return res.json({ expanded: null, reason: 'У позиции нет действующей техкарты — раскрывать нечего' });
+    }
+    return res.json({ expanded });
+  } catch (error) {
+    console.error('Expand nested tech card error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.put('/items/:source/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
     const eid = enterpriseOf(req, res);

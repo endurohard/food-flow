@@ -400,16 +400,134 @@ export class NomenclatureService {
     // Нетто, выход и количество фасовок считает представление — чтобы
     // формула жила в одном месте и экраны не расходились в цифрах.
     const ing = await this.pool.query(
-      `SELECT id, inventory_item_id, item_name AS name, sku, gross AS quantity, unit,
-              package_unit, package_size, packages_count,
-              cold_loss_percent, hot_loss_percent, net, output_weight,
-              is_optional, cost_price
+      `SELECT v.id, v.inventory_item_id, v.item_name AS name, v.sku, v.item_type,
+              v.gross AS quantity, v.unit,
+              v.package_unit, v.package_size, v.packages_count,
+              v.cold_loss_percent, v.hot_loss_percent, v.net, v.output_weight,
+              v.is_optional, v.cost_price,
+              -- Есть ли у ингредиента своя действующая техкарта: по этому
+              -- признаку экран рисует раскрытие. Проверять только item_type
+              -- недостаточно — заготовка без карты раскрывать нечего, и
+              -- шеврон вёл бы в пустоту.
+              EXISTS (
+                SELECT 1 FROM tech_cards t
+                 WHERE t.output_item_id = v.inventory_item_id
+                   AND t.enterprise_id = $2
+                   AND t.is_active = true
+                   AND t.effective_from <= CURRENT_DATE
+                   AND (t.effective_to IS NULL OR t.effective_to >= CURRENT_DATE)
+              ) AS has_nested
+         FROM v_tech_card_ingredients v
+        WHERE v.tech_card_id = $1
+        ORDER BY v.item_name`,
+      [current.id, enterpriseId]
+    );
+    return { applicable: true, card: current, versions: cards.rows, ingredients: ing.rows };
+  }
+
+  /**
+   * Раскрытие вложенной заготовки: состав техкарты, которая её выпускает.
+   *
+   * Количества МАСШТАБИРУЮТСЯ под фактический расход. Техкарта заготовки
+   * описывает один цикл производства («чашу»): например, 1 кг кимчи из 1.2 кг
+   * капусты. Если в блюдо идёт 0.036 кг кимчи, показывать 1.2 кг капусты —
+   * враньё; верно 1.2 × (0.036 / 1) = 0.0432.
+   *
+   * Только для ПОКАЗА. Списание при продаже берёт заготовку одной строкой по
+   * себестоимости выпуска: она уже сварена и лежит на складе, разбирать её
+   * обратно на сырьё — двойной учёт.
+   */
+  async expandNested(
+    inventoryItemId: string,
+    enterpriseId: string,
+    consumedQty: number,
+    depth = 1
+  ): Promise<any> {
+    // Потолок глубины — защита от бесконечного раскрытия: цикл в составе
+    // запрещён при сохранении карты, но на грязных данных рекурсия иначе
+    // положит сервис.
+    const maxDepth = Math.min(Math.max(Math.floor(depth) || 1, 1), 5);
+    return this.expandLevel(inventoryItemId, enterpriseId, consumedQty, maxDepth, new Set());
+  }
+
+  private async expandLevel(
+    inventoryItemId: string,
+    enterpriseId: string,
+    consumedQty: number,
+    depthLeft: number,
+    seen: Set<string>
+  ): Promise<any> {
+    if (depthLeft <= 0) return null;
+    // Повторная встреча позиции на пути вниз — цикл в данных. Прекращаем
+    // спуск и говорим об этом, а не молча обрываем ветку.
+    if (seen.has(inventoryItemId)) {
+      return { cycle: true, reason: 'Циклический состав: позиция уже встречалась выше по дереву',
+               card: null, ingredients: [] };
+    }
+
+    const cards = await this.pool.query(
+      `SELECT id, name, output_quantity, effective_from, effective_to
+         FROM tech_cards
+        WHERE output_item_id = $1 AND enterprise_id = $2 AND is_active = true
+          AND effective_from <= CURRENT_DATE
+          AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+        ORDER BY effective_from DESC
+        LIMIT 1`,
+      [inventoryItemId, enterpriseId]
+    );
+    if (!cards.rowCount) return null;      // не заготовка — раскрывать нечего
+    const card = cards.rows[0];
+
+    // Выход за цикл: делитель. Ноль или пустое значение означало бы деление
+    // на ноль — показываем состав как есть за один цикл и честно помечаем.
+    const perRun = parseFloat(card.output_quantity);
+    const scalable = Number.isFinite(perRun) && perRun > 0;
+    const factor = scalable ? consumedQty / perRun : 1;
+
+    const rows = await this.pool.query(
+      `SELECT id, inventory_item_id, item_name AS name, sku, item_type, unit,
+              package_unit, package_size, gross, cold_loss_percent, hot_loss_percent,
+              net, output_weight, is_optional, cost_price
          FROM v_tech_card_ingredients
         WHERE tech_card_id = $1
         ORDER BY item_name`,
-      [current.id]
+      [card.id]
     );
-    return { applicable: true, card: current, versions: cards.rows, ingredients: ing.rows };
+
+    const nextSeen = new Set(seen);
+    nextSeen.add(inventoryItemId);
+
+    const ingredients = [];
+    for (const r of rows.rows) {
+      const gross = parseFloat(r.gross) || 0;
+      const scaledGross = gross * factor;
+      const cold = parseFloat(r.cold_loss_percent) || 0;
+      const hot = parseFloat(r.hot_loss_percent) || 0;
+      const net = scaledGross * (1 - cold / 100);
+      ingredients.push({
+        ...r,
+        // Исходные значения карты оставляем рядом: видно, что показан
+        // пересчёт, а не подмена самой техкарты заготовки.
+        gross_per_run: r.gross,
+        gross: Number(scaledGross.toFixed(6)),
+        net: Number(net.toFixed(6)),
+        output_weight: Number((net * (1 - hot / 100)).toFixed(6)),
+        cost: Number((scaledGross * (parseFloat(r.cost_price) || 0)).toFixed(4)),
+        nested: r.item_type === 'prepared'
+          ? await this.expandLevel(r.inventory_item_id, enterpriseId, scaledGross, depthLeft - 1, nextSeen)
+          : null
+      });
+    }
+
+    return {
+      card: { id: card.id, name: card.name, outputQuantity: card.output_quantity },
+      consumedQty,
+      scaled: scalable,
+      // Нечем масштабировать — состав показан за один цикл производства,
+      // и экран обязан об этом сказать, иначе цифры прочтут как расход.
+      scaleNote: scalable ? null : 'У техкарты заготовки не задан выход — состав показан за один цикл производства',
+      ingredients
+    };
   }
 
   // ========== ПРОВЕРКИ ВЛАДЕНИЯ ==========
