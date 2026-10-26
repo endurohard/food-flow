@@ -1447,6 +1447,10 @@ AUTH.requireAuth();
 
     <div id="treeRoot"></div>
     <div id="cashPanel" style="display:none"></div>
+
+    <!-- Карточка позиции с вкладками: разворачивается на месте дерева,
+         без модального окна — встроенный браузер их блокирует. -->
+    <div id="cardPanel" style="display:none"></div>
   </div>
 </div>
 
@@ -1597,7 +1601,8 @@ AUTH.requireAuth();
       + '<td class="nm-actions" style="white-space:nowrap">'
       + (deleted
           ? '<button title="Восстановить" onclick="restoreItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">♻️</button>'
-          : '<button title="Изменить" onclick="openItemForm(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">✏️</button>'
+          : '<button title="Карточка" onclick="openCard(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">📄</button>'
+            + '<button title="Изменить" onclick="openItemForm(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">✏️</button>'
             + '<button title="Удалить" onclick="deleteItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">🗑️</button>')
       + '</td></tr>';
   }
@@ -1882,6 +1887,224 @@ AUTH.requireAuth();
     }
   }
 
+  // ───────── карточка позиции (вкладки) ─────────
+
+  let cardData = null;
+  let cardTab = 'main';
+
+  function num(v, digits) {
+    if (v === null || v === undefined || v === '') return '—';
+    const n = Number(v);
+    return isNaN(n) ? esc(v) : n.toFixed(digits === undefined ? 2 : digits);
+  }
+
+  function dt(v) {
+    if (!v) return '—';
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? esc(v) : d.toLocaleDateString('ru-RU');
+  }
+
+  async function openCard(id, source) {
+    if (!dataSourceOk) { showNotification('⚠️ Нет связи с сервером — карточка недоступна'); return; }
+    document.getElementById('treeRoot').style.display = 'none';
+    document.getElementById('cardPanel').style.display = 'block';
+    document.getElementById('cardPanel').innerHTML = '<div class="nm-empty">Загрузка карточки…</div>';
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id + '/card?days=30');
+      if (!res.ok) throw new Error(await apiError(res));
+      cardData = await res.json();
+      cardTab = 'main';
+      renderCard();
+    } catch (e) {
+      // Ошибка карточки не должна гасить весь экран: дерево остаётся рабочим.
+      document.getElementById('cardPanel').innerHTML =
+        '<div class="nm-error"><div class="nm-error-title">⚠️ Карточка не загружена</div>'
+        + '<div style="color:var(--color-text-primary);line-height:1.5">' + esc(e.message) + '</div>'
+        + '<button class="btn btn-primary" style="margin-top:16px" onclick="closeCard()">← К дереву</button></div>';
+    }
+  }
+
+  function closeCard() {
+    cardData = null;
+    document.getElementById('cardPanel').style.display = 'none';
+    document.getElementById('cardPanel').innerHTML = '';
+    document.getElementById('treeRoot').style.display = 'block';
+  }
+
+  function switchCardTab(tab) {
+    cardTab = tab;
+    renderCard();
+  }
+
+  function cardMain(it) {
+    const rows = [
+      ['Название', esc(it.name)],
+      ['Артикул', esc(it.sku || '—')],
+      ['Тип', esc(TYPE_LABEL[it.item_type] || it.item_type)],
+      ['Единица измерения', esc(it.unit || '—')],
+      ['Категория', esc(it.category || '—')],
+      ['Бухгалтерская категория', esc(it.accounting_category || '—')],
+      ['Налоговая категория', esc(it.tax_category || '—')],
+      ['Продуктовая категория', esc(it.product_category || '—')],
+      ['Место приготовления', esc(it.prep_station || '—')],
+      ['Цена продажи', it.price === null || it.price === undefined ? '—' : num(it.price) + ' ₽'],
+      ['Себестоимость', it.cost_price === null || it.cost_price === undefined ? '—' : num(it.cost_price) + ' ₽'],
+      ['Порядок на кассе', it.cash_order === null || it.cash_order === undefined ? '—' : it.cash_order]
+    ];
+    return '<table class="nm-table"><tbody>'
+      + rows.map(function (r) {
+          return '<tr><td style="width:240px;color:var(--color-text-secondary)">' + r[0] + '</td>'
+            + '<td><b>' + r[1] + '</b></td></tr>';
+        }).join('')
+      + '</tbody></table>';
+  }
+
+  // Раздел, неприменимый к этому типу позиции, показывает причину, а не
+  // пустую таблицу: иначе выглядит как потерянные данные.
+  function notApplicable(reason) {
+    return '<div class="nm-empty">' + esc(reason || 'Раздел неприменим к этой позиции') + '</div>';
+  }
+
+  function cardSales(s, days) {
+    if (!s.applicable) return notApplicable(s.reason);
+    const t = s.total || {};
+    let html = '<div class="nm-empty">За последние ' + days + ' дней: продано <b>' + num(t.qty, 3)
+      + '</b>, выручка <b>' + num(t.revenue) + ' ₽</b>, заказов <b>' + (t.orders || 0) + '</b></div>';
+    if (!s.recent.length) return html + '<div class="nm-empty">Продаж не было</div>';
+    html += '<table class="nm-table"><thead><tr><th>Заказ</th><th>Дата</th><th>Статус</th>'
+      + '<th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>';
+    s.recent.forEach(function (r) {
+      html += '<tr><td>' + esc(r.order_number || '—') + '</td><td>' + dt(r.created_at) + '</td>'
+        + '<td>' + esc(r.status || '—') + '</td><td>' + num(r.quantity, 3) + '</td>'
+        + '<td>' + num(r.unit_price) + '</td><td>' + num(r.subtotal) + '</td></tr>';
+    });
+    return html + '</tbody></table>';
+  }
+
+  function cardPurchase(p) {
+    if (!p.applicable) return notApplicable(p.reason);
+    let html = '<div style="font-weight:600;margin:10px 0 6px">Остатки по складам</div>';
+    html += p.stock.length
+      ? '<table class="nm-table"><thead><tr><th>Склад</th><th>Остаток</th><th>Последняя инвентаризация</th></tr></thead><tbody>'
+        + p.stock.map(function (r) {
+            return '<tr><td>' + esc(r.warehouse) + '</td><td>' + num(r.quantity, 3) + '</td>'
+              + '<td>' + dt(r.last_counted_at) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<div class="nm-empty">Остатков нет</div>';
+
+    html += '<div style="font-weight:600;margin:16px 0 6px">Поставки</div>';
+    html += p.deliveries.length
+      ? '<table class="nm-table"><thead><tr><th>Накладная</th><th>Дата</th><th>Поставщик</th>'
+        + '<th>Кол-во</th><th>Цена за ед.</th><th>Сумма</th></tr></thead><tbody>'
+        + p.deliveries.map(function (r) {
+            return '<tr><td>' + esc(r.invoice_number || '—') + '</td><td>' + dt(r.invoice_date) + '</td>'
+              + '<td>' + esc(r.supplier || '—') + '</td><td>' + num(r.quantity, 3) + ' ' + esc(r.unit || '')
+              + '</td><td>' + num(r.price_per_unit) + '</td><td>' + num(r.total_price) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<div class="nm-empty">Поставок не было</div>';
+
+    html += '<div style="font-weight:600;margin:16px 0 6px">Партии на остатке (FIFO — первой спишется верхняя)</div>';
+    html += p.batches.length
+      ? '<table class="nm-table"><thead><tr><th>Партия</th><th>Склад</th><th>Остаток</th>'
+        + '<th>Себестоимость</th><th>Поступила</th><th>Годна до</th></tr></thead><tbody>'
+        + p.batches.map(function (r) {
+            return '<tr><td>' + esc(r.batch_number || '—') + '</td><td>' + esc(r.warehouse || '—') + '</td>'
+              + '<td>' + num(r.quantity, 3) + '</td><td>' + num(r.cost_price) + '</td>'
+              + '<td>' + dt(r.received_at) + '</td><td>' + dt(r.expiry_date) + '</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<div class="nm-empty">Партий на остатке нет</div>';
+    return html;
+  }
+
+  function cardCooking(c) {
+    if (!c.applicable) return notApplicable(c.reason);
+    if (!c.card) {
+      return '<div class="nm-empty">Техкарты нет. Создать её можно в разделе Меню → Техкарты.</div>';
+    }
+    const k = c.card;
+    let html = '<div class="nm-empty">Техкарта <b>' + esc(k.name || 'без названия') + '</b>'
+      + (k.is_current ? ' <span class="nm-type">действует</span>' : ' <span class="nm-type">не действует сегодня</span>')
+      + ' — с ' + dt(k.effective_from) + (k.effective_to ? ' по ' + dt(k.effective_to) : ' бессрочно')
+      + '. Норма выхода: ' + num(k.yield_weight, 3) + '</div>';
+
+    html += c.ingredients.length
+      ? '<table class="nm-table"><thead><tr><th>Ингредиент</th><th>Артикул</th><th>Брутто</th>'
+        + '<th>Потери хол.</th><th>Нетто</th><th>Потери гор.</th><th>Выход</th>'
+        + '<th>Себестоимость</th></tr></thead><tbody>'
+        + c.ingredients.map(function (r) {
+            // Нетто и выход считаем каскадом, как в миграции 032:
+            // нетто = брутто × (1 - хол/100), выход = нетто × (1 - гор/100).
+            const gross = Number(r.quantity) || 0;
+            const cold = Number(r.cold_loss_percent) || 0;
+            const hot = Number(r.hot_loss_percent) || 0;
+            const net = gross * (1 - cold / 100);
+            const out = net * (1 - hot / 100);
+            const cost = gross * (Number(r.cost_price) || 0);
+            return '<tr><td>' + esc(r.name || '—') + (r.is_optional ? ' <span class="nm-type">необяз.</span>' : '')
+              + '</td><td class="nm-sku">' + esc(r.sku || '—') + '</td>'
+              + '<td>' + num(gross, 4) + ' ' + esc(r.unit || '') + '</td>'
+              + '<td>' + num(cold) + ' %</td><td>' + num(net, 4) + '</td>'
+              + '<td>' + num(hot) + ' %</td><td>' + num(out, 4) + '</td>'
+              + '<td>' + num(cost) + ' ₽</td></tr>';
+          }).join('') + '</tbody></table>'
+      : '<div class="nm-empty">В техкарте нет ингредиентов</div>';
+
+    if (c.versions.length > 1) {
+      html += '<div style="font-weight:600;margin:16px 0 6px">История версий</div>'
+        + '<table class="nm-table"><thead><tr><th>Название</th><th>Действует с</th><th>По</th><th></th></tr></thead><tbody>'
+        + c.versions.map(function (v) {
+            return '<tr><td>' + esc(v.name || '—') + '</td><td>' + dt(v.effective_from) + '</td>'
+              + '<td>' + (v.effective_to ? dt(v.effective_to) : 'бессрочно') + '</td>'
+              + '<td>' + (v.is_current ? '<span class="nm-type">действует</span>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table>';
+    }
+    return html;
+  }
+
+  function renderCard() {
+    if (!cardData) return;
+    const it = cardData.item;
+    const tabs = [
+      ['main', 'ОСНОВНОЕ'],
+      ['sales', 'ПРОДАЖИ' + (cardData.sales.applicable ? '' : ' —')],
+      ['purchase', 'ЗАКУПКА' + (cardData.purchase.applicable ? '' : ' —')],
+      ['cooking', 'ПРИГОТОВЛЕНИЕ']
+    ];
+    let html = '<div class="nm-group"><div class="nm-group-head" style="cursor:default">'
+      + '<span class="nm-group-name">📄 ' + esc(it.name) + '</span>'
+      + '<span class="nm-sku">' + esc(it.sku || '') + '</span>'
+      + '<span class="nm-actions"><button title="К дереву" onclick="closeCard()">✖️</button></span>'
+      + '</div><div class="nm-body">'
+      + '<div class="tabs" style="margin:8px 0 14px">'
+      + tabs.map(function (t) {
+          return '<button class="tab' + (cardTab === t[0] ? ' active' : '') + '" '
+            + 'onclick="switchCardTab(' + jsArg(t[0]) + ')">' + t[1] + '</button>';
+        }).join('')
+      + '</div>';
+
+    if (cardTab === 'main') html += cardMain(it);
+    else if (cardTab === 'sales') html += cardSales(cardData.sales, cardData.periodDays);
+    else if (cardTab === 'purchase') html += cardPurchase(cardData.purchase);
+    else html += cardCooking(cardData.cooking);
+
+    html += '<div style="margin-top:16px;display:flex;gap:10px">'
+      + '<button class="btn btn-primary" onclick="editFromCard()">✏️ Изменить</button>'
+      + '<button class="btn" style="border:1px solid var(--color-grey-3,#ddd)" onclick="closeCard()">← К дереву</button>'
+      + '</div></div></div>';
+    document.getElementById('cardPanel').innerHTML = html;
+  }
+
+  // Правка из карточки: сначала возвращаем дерево, иначе форма сохранения
+  // откроется под скрытым деревом, а после reloadTree карточка покажет
+  // устаревшие данные поверх обновлённого списка.
+  function editFromCard() {
+    if (!cardData) return;
+    const id = cardData.item.id;
+    const source = cardData.item.source;
+    closeCard();
+    openItemForm(id, source);
+  }
+
   // ───────── режим «порядок на кассе» ─────────
 
   function collectSellable() {
@@ -1899,6 +2122,9 @@ AUTH.requireAuth();
 
   function toggleCashMode() {
     cashMode = document.getElementById('cashModeToggle').checked;
+    // Карточку закрываем: иначе она останется висеть поверх панели кассы,
+    // а кнопка «К дереву» вернёт дерево в режиме, где его быть не должно.
+    if (cardData) closeCard();
     document.getElementById('treeRoot').style.display = cashMode ? 'none' : 'block';
     document.getElementById('cashPanel').style.display = cashMode ? 'block' : 'none';
     if (cashMode) renderCashPanel();
@@ -1981,6 +2207,25 @@ AUTH.requireAuth();
     } catch (e) {
       showNotification('❌ Не сохранено: ' + e.message);
     }
+  }
+
+  // ───────── мобильный сайдбар ─────────
+  // Обработчики гамбургера и оверлея заданы в шапке, взятой из menu.html,
+  // а определения там лежат ниже — на этой странице их надо объявить своими,
+  // иначе кнопка меню на телефоне молча не работает.
+  function toggleSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (!sb) return;
+    sb.classList.toggle('mobile-open');
+    if (ov) ov.style.display = sb.classList.contains('mobile-open') ? 'block' : 'none';
+  }
+
+  function closeSidebarMobile() {
+    var sb = document.getElementById('sidebar');
+    var ov = document.getElementById('sidebarOverlay');
+    if (sb) sb.classList.remove('mobile-open');
+    if (ov) ov.style.display = 'none';
   }
 
   // ───────── старт ─────────

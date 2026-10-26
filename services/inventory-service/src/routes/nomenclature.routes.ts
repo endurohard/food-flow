@@ -91,6 +91,25 @@ router.get('/items/:source/:id', authenticateUser, async (req: Request, res: Res
   }
 });
 
+router.get('/items/:source/:id/card', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const eid = enterpriseOf(req, res);
+    if (!eid) return;
+    const source = sourceOf(req, res);
+    if (!source) return;
+    // Период продаж ограничиваем сверху: без потолка запрос по всей истории
+    // заказов крупного предприятия кладёт экран на несколько секунд.
+    const daysRaw = Number(req.query.days);
+    const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(Math.floor(daysRaw), 365) : 30;
+    const card = await service.getCard(req.params.id, source, eid, days);
+    if (!card) return res.status(404).json({ error: 'Позиция не найдена' });
+    return res.json(card);
+  } catch (error) {
+    console.error('Get nomenclature card error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.put('/items/:source/:id', authenticateUser, async (req: Request, res: Response) => {
   try {
     const eid = enterpriseOf(req, res);

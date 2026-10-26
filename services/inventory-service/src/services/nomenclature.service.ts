@@ -280,6 +280,136 @@ export class NomenclatureService {
     }
   }
 
+  // ========== КАРТОЧКА ПОЗИЦИИ ==========
+
+  /**
+   * Полная карточка для экрана с вкладками: основное, продажи, закупка,
+   * приготовление. Собирается одним методом, чтобы фронт не делал пять
+   * запросов и не рисовал вкладки с разъезжающимися данными.
+   *
+   * Разделы, которых у позиции быть не может, возвращаются пустыми, а не
+   * отсутствуют: вкладка должна показать «данных нет», а не исчезнуть.
+   */
+  async getCard(id: string, source: NomenclatureSource, enterpriseId: string, days = 30): Promise<any> {
+    const item = await this.getItem(id, source, enterpriseId);
+    if (!item) return null;
+
+    const [sales, purchase, cooking] = await Promise.all([
+      this.getSales(id, source, enterpriseId, days),
+      this.getPurchase(id, source, enterpriseId),
+      this.getCooking(id, source, enterpriseId)
+    ]);
+    return { item, sales, purchase, cooking, periodDays: days };
+  }
+
+  /** Вкладка ПРОДАЖИ. Только для menu_items: позиции склада не продаются. */
+  private async getSales(id: string, source: NomenclatureSource, enterpriseId: string, days: number) {
+    if (source !== 'menu') {
+      return { applicable: false, reason: 'Позиция склада не продаётся напрямую', total: null, recent: [] };
+    }
+    // Считаем только проведённые заказы: отменённые не продажа.
+    const totals = await this.pool.query(
+      `SELECT COALESCE(SUM(oi.quantity), 0)::numeric AS qty,
+              COALESCE(SUM(oi.subtotal), 0)::numeric AS revenue,
+              COUNT(DISTINCT o.id)::int             AS orders
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+        WHERE oi.menu_item_id = $1
+          AND o.restaurant_id IN (SELECT id FROM restaurants WHERE enterprise_id = $2)
+          AND o.status NOT IN ('cancelled')
+          AND o.created_at >= NOW() - ($3 || ' days')::interval`,
+      [id, enterpriseId, String(days)]
+    );
+    const recent = await this.pool.query(
+      `SELECT o.id AS order_id, o.order_number, o.created_at, o.status,
+              oi.quantity, oi.unit_price, oi.subtotal
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+        WHERE oi.menu_item_id = $1
+          AND o.restaurant_id IN (SELECT id FROM restaurants WHERE enterprise_id = $2)
+        ORDER BY o.created_at DESC
+        LIMIT 20`,
+      [id, enterpriseId]
+    );
+    return { applicable: true, total: totals.rows[0], recent: recent.rows };
+  }
+
+  /** Вкладка ЗАКУПКА. Только для inventory_items: блюда не закупают. */
+  private async getPurchase(id: string, source: NomenclatureSource, enterpriseId: string) {
+    if (source !== 'inventory') {
+      return { applicable: false, reason: 'Блюдо не закупается — закупаются его ингредиенты',
+               stock: [], deliveries: [], batches: [] };
+    }
+    const [stock, deliveries, batches] = await Promise.all([
+      this.pool.query(
+        `SELECT w.id AS warehouse_id, w.name AS warehouse, s.quantity, s.last_counted_at
+           FROM inventory_stock s
+           JOIN warehouses w ON w.id = s.warehouse_id
+          WHERE s.inventory_item_id = $1 AND w.enterprise_id = $2
+          ORDER BY w.name`,
+        [id, enterpriseId]
+      ),
+      this.pool.query(
+        `SELECT si.id AS invoice_id, si.invoice_number, si.invoice_date, si.status,
+                sup.name AS supplier, sii.quantity, sii.unit, sii.price_per_unit, sii.total_price
+           FROM supply_invoice_items sii
+           JOIN supply_invoices si ON si.id = sii.invoice_id
+           LEFT JOIN suppliers sup ON sup.id = si.supplier_id
+          WHERE sii.inventory_item_id = $1 AND si.enterprise_id = $2
+          ORDER BY si.invoice_date DESC NULLS LAST
+          LIMIT 20`,
+        [id, enterpriseId]
+      ),
+      this.pool.query(
+        `SELECT b.id, b.batch_number, b.quantity, b.cost_price, b.received_at,
+                b.expiry_date, b.is_depleted, w.name AS warehouse
+           FROM inventory_batches b
+           LEFT JOIN warehouses w ON w.id = b.warehouse_id
+          WHERE b.inventory_item_id = $1 AND b.enterprise_id = $2 AND b.is_depleted = false
+          ORDER BY b.received_at ASC
+          LIMIT 20`,
+        [id, enterpriseId]
+      )
+    ]);
+    return { applicable: true, stock: stock.rows, deliveries: deliveries.rows, batches: batches.rows };
+  }
+
+  /**
+   * Вкладка ПРИГОТОВЛЕНИЕ: техкарта с ингредиентами.
+   * У блюда карта ищется по menu_item_id, у заготовки — по output_item_id:
+   * заготовка производится техкартой, а не продаётся по ней.
+   */
+  private async getCooking(id: string, source: NomenclatureSource, enterpriseId: string) {
+    const col = source === 'menu' ? 'menu_item_id' : 'output_item_id';
+    const cards = await this.pool.query(
+      `SELECT id, name, yield_weight, output_quantity, cooking_instructions,
+              effective_from, effective_to, is_active,
+              (effective_from <= CURRENT_DATE
+               AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)) AS is_current
+         FROM tech_cards
+        WHERE ${col} = $1 AND enterprise_id = $2
+        ORDER BY effective_from DESC NULLS LAST`,
+      [id, enterpriseId]
+    );
+    if (!cards.rowCount) {
+      return { applicable: true, card: null, versions: [], ingredients: [] };
+    }
+    // Действующая на сегодня, иначе самая свежая: экран всегда показывает
+    // что-то осмысленное, а не пустоту при карте с будущей датой.
+    const current = cards.rows.find((c: any) => c.is_current) || cards.rows[0];
+    const ing = await this.pool.query(
+      `SELECT tci.id, tci.inventory_item_id, ii.name, ii.sku, tci.quantity, tci.unit,
+              tci.cold_loss_percent, tci.hot_loss_percent, tci.is_optional,
+              ii.cost_price
+         FROM tech_card_ingredients tci
+         LEFT JOIN inventory_items ii ON ii.id = tci.inventory_item_id
+        WHERE tci.tech_card_id = $1
+        ORDER BY ii.name`,
+      [current.id]
+    );
+    return { applicable: true, card: current, versions: cards.rows, ingredients: ing.rows };
+  }
+
   // ========== ПРОВЕРКИ ВЛАДЕНИЯ ==========
 
   async groupBelongsTo(groupId: string, enterpriseId: string): Promise<boolean> {
