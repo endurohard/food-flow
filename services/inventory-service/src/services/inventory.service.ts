@@ -320,6 +320,12 @@ export class InventoryService {
     performedBy?: string,
     enterpriseId?: string
   ): Promise<{ deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }>; skipped: string[] }> {
+    // stock_movements.enterprise_id — NOT NULL, поэтому пустой тенант даёт
+    // не внятный отказ, а падение на ограничении уже внутри транзакции.
+    // Проверяем заранее: при internal-вызове тенант обязан прийти в теле.
+    if (!enterpriseId) {
+      throw new Error('Списание невозможно: не передан enterpriseId (контекст предприятия)');
+    }
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');

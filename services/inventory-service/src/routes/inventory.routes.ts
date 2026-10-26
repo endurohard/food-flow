@@ -282,7 +282,8 @@ router.post('/deduct-by-order', authenticateInternal, requireRole('admin', 'owne
     return res.json(result);
   } catch (error: any) {
     if (error.message && (error.message.includes('Недостаточно') ||
-        error.message.includes('Insufficient') || error.message.includes('not found'))) {
+        error.message.includes('Insufficient') || error.message.includes('not found') ||
+        error.message.includes('enterpriseId'))) {
       return res.status(400).json({ error: error.message });
     }
     console.error('Deduct by tech cards error:', error);
