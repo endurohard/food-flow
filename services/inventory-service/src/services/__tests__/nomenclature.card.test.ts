@@ -50,7 +50,7 @@ function makePool(state: {
     if (/FROM tech_cards/.test(sql)) {
       return { rows: state.cards || [], rowCount: (state.cards || []).length };
     }
-    if (/FROM tech_card_ingredients tci/.test(sql)) {
+    if (/FROM v_tech_card_ingredients/.test(sql)) {
       return { rows: state.ingredients || [], rowCount: (state.ingredients || []).length };
     }
     return { rows: [], rowCount: 0 };
@@ -216,7 +216,7 @@ describe('Карточка — вкладка ПРИГОТОВЛЕНИЕ', () =>
       ingredients: [{ name: 'Хлеб', quantity: '2' }]
     });
     const card = await svc(pool).getCard('i1', 'menu', EID);
-    const q = calls.find(c => /FROM tech_card_ingredients tci/.test(c.sql))!;
+    const q = calls.find(c => /FROM v_tech_card_ingredients/.test(c.sql))!;
     expect(q.params[0]).toBe('tc-1');
     expect(card.cooking.ingredients).toHaveLength(1);
   });

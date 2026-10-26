@@ -383,7 +383,7 @@ export class NomenclatureService {
     const col = source === 'menu' ? 'menu_item_id' : 'output_item_id';
     const cards = await this.pool.query(
       `SELECT id, name, yield_weight, output_quantity, cooking_instructions,
-              effective_from, effective_to, is_active,
+              effective_from, effective_to, is_active, write_off_method,
               (effective_from <= CURRENT_DATE
                AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)) AS is_current
          FROM tech_cards
@@ -397,14 +397,16 @@ export class NomenclatureService {
     // Действующая на сегодня, иначе самая свежая: экран всегда показывает
     // что-то осмысленное, а не пустоту при карте с будущей датой.
     const current = cards.rows.find((c: any) => c.is_current) || cards.rows[0];
+    // Нетто, выход и количество фасовок считает представление — чтобы
+    // формула жила в одном месте и экраны не расходились в цифрах.
     const ing = await this.pool.query(
-      `SELECT tci.id, tci.inventory_item_id, ii.name, ii.sku, tci.quantity, tci.unit,
-              tci.cold_loss_percent, tci.hot_loss_percent, tci.is_optional,
-              ii.cost_price
-         FROM tech_card_ingredients tci
-         LEFT JOIN inventory_items ii ON ii.id = tci.inventory_item_id
-        WHERE tci.tech_card_id = $1
-        ORDER BY ii.name`,
+      `SELECT id, inventory_item_id, item_name AS name, sku, gross AS quantity, unit,
+              package_unit, package_size, packages_count,
+              cold_loss_percent, hot_loss_percent, net, output_weight,
+              is_optional, cost_price
+         FROM v_tech_card_ingredients
+        WHERE tech_card_id = $1
+        ORDER BY item_name`,
       [current.id]
     );
     return { applicable: true, card: current, versions: cards.rows, ingredients: ing.rows };

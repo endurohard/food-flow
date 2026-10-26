@@ -84,7 +84,15 @@ describe('Версии техкарты — создание', () => {
     await svc.createVersion('tc-old', { effectiveFrom: '2026-06-01' }, 'e-1');
 
     const ins = client.queries.find((q: any) => /INSERT INTO tech_cards/.test(q.sql));
-    expect(ins.sql).toMatch(/NULL\)/);
+    // Проверяем смысл, а не позицию литерала в строке: effective_to должен
+    // вставляться как NULL. Привязка к «NULL)» ломалась от любой новой
+    // колонки в конце списка, хотя поведение оставалось прежним.
+    const cols = /INSERT INTO tech_cards \(([^)]*)\)/.exec(ins.sql)![1]
+      .split(',').map((c: string) => c.trim());
+    const vals = /VALUES \(([^)]*)\)/.exec(ins.sql)![1]
+      .split(',').map((v: string) => v.trim());
+    expect(cols).toHaveLength(vals.length);
+    expect(vals[cols.indexOf('effective_to')]).toBe('NULL');
   });
 
   it('дата новой версии не может быть раньше текущей', async () => {

@@ -26,6 +26,13 @@ export class TechCardService {
               'unit', tci.unit,
               'coldLossPercent', tci.cold_loss_percent,
               'hotLossPercent', tci.hot_loss_percent,
+              'packageUnit', tci.package_unit,
+              'packageSize', tci.package_size,
+              -- Количество фасовок не хранится: это производная от брутто.
+              -- Хранить её рядом — два источника истины для одной величины,
+              -- и правка брутто мимо формы оставила бы экран с враньём.
+              'packagesCount', CASE WHEN tci.package_size IS NOT NULL AND tci.package_size > 0
+                                    THEN ROUND(tci.quantity / tci.package_size, 4) END,
               'costPrice', ii.cost_price,
               -- Та же средневзвешенная по остатку, что и в getById:
               -- список карточек не должен противоречить открытой карточке
@@ -71,6 +78,10 @@ export class TechCardService {
 
     const ingredients = await this.pool.query(
       `SELECT tci.*, ii.name as item_name, ii.cost_price, ii.unit as item_unit,
+        -- Количество фасовок — производная от брутто, не хранимое поле:
+        -- иначе правка брутто мимо формы оставит на экране старые упаковки.
+        CASE WHEN tci.package_size IS NOT NULL AND tci.package_size > 0
+             THEN ROUND(tci.quantity / tci.package_size, 4) END AS packages_count,
         -- Средневзвешенная цена ОСТАТКА на складе.
         -- ii.cost_price — цена последнего прихода (или последнего выпуска
         -- для своих полуфабрикатов): она затирается каждой накладной, из-за
@@ -153,11 +164,11 @@ export class TechCardService {
 
       const tcResult = await client.query(
         `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name, output_item_id, output_quantity,
-           effective_from, effective_to)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::date, CURRENT_DATE), $9) RETURNING *`,
+           effective_from, effective_to, write_off_method)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::date, CURRENT_DATE), $9, $10) RETURNING *`,
         [data.menuItemId || null, enterpriseId || null, data.yieldWeight || null, data.cookingInstructions || null,
          data.name || null, data.outputItemId || null, data.outputQuantity ?? 1,
-         data.effectiveFrom || null, data.effectiveTo || null]
+         data.effectiveFrom || null, data.effectiveTo || null, data.writeOffMethod || 'ingredients']
       );
       const techCard = tcResult.rows[0];
 
@@ -165,10 +176,13 @@ export class TechCardService {
         for (const ing of data.ingredients) {
           await client.query(
             `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
-               cold_loss_percent, hot_loss_percent, is_optional)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+               cold_loss_percent, hot_loss_percent, is_optional, package_unit, package_size)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [techCard.id, ing.inventoryItemId, ing.quantity, ing.unit || null,
-             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
+             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false,
+             // Фасовка задаётся целиком или не задаётся: половина пары
+             // упирается в CHECK, поэтому пустые значения приводим к NULL.
+             ing.packageUnit || null, ing.packageSize ?? null]
           );
         }
       }
@@ -208,6 +222,7 @@ export class TechCardService {
       if (data.name !== undefined) { fields.push(`name = $${p++}`); values.push(data.name); }
       if (data.outputItemId !== undefined) { fields.push(`output_item_id = $${p++}`); values.push(data.outputItemId); }
       if (data.outputQuantity !== undefined) { fields.push(`output_quantity = $${p++}`); values.push(data.outputQuantity); }
+      if (data.writeOffMethod !== undefined) { fields.push(`write_off_method = $${p++}`); values.push(data.writeOffMethod); }
 
       if (fields.length) {
         values.push(techCardId);
@@ -229,10 +244,11 @@ export class TechCardService {
         for (const ing of data.ingredients) {
           await client.query(
             `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
-               cold_loss_percent, hot_loss_percent, is_optional)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+               cold_loss_percent, hot_loss_percent, is_optional, package_unit, package_size)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [techCardId, ing.inventoryItemId, ing.quantity, ing.unit || null,
-             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
+             ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false,
+             ing.packageUnit || null, ing.packageSize ?? null]
           );
         }
       }
@@ -266,7 +282,7 @@ export class TechCardService {
    */
   async createVersion(
     sourceCardId: string,
-    data: { effectiveFrom: string; ingredients?: any[]; yieldWeight?: number; cookingInstructions?: string; name?: string },
+    data: { effectiveFrom: string; ingredients?: any[]; yieldWeight?: number; cookingInstructions?: string; name?: string; writeOffMethod?: string },
     enterpriseId?: string
   ): Promise<any> {
     const client = await this.pool.connect();
@@ -297,20 +313,24 @@ export class TechCardService {
 
       const created = await client.query(
         `INSERT INTO tech_cards (menu_item_id, enterprise_id, yield_weight, cooking_instructions, name,
-           output_item_id, output_quantity, effective_from, effective_to)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, NULL) RETURNING *`,
+           output_item_id, output_quantity, effective_from, effective_to, write_off_method)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, NULL, $9) RETURNING *`,
         [source.menu_item_id, source.enterprise_id,
          data.yieldWeight ?? source.yield_weight,
          data.cookingInstructions ?? source.cooking_instructions,
          data.name ?? source.name,
-         source.output_item_id, source.output_quantity, data.effectiveFrom]
+         source.output_item_id, source.output_quantity, data.effectiveFrom,
+         // Метод списания наследуется: новая версия той же карты не должна
+         // молча переключиться на списание сырья и начать двойной учёт.
+         data.writeOffMethod ?? source.write_off_method ?? 'ingredients']
       );
       const newCard = created.rows[0];
 
       // Состав: либо новый, либо копия прежнего — версия без ингредиентов
       // ничего не спишет и тихо обнулит учёт по этому блюду
       const ingredients = data.ingredients ?? (await client.query(
-        `SELECT inventory_item_id, quantity, unit, cold_loss_percent, hot_loss_percent, is_optional
+        `SELECT inventory_item_id, quantity, unit, cold_loss_percent, hot_loss_percent, is_optional,
+                package_unit, package_size
          FROM tech_card_ingredients WHERE tech_card_id = $1`, [sourceCardId]
       )).rows.map((r: any) => ({
         inventoryItemId: r.inventory_item_id,
@@ -318,16 +338,21 @@ export class TechCardService {
         unit: r.unit,
         coldLossPercent: r.cold_loss_percent,
         hotLossPercent: r.hot_loss_percent,
-        isOptional: r.is_optional
+        isOptional: r.is_optional,
+        // Фасовку тоже копируем: без неё новая версия показывала бы расход
+        // в килограммах там, где прежняя вела учёт упаковками.
+        packageUnit: r.package_unit,
+        packageSize: r.package_size
       }));
 
       for (const ing of ingredients) {
         await client.query(
           `INSERT INTO tech_card_ingredients (tech_card_id, inventory_item_id, quantity, unit,
-             cold_loss_percent, hot_loss_percent, is_optional)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             cold_loss_percent, hot_loss_percent, is_optional, package_unit, package_size)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [newCard.id, ing.inventoryItemId, ing.quantity, ing.unit || null,
-           ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false]
+           ing.coldLossPercent || 0, ing.hotLossPercent || 0, ing.isOptional || false,
+           ing.packageUnit || null, ing.packageSize ?? null]
         );
       }
 

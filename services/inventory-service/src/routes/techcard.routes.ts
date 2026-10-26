@@ -4,6 +4,26 @@ import { TechCardService } from '../services/techcard.service';
 import { authenticateUser } from '../middleware/auth.middleware';
 import { config } from '../config';
 
+
+/**
+ * Текст отказа по нарушенному CHECK. Разбираем по ИМЕНИ ограничения:
+ * один общий текст на все CHECK'и таблицы врал про даты, когда ошибка была
+ * в методе списания.
+ */
+function checkViolationMessage(error: any): string {
+  const name = String(error.constraint || '');
+  if (name === 'tech_cards_write_off_method_check') {
+    return 'Неизвестный метод списания: допустимы «списывать ингредиенты» или «списывать готовое блюдо»';
+  }
+  if (name === 'tech_cards_finished_needs_output') {
+    return 'Для метода «списывать готовое блюдо» нужно указать позицию выпуска на склад';
+  }
+  if (name === 'tech_card_ingredients_package_check') {
+    return 'Фасовка задаётся парой: название и размер упаковки больше нуля';
+  }
+  return 'Дата окончания действия раньше даты начала';
+}
+
 const router = Router();
 const techCardService = new TechCardService(config.database.url);
 
@@ -54,6 +74,9 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
       name: Joi.string().max(255).optional(),
       outputItemId: Joi.string().uuid().optional(),
       outputQuantity: Joi.number().positive().optional(),
+      // ingredients — при продаже списывается сырьё; finished — списывается
+      // уже готовая позиция (сырьё ушло при выпуске, иначе двойной учёт).
+      writeOffMethod: Joi.string().valid('ingredients', 'finished').optional(),
       // Срок действия версии. Без даты карта действует с сегодня бессрочно.
       effectiveFrom: Joi.string().isoDate().optional(),
       effectiveTo: Joi.string().isoDate().allow(null).optional(),
@@ -68,7 +91,23 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
         // не может исчезнуть полностью.
         coldLossPercent: Joi.number().min(0).max(99.99).optional(),
         hotLossPercent: Joi.number().min(0).max(99.99).optional(),
-        isOptional: Joi.boolean().optional()
+        isOptional: Joi.boolean().optional(),
+        // Фасовка: название и размер задаются только парой. Половина пары
+        // упрётся в CHECK базы и вернётся 500 — отсекаем раньше, с текстом.
+        // Количество фасовок НЕ принимаем: оно считается из брутто, иначе
+        // появляется второй источник истины для одной величины.
+        packageUnit: Joi.string().max(20).allow(null, '').optional(),
+        packageSize: Joi.number().positive().allow(null).optional()
+      }).and('packageUnit', 'packageSize').custom((v, helpers) => {
+        // .and() считается выполненным при packageSize: null — явная
+        // проверка на пустое значение обязательна (та же ловушка, что
+        // с Joi .with() в модификаторах).
+        const hasUnit = v.packageUnit !== undefined && v.packageUnit !== null && v.packageUnit !== '';
+        const hasSize = v.packageSize !== undefined && v.packageSize !== null;
+        if (hasUnit !== hasSize) {
+          return helpers.message({ custom: 'Фасовка задаётся парой: название и размер упаковки' } as any);
+        }
+        return v;
       })).optional()
     }).or('menuItemId', 'outputItemId');
     const { error, value } = schema.validate(req.body);
@@ -89,7 +128,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
       });
     }
     if (error.code === '23514') {
-      return res.status(400).json({ error: 'Дата окончания действия раньше даты начала' });
+      return res.status(400).json({ error: checkViolationMessage(error) });
     }
     console.error('Create tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -117,7 +156,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
       });
     }
     if (error.code === '23514') {
-      return res.status(400).json({ error: 'Дата окончания действия раньше даты начала' });
+      return res.status(400).json({ error: checkViolationMessage(error) });
     }
     console.error('Update tech card error:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -132,6 +171,8 @@ router.post('/:id/versions', authenticateUser, async (req: Request, res: Respons
   try {
     const schema = Joi.object({
       effectiveFrom: Joi.string().isoDate().required(),
+      // Метод наследуется от исходной версии, если не задан явно.
+      writeOffMethod: Joi.string().valid('ingredients', 'finished').optional(),
       name: Joi.string().max(255).optional(),
       yieldWeight: Joi.number().min(0).optional(),
       cookingInstructions: Joi.string().optional(),
@@ -141,7 +182,23 @@ router.post('/:id/versions', authenticateUser, async (req: Request, res: Respons
         unit: Joi.string().max(20).optional(),
         coldLossPercent: Joi.number().min(0).max(99.99).optional(),
         hotLossPercent: Joi.number().min(0).max(99.99).optional(),
-        isOptional: Joi.boolean().optional()
+        isOptional: Joi.boolean().optional(),
+        // Фасовка: название и размер задаются только парой. Половина пары
+        // упрётся в CHECK базы и вернётся 500 — отсекаем раньше, с текстом.
+        // Количество фасовок НЕ принимаем: оно считается из брутто, иначе
+        // появляется второй источник истины для одной величины.
+        packageUnit: Joi.string().max(20).allow(null, '').optional(),
+        packageSize: Joi.number().positive().allow(null).optional()
+      }).and('packageUnit', 'packageSize').custom((v, helpers) => {
+        // .and() считается выполненным при packageSize: null — явная
+        // проверка на пустое значение обязательна (та же ловушка, что
+        // с Joi .with() в модификаторах).
+        const hasUnit = v.packageUnit !== undefined && v.packageUnit !== null && v.packageUnit !== '';
+        const hasSize = v.packageSize !== undefined && v.packageSize !== null;
+        if (hasUnit !== hasSize) {
+          return helpers.message({ custom: 'Фасовка задаётся парой: название и размер упаковки' } as any);
+        }
+        return v;
       })).optional()
     });
     const { error, value } = schema.validate(req.body);

@@ -1752,6 +1752,19 @@ AUTH.requireAuth();
         </div>
 
         <div class="form-group">
+          <label class="form-label">Метод списания:</label>
+          <select class="form-select" id="recipeWriteOffMethod">
+            <option value="ingredients">Списывать ингредиенты</option>
+            <option value="finished">Списывать готовое блюдо</option>
+          </select>
+          <div style="font-size: 12px; color: #888; margin-top: 4px;">
+            «Готовое блюдо» — для продукции, которую готовят партиями заранее:
+            сырьё уже списано при выпуске, со склада уходит сама готовая позиция.
+            Требует заполненного выхода на склад.
+          </div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">Действует с:</label>
           <input type="date" class="form-input" id="recipeEffectiveFrom">
           <div style="font-size: 12px; color: #888; margin-top: 4px;">
@@ -2857,6 +2870,7 @@ AUTH.requireAuth();
       document.getElementById('recipeOutputQuantity').value = '1';
       // Новая карта: дата и история версий не должны тянуться от прошлой
       document.getElementById('recipeEffectiveFrom').value = '';
+      document.getElementById('recipeWriteOffMethod').value = 'ingredients';
       document.getElementById('recipeVersionsBlock').style.display = 'none';
       onRecipeKindChange();
       updateRecipeDishOptions();
@@ -2965,6 +2979,18 @@ AUTH.requireAuth();
           <input type="number" class="form-input ingredient-hot-loss" step="0.1" min="0" max="99.99" value="${preset && preset.hotLossPercent !== undefined && preset.hotLossPercent !== null ? preset.hotLossPercent : 0}">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" title="Название упаковки: упак, бутылка, лоток. Пусто — учёт в базовых единицах">Фасовка:</label>
+          <input type="text" class="form-input ingredient-package-unit" placeholder="упак" value="${preset && preset.packageUnit ? preset.packageUnit : ''}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" title="Сколько базовых единиц в одной упаковке">В упаковке:</label>
+          <input type="number" class="form-input ingredient-package-size" step="0.0001" min="0" placeholder="0" value="${preset && preset.packageSize !== undefined && preset.packageSize !== null ? preset.packageSize : ''}">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" title="Считается из брутто и размера упаковки — отдельно не хранится">Упаковок:</label>
+          <input type="text" class="form-input ingredient-packages-count" readonly tabindex="-1" style="background:var(--color-grey-1,#f7f7f7);" value="">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
           <label class="form-label">Необяз.:</label>
           <input type="checkbox" class="ingredient-optional" style="width:20px;height:20px;"${preset && preset.isOptional ? ' checked' : ''}>
         </div>
@@ -2972,6 +2998,27 @@ AUTH.requireAuth();
       `;
 
       container.appendChild(row);
+
+      // Количество упаковок — производная от брутто, не отдельное поле ввода.
+      // Хранить его было бы вторым источником истины: правка брутто мимо
+      // формы оставила бы на экране неверные упаковки.
+      const recalc = () => updatePackagesCount(row);
+      row.querySelector('.ingredient-quantity').addEventListener('input', recalc);
+      row.querySelector('.ingredient-package-size').addEventListener('input', recalc);
+      recalc();
+    }
+
+    /** Пересчёт «Упаковок» из брутто и размера фасовки. */
+    function updatePackagesCount(row) {
+      const qty = parseFloat(row.querySelector('.ingredient-quantity').value);
+      const size = parseFloat(row.querySelector('.ingredient-package-size').value);
+      const out = row.querySelector('.ingredient-packages-count');
+      // Нулевой размер дал бы Infinity на экране — показываем прочерк.
+      if (!isFinite(qty) || !isFinite(size) || size <= 0) {
+        out.value = '—';
+        return;
+      }
+      out.value = String(Math.round((qty / size) * 10000) / 10000);
     }
 
     function removeIngredientRow(rowId) {
@@ -3009,6 +3056,10 @@ AUTH.requireAuth();
         document.getElementById('recipeDescription').value = tc.cooking_instructions || '';
         document.getElementById('recipeEffectiveFrom').value = tc.effective_from
           ? String(tc.effective_from).slice(0, 10) : '';
+        // Без этой строки метод при открытии всегда показывался бы как
+        // «списывать ингредиенты», и сохранение молча сбрасывало бы его.
+        document.getElementById('recipeWriteOffMethod').value =
+          tc.write_off_method === 'finished' ? 'finished' : 'ingredients';
         await showRecipeVersions(tc.menu_item_id);
 
         (tc.ingredients || []).forEach(ing => addIngredientRow({
@@ -3016,6 +3067,12 @@ AUTH.requireAuth();
           quantity: parseFloat(ing.quantity),
           coldLossPercent: ing.cold_loss_percent !== null && ing.cold_loss_percent !== undefined ? parseFloat(ing.cold_loss_percent) : 0,
           hotLossPercent: ing.hot_loss_percent !== null && ing.hot_loss_percent !== undefined ? parseFloat(ing.hot_loss_percent) : 0,
+          // getById отдаёт строки как есть (tci.*), поэтому имена полей в
+          // snake_case; в списке карточек они приходят в camelCase.
+          packageUnit: ing.package_unit || ing.packageUnit || null,
+          packageSize: ing.package_size !== null && ing.package_size !== undefined
+            ? parseFloat(ing.package_size)
+            : (ing.packageSize !== null && ing.packageSize !== undefined ? parseFloat(ing.packageSize) : null),
           isOptional: !!ing.is_optional
         }));
         if (!(tc.ingredients || []).length) addIngredientRow();
@@ -3037,6 +3094,7 @@ AUTH.requireAuth();
       const name = document.getElementById('recipeName').value.trim();
       const yieldWeightRaw = document.getElementById('recipeYieldWeight').value;
       const cookingInstructions = document.getElementById('recipeDescription').value.trim();
+      const writeOffMethod = document.getElementById('recipeWriteOffMethod').value;
 
       if (kind === 'menu' && !menuItemId) {
         showNotification('⚠️ Выберите блюдо меню');
@@ -3053,16 +3111,44 @@ AUTH.requireAuth();
 
       // Сбор состава
       const ingredients = [];
+      let packageError = null;
       document.querySelectorAll('#recipeIngredientsList .ingredient-row').forEach(row => {
         const inventoryItemId = row.querySelector('.ingredient-select').value;
         const quantity = parseFloat(row.querySelector('.ingredient-quantity').value);
         const coldLossPercent = parseFloat(row.querySelector('.ingredient-cold-loss').value) || 0;
         const hotLossPercent = parseFloat(row.querySelector('.ingredient-hot-loss').value) || 0;
         const isOptional = row.querySelector('.ingredient-optional').checked;
+        const packageUnit = row.querySelector('.ingredient-package-unit').value.trim();
+        const packageSizeRaw = row.querySelector('.ingredient-package-size').value;
+        const packageSize = packageSizeRaw === '' ? null : parseFloat(packageSizeRaw);
         if (inventoryItemId && quantity > 0) {
-          ingredients.push({ inventoryItemId, quantity, coldLossPercent, hotLossPercent, isOptional });
+          const ing = { inventoryItemId, quantity, coldLossPercent, hotLossPercent, isOptional };
+          // Фасовка задаётся парой. Половина пары упёрлась бы в CHECK базы и
+          // вернулась 500 — отсекаем здесь с понятным текстом.
+          const hasUnit = !!packageUnit;
+          const hasSize = packageSize !== null && isFinite(packageSize);
+          if (hasUnit !== hasSize) {
+            packageError = 'Фасовка задаётся парой: укажите и название, и размер упаковки';
+          } else if (hasUnit && packageSize <= 0) {
+            packageError = 'Размер упаковки должен быть больше нуля';
+          } else if (hasUnit) {
+            ing.packageUnit = packageUnit;
+            ing.packageSize = packageSize;
+          }
+          ingredients.push(ing);
         }
       });
+      if (packageError) {
+        showNotification('⚠️ ' + packageError);
+        return;
+      }
+
+      // «Списывать готовое» без позиции выпуска упрётся в CHECK базы.
+      // Говорим об этом до запроса, пока введённое не потерялось.
+      if (writeOffMethod === 'finished' && !outputItemId) {
+        showNotification('⚠️ Для метода «списывать готовое блюдо» укажите товар склада на выходе');
+        return;
+      }
 
       if (ingredients.length === 0) {
         showNotification('⚠️ Добавьте хотя бы один ингредиент');
@@ -3073,6 +3159,9 @@ AUTH.requireAuth();
       if (name) payload.name = name;
       if (cookingInstructions) payload.cookingInstructions = cookingInstructions;
       if (yieldWeightRaw !== '') payload.yieldWeight = parseFloat(yieldWeightRaw);
+      // Метод отправляем всегда: при PUT отсутствие поля оставило бы в базе
+      // прежнее значение, и переключение в форме молча не применялось бы.
+      payload.writeOffMethod = writeOffMethod;
       const effectiveFrom = document.getElementById('recipeEffectiveFrom').value;
       if (effectiveFrom) payload.effectiveFrom = effectiveFrom;
       if (kind === 'menu') {

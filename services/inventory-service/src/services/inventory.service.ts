@@ -370,11 +370,33 @@ export class InventoryService {
       const skipped: string[] = [];
 
       for (const orderItem of orderItems.rows) {
+        // Метод списания и позиция выпуска действующей на дату заказа карты.
+        // Нужны ДО выборки состава: при методе «списывать готовое» сырьё
+        // трогать нельзя — оно ушло со склада ещё в момент выпуска партии,
+        // и повторное списание было бы двойным учётом.
+        const cardMeta = await client.query(
+          `SELECT tc.id, tc.write_off_method, tc.output_item_id, tc.output_quantity,
+                  ii.name AS output_name
+             FROM tech_cards tc
+             LEFT JOIN inventory_items ii ON ii.id = tc.output_item_id
+            WHERE tc.menu_item_id = $1
+              AND tc.is_active = true
+              AND tc.effective_from <= $2
+              AND (tc.effective_to IS NULL OR tc.effective_to >= $2)
+            ORDER BY tc.effective_from DESC
+            LIMIT 1`,
+          [orderItem.menu_item_id, orderItem.order_date]
+        );
+        const card = cardMeta.rows[0] || null;
+        const writeOffFinished = !!card && card.write_off_method === 'finished';
+
         // Get tech card ingredients for this menu item.
         // Берём ОДНУ версию, действовавшую на дату заказа. LIMIT 1 в
         // подзапросе обязателен: без него при нескольких подходящих картах
         // вернулись бы ингредиенты всех сразу и списался двойной комплект.
-        const ingredients = await client.query(
+        const ingredients = writeOffFinished
+          ? { rowCount: 0, rows: [] as any[] }
+          : await client.query(
           `SELECT tci.inventory_item_id, tci.quantity, tci.cold_loss_percent, tci.hot_loss_percent, tci.is_optional,
                   ii.name AS item_name
            FROM tech_card_ingredients tci
@@ -456,8 +478,34 @@ export class InventoryService {
         // У блюда нет техкарты — списывать нечего, это не ошибка.
         // Выбранные модификаторы при этом списать всё равно надо: добавка
         // может иметь свой расход, даже когда у самого блюда карты нет.
-        if (ingredients.rowCount === 0) {
+        if (!card) {
           skipped.push(`menu_item ${orderItem.menu_item_id}: no tech card`);
+        } else if (writeOffFinished) {
+          // Метод «списывать готовое блюдо»: со склада уходит уже готовая
+          // позиция (output_item_id), а не сырьё — его списали при выпуске.
+          // output_quantity — выход за один цикл производства, поэтому
+          // расход на порцию равен ему же: одна продажа снимает один выход.
+          const perPortion = parseFloat(card.output_quantity) || 0;
+          if (perPortion <= 0) {
+            // Карта настроена наполовину: выпуск есть, объём не задан.
+            // Молча списать ноль нельзя — учёт разойдётся незаметно.
+            skipped.push(
+              `menu_item ${orderItem.menu_item_id}: метод «списывать готовое», ` +
+              `но не задан выход (output_quantity) — списание не выполнено`
+            );
+          } else {
+            await deductItem(
+              card.output_item_id,
+              perPortion * orderItem.quantity,
+              card.output_name || 'готовая позиция',
+              false,
+              `Списание готового блюда: ${card.output_name || card.output_item_id}`
+            );
+          }
+        } else if (ingredients.rowCount === 0) {
+          // Карта есть, но состав пуст: списывать нечего. Это не «нет карты»,
+          // и умолчать нельзя — пустая карта тихо обнуляет учёт по блюду.
+          skipped.push(`menu_item ${orderItem.menu_item_id}: техкарта без ингредиентов`);
         }
 
         for (const ing of ingredients.rows) {

@@ -2022,29 +2022,37 @@ AUTH.requireAuth();
       return '<div class="nm-empty">Техкарты нет. Создать её можно в разделе Меню → Техкарты.</div>';
     }
     const k = c.card;
+    const METHOD_LABEL = {
+      ingredients: 'списывать ингредиенты',
+      finished: 'списывать готовое блюдо'
+    };
     let html = '<div class="nm-empty">Техкарта <b>' + esc(k.name || 'без названия') + '</b>'
       + (k.is_current ? ' <span class="nm-type">действует</span>' : ' <span class="nm-type">не действует сегодня</span>')
       + ' — с ' + dt(k.effective_from) + (k.effective_to ? ' по ' + dt(k.effective_to) : ' бессрочно')
-      + '. Норма выхода: ' + num(k.yield_weight, 3) + '</div>';
+      + '. Норма выхода: ' + num(k.yield_weight, 3)
+      + '. Метод списания: <b>' + esc(METHOD_LABEL[k.write_off_method] || k.write_off_method || '—') + '</b></div>';
 
     html += c.ingredients.length
-      ? '<table class="nm-table"><thead><tr><th>Ингредиент</th><th>Артикул</th><th>Брутто</th>'
+      ? '<table class="nm-table"><thead><tr><th>Ингредиент</th><th>Артикул</th>'
+        + '<th>Фасовка</th><th>Упаковок</th><th>Брутто</th>'
         + '<th>Потери хол.</th><th>Нетто</th><th>Потери гор.</th><th>Выход</th>'
         + '<th>Себестоимость</th></tr></thead><tbody>'
         + c.ingredients.map(function (r) {
-            // Нетто и выход считаем каскадом, как в миграции 032:
-            // нетто = брутто × (1 - хол/100), выход = нетто × (1 - гор/100).
+            // Нетто, выход и количество упаковок приходят уже посчитанными
+            // из v_tech_card_ingredients: формула живёт в одном месте, иначе
+            // экраны начинают спорить друг с другом о цифрах.
             const gross = Number(r.quantity) || 0;
-            const cold = Number(r.cold_loss_percent) || 0;
-            const hot = Number(r.hot_loss_percent) || 0;
-            const net = gross * (1 - cold / 100);
-            const out = net * (1 - hot / 100);
             const cost = gross * (Number(r.cost_price) || 0);
+            const pack = r.package_unit
+              ? esc(r.package_unit) + ' по ' + num(r.package_size, 4)
+              : '—';
             return '<tr><td>' + esc(r.name || '—') + (r.is_optional ? ' <span class="nm-type">необяз.</span>' : '')
               + '</td><td class="nm-sku">' + esc(r.sku || '—') + '</td>'
+              + '<td>' + pack + '</td>'
+              + '<td>' + (r.packages_count === null || r.packages_count === undefined ? '—' : num(r.packages_count, 4)) + '</td>'
               + '<td>' + num(gross, 4) + ' ' + esc(r.unit || '') + '</td>'
-              + '<td>' + num(cold) + ' %</td><td>' + num(net, 4) + '</td>'
-              + '<td>' + num(hot) + ' %</td><td>' + num(out, 4) + '</td>'
+              + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + num(r.net, 4) + '</td>'
+              + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + num(r.output_weight, 4) + '</td>'
               + '<td>' + num(cost) + ' ₽</td></tr>';
           }).join('') + '</tbody></table>'
       : '<div class="nm-empty">В техкарте нет ингредиентов</div>';
