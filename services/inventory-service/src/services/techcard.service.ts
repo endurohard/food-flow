@@ -33,7 +33,11 @@ export class TechCardService {
               -- и правка брутто мимо формы оставила бы экран с враньём.
               'packagesCount', CASE WHEN tci.package_size IS NOT NULL AND tci.package_size > 0
                                     THEN ROUND(tci.quantity / tci.package_size, 4) END,
-              'costPrice', ii.cost_price,
+              -- Цена по полному порядку источников (миграция 042):
+              -- партии → справочная → плановая по техкарте выпуска.
+              -- Сырой ii.cost_price здесь давал 0 у заготовки, которую ещё
+              -- не производили, и строка состава показывала 0,00 ₽.
+              'costPrice', item_effective_cost(tci.inventory_item_id),
               -- Та же средневзвешенная по остатку, что и в getById:
               -- список карточек не должен противоречить открытой карточке
               'avgCostPrice', (
@@ -77,7 +81,10 @@ export class TechCardService {
     if (!result.rows[0]) return null;
 
     const ingredients = await this.pool.query(
-      `SELECT tci.*, ii.name as item_name, ii.cost_price, ii.unit as item_unit,
+      `SELECT tci.*, ii.name as item_name, ii.unit as item_unit,
+        -- Цена по полному порядку источников (миграция 042), а не сырой
+        -- ii.cost_price: у заготовки без выпуска он нулевой.
+        item_effective_cost(tci.inventory_item_id) AS cost_price,
         -- Количество фасовок — производная от брутто, не хранимое поле:
         -- иначе правка брутто мимо формы оставит на экране старые упаковки.
         CASE WHEN tci.package_size IS NOT NULL AND tci.package_size > 0
