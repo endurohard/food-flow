@@ -363,6 +363,7 @@
             color: #155724;
         }
     </style>
+    <script src="js/telephony-autolaunch.js"></script>
 </head>
 <body>
 <!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
@@ -677,19 +678,20 @@ AUTH.requireAuth();
 
             <div class="form-group">
                 <label class="form-label">SIP Добавочный номер *</label>
-                <input type="text" class="form-control" id="sip-extension" placeholder="7779" value="7779">
+                <input type="text" class="form-control" id="sip-extension" placeholder="7779">
                 <small style="color: var(--color-text-secondary); font-size: 12px;">Ваш внутренний номер в PBX</small>
             </div>
 
             <div class="form-group">
                 <label class="form-label">SIP Пароль *</label>
-                <input type="password" class="form-control" id="sip-password" placeholder="••••••" value="5TQNF_Srld">
+                <input type="password" class="form-control" id="sip-password" placeholder="••••••" autocomplete="new-password">
+                <small id="sipPasswordHint" style="color: var(--color-text-secondary); font-size: 12px;"></small>
                 <small style="color: var(--color-text-secondary); font-size: 12px;">Пароль для подключения к PBX</small>
             </div>
 
             <div class="form-group">
                 <label class="form-label">Отображаемое имя</label>
-                <input type="text" class="form-control" id="sip-displayName" placeholder="Оператор 1" value="Оператор 1">
+                <input type="text" class="form-control" id="sip-displayName" placeholder="Оператор 1">
                 <small style="color: var(--color-text-secondary); font-size: 12px;">Имя, которое видят другие абоненты</small>
             </div>
 
@@ -697,7 +699,7 @@ AUTH.requireAuth();
 
             <div class="form-group">
                 <label class="form-label">SIP Сервер</label>
-                <input type="text" class="form-control" id="sip-server" placeholder="www.it005.ru" value="www.it005.ru">
+                <input type="text" class="form-control" id="sip-server" placeholder="www.it005.ru">
             </div>
 
             <div class="form-group">
@@ -721,7 +723,7 @@ AUTH.requireAuth();
             </div>
 
             <div style="margin-top: 24px;">
-                <button class="btn btn-primary" onclick="saveProfile()">💾 Сохранить профиль</button>
+                <button class="btn btn-primary" onclick="saveSipSettings()">💾 Сохранить профиль</button>
                 <button class="btn btn-secondary" onclick="testConnection()">🔌 Тест подключения</button>
             </div>
         </div>
@@ -794,6 +796,117 @@ AUTH.requireAuth();
             }
         }
 
+        // ── SIP / телефония ────────────────────────────────────────────
+        // Раньше кнопки ниже вызывали saveProfile/testConnection/manualLaunch,
+        // которых на странице не существовало: нажатие выглядело как «ничего
+        // не происходит», без единой ошибки на экране.
+        // Настройки живут в users.pbx_* и правятся через
+        // PUT /api/users/:id/pbx-settings. Пароль в разметку не подставляется
+        // и с сервера не возвращается в поле — только признак «задан».
+
+        async function loadSipSettings() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) return;
+            try {
+                const res = await AUTH.fetch('/api/users/' + userId + '/pbx-settings');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const d = await res.json();
+                document.getElementById('sip-extension').value = d.pbx_extension || '';
+                document.getElementById('sip-displayName').value = d.pbx_display_name || '';
+                // Пароль не показываем: поле остаётся пустым, а подпись
+                // сообщает, задан он или нет. Пустое поле при сохранении
+                // означает «не менять», а не «стереть».
+                const hint = document.getElementById('sipPasswordHint');
+                if (hint) {
+                    hint.textContent = d.pbx_password
+                        ? 'Пароль задан. Оставьте поле пустым, чтобы не менять его.'
+                        : 'Пароль не задан.';
+                }
+            } catch (e) {
+                showProfileAlert('Не удалось загрузить настройки SIP: ' + e.message, 'error');
+            }
+        }
+
+        async function saveSipSettings() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) {
+                showProfileAlert('Не удалось определить ID пользователя', 'error');
+                return;
+            }
+            const ext = document.getElementById('sip-extension').value.trim();
+            const pwd = document.getElementById('sip-password').value;
+            const body = {
+                pbx_extension: ext,
+                pbx_username: ext,
+                pbx_display_name: document.getElementById('sip-displayName').value.trim()
+            };
+            // Пустой пароль не отправляем вовсе: иначе сохранение формы
+            // затёрло бы рабочий пароль пустым значением.
+            if (pwd) {
+                body.pbx_password = pwd;
+                body.pbx_ws_password = pwd;
+            }
+            try {
+                const res = await AUTH.fetch('/api/users/' + userId + '/pbx-settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    // 403 здесь штатный: менять SIP-настройки может только админ
+                    if (res.status === 403) {
+                        throw new Error('менять настройки SIP может только администратор предприятия');
+                    }
+                    throw new Error(err.message || err.error || 'HTTP ' + res.status);
+                }
+                document.getElementById('sip-password').value = '';
+                showProfileAlert('Настройки SIP сохранены', 'success');
+                await loadSipSettings();
+            } catch (e) {
+                showProfileAlert('Не сохранено: ' + e.message, 'error');
+            }
+        }
+
+        async function testConnection() {
+            // Честная проверка: дёргаем свои же настройки с сервера и
+            // сообщаем, чего не хватает для регистрации. Выдавать «успех»
+            // без реальной проверки нельзя — это враньё на экране.
+            const userId = document.getElementById('userId').value;
+            if (!userId) {
+                showProfileAlert('Не удалось определить ID пользователя', 'error');
+                return;
+            }
+            try {
+                const res = await AUTH.fetch('/api/users/' + userId + '/pbx-settings');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const d = await res.json();
+                const missing = [];
+                if (!d.pbx_extension) missing.push('внутренний номер');
+                if (!d.pbx_password) missing.push('пароль');
+                if (missing.length) {
+                    showProfileAlert('Настройки неполные: не задан ' + missing.join(', ')
+                        + '. Заполните и сохраните.', 'error');
+                    return;
+                }
+                showProfileAlert('Настройки на сервере заполнены (номер ' + d.pbx_extension
+                    + '). Регистрация на АТС проверяется при запуске телефонии.', 'success');
+            } catch (e) {
+                showProfileAlert('Проверка не выполнена: ' + e.message, 'error');
+            }
+        }
+
+        function manualLaunch() {
+            // Лаунчер лежит в js/telephony-autolaunch.js. Если скрипт не
+            // подключён, честно говорим об этом вместо мёртвой кнопки.
+            if (window.telephonyLauncher && typeof window.telephonyLauncher.showTelephonyPanel === 'function') {
+                window.telephonyLauncher.showTelephonyPanel();
+                return;
+            }
+            showProfileAlert('Модуль телефонии не загружен на этой странице — '
+                + 'откройте раздел «Звонки».', 'error');
+        }
+
         function showProfileAlert(msg, type) {
             const el = document.getElementById('profileAlert');
             el.textContent = msg;
@@ -809,7 +922,7 @@ AUTH.requireAuth();
         }
 
         // Initialize
-        loadProfile();
+        loadProfile().then(loadSipSettings);
     </script>
 </div><!-- /main-wrapper -->
 
