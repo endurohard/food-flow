@@ -1089,6 +1089,7 @@
       }
     }
   </style>
+    <script src="js/units.js"></script>
 </head>
 <body>
 <!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
@@ -2084,9 +2085,9 @@ AUTH.requireAuth();
         + '<td class="nm-sku">' + esc(r.sku || '—') + '</td>'
         + '<td>' + (r.package_unit ? esc(r.package_unit) + ' по ' + num(r.package_size, 4) : '—') + '</td>'
         + '<td>—</td>'
-        + '<td>' + num(r.gross, 4) + ' ' + esc(r.unit || '') + '</td>'
-        + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + num(r.net, 4) + '</td>'
-        + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + num(r.output_weight, 4) + '</td>'
+        + '<td>' + Units.qty(r.gross, r.unit) + '</td>'
+        + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + Units.qty(r.net, r.unit) + '</td>'
+        + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + Units.qty(r.output_weight, r.unit) + '</td>'
         + '<td>' + num(r.cost) + ' ₽</td></tr>';
       // Вложенный уровень уже пришёл в ответе — отдельный запрос не нужен.
       if (canExpand && childOpen) {
@@ -2148,9 +2149,9 @@ AUTH.requireAuth();
               + '</td><td class="nm-sku">' + esc(r.sku || '—') + '</td>'
               + '<td>' + pack + '</td>'
               + '<td>' + (r.packages_count === null || r.packages_count === undefined ? '—' : num(r.packages_count, 4)) + '</td>'
-              + '<td>' + num(gross, 4) + ' ' + esc(r.unit || '') + '</td>'
-              + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + num(r.net, 4) + '</td>'
-              + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + num(r.output_weight, 4) + '</td>'
+              + '<td>' + Units.qty(gross, r.unit) + '</td>'
+              + '<td>' + num(r.cold_loss_percent) + ' %</td><td>' + Units.qty(r.net, r.unit) + '</td>'
+              + '<td>' + num(r.hot_loss_percent) + ' %</td><td>' + Units.qty(r.output_weight, r.unit) + '</td>'
               + '<td>' + num(cost) + ' ₽</td></tr>';
             if (open) out += nestedRows(expandedRows[rowId], 1, 10);
             return out;
