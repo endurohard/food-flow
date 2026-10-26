@@ -1557,13 +1557,15 @@ AUTH.requireAuth();
               <th>Поставщик</th>
               <th>Склад</th>
               <th>Сумма</th>
+              <th>Оплачено</th>
+              <th>Долг</th>
               <th>Позиций</th>
               <th>Статус</th>
               <th>Действия</th>
             </tr>
           </thead>
           <tbody id="invoicesTableBody">
-            <tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
+            <tr><td colspan="10" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1671,7 +1673,12 @@ AUTH.requireAuth();
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Номер накладной:</label>
-            <input type="text" class="form-input" id="invoiceNumber" maxlength="100" required>
+            <div style="display:flex;gap:8px;">
+              <input type="text" class="form-input" id="invoiceNumber" maxlength="100" required
+                     placeholder="с бумаги поставщика">
+              <button type="button" class="btn" onclick="generateInvoiceNumber()"
+                      title="Подставить следующий свободный номер — для поставки без документа">🔢</button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Дата накладной:</label>
@@ -3011,7 +3018,7 @@ AUTH.requireAuth();
         fillInvoiceItemsCounts();
       } catch (e) {
         supplierInvoices = [];
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-danger);">Ошибка загрузки накладных: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--color-danger);">Ошибка загрузки накладных: ' + e.message + '</td></tr>';
       }
     }
 
@@ -3038,7 +3045,7 @@ AUTH.requireAuth();
           .toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
 
       if (!supplierInvoices.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Накладных пока нет — создайте накладную от поставщика</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--color-grey-5);">Накладных пока нет — создайте накладную от поставщика</td></tr>';
         return;
       }
 
@@ -3057,17 +3064,55 @@ AUTH.requireAuth();
           ? `<button class="btn btn-small" onclick="openInvoiceItemsModal('${inv.id}')">👁 Позиции</button>`
           : `<button class="btn btn-small btn-secondary" onclick="openInvoiceItemsModal('${inv.id}')">📝 Позиции</button>
              <button class="btn btn-small btn-primary" onclick="confirmSupplierInvoice('${inv.id}')">📥 Принять</button>`;
+        // Долг и оплата имеют смысл только у принятой накладной: по черновику
+        // товар ещё не получен и денег поставщику не должны.
+        const money = v => (parseFloat(v) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2});
+        const paid = parseFloat(inv.paid_amount) || 0;
+        const debt = parseFloat(inv.debt) || 0;
+        const payHtml = !isReceived
+          ? '<span style="color:var(--color-grey-5);">—</span>'
+          : inv.payment_status === 'paid'
+            ? '<span style="color:var(--color-success);">' + money(paid) + ' ₽</span>'
+            : money(paid) + ' ₽';
+        const debtHtml = !isReceived
+          ? '<span style="color:var(--color-grey-5);">—</span>'
+          : debt > 0
+            ? '<strong style="color:var(--color-danger);">' + money(debt) + ' ₽</strong>'
+            : '<span style="color:var(--color-success);">оплачена</span>';
         return `<tr${isReceived ? '' : ' style="opacity:.85"'}>
           <td><strong>${inv.invoice_number || '—'}</strong></td>
           <td>${dateText}</td>
           <td>${inv.supplier_name || '—'}</td>
           <td>${inv.warehouse_name || '—'}</td>
-          <td>${(parseFloat(inv.total_amount) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td>${money(inv.total_amount)} ₽</td>
+          <td>${payHtml}</td>
+          <td>${debtHtml}</td>
           <td>${itemsCount}</td>
           <td>${statusHtml}</td>
           <td style="white-space:nowrap;">${actions}</td>
         </tr>`;
       }).join('');
+    }
+
+    /**
+     * Подставляет следующий свободный номер.
+     * Нужен для поставки без документа: номера, набранные руками, рано или
+     * поздно дублируются, а дубль накладной задваивает долг поставщику.
+     */
+    async function generateInvoiceNumber() {
+      const input = document.getElementById('invoiceNumber');
+      const err = document.getElementById('invoiceError');
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/next-number');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.number) throw new Error('пустой ответ сервера');
+        input.value = data.number;
+        if (err) err.textContent = '';
+      } catch (e) {
+        // Молча оставлять поле пустым нельзя: человек решит, что кнопка мёртвая
+        if (err) err.textContent = 'Не удалось получить номер: ' + e.message;
+      }
     }
 
     // ── Создание накладной ──

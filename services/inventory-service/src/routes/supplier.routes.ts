@@ -98,6 +98,24 @@ router.get('/invoices', authenticateUser, async (req: Request, res: Response) =>
   }
 });
 
+/**
+ * Следующий свободный номер накладной для своего предприятия.
+ * Нужен, когда у поставки нет бумаги со своим номером: вводить номера
+ * руками означает рано или поздно получить дубль и задвоенный долг.
+ */
+router.get('/invoices/next-number', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    if (!req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const number = await supplierService.nextInvoiceNumber(req.enterpriseId);
+    return res.json({ number });
+  } catch (error) {
+    console.error('Next invoice number error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/invoices', authenticateUser, async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';

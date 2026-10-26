@@ -93,6 +93,9 @@ export class SupplierService {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const result = await this.pool.query(
       `SELECT si.*, s.name as supplier_name, w.name as warehouse_name,
+              -- Долг — производная, а не хранимое поле: иначе он разъедется
+              -- с суммой накладной при правке позиций.
+              GREATEST(COALESCE(si.total_amount, 0) - si.paid_amount, 0) AS debt,
               (SELECT COUNT(*) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_count,
               (SELECT COALESCE(SUM(sii.total_price), 0) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_total
        FROM supply_invoices si
@@ -103,6 +106,16 @@ export class SupplierService {
       values
     );
     return result.rows;
+  }
+
+  /**
+   * Следующий номер накладной вида ПР-2026-00001.
+   * Выдаётся функцией БД под блокировкой строки счётчика: два
+   * одновременных приёма не получат одинаковый номер.
+   */
+  async nextInvoiceNumber(enterpriseId: string): Promise<string> {
+    const r = await this.pool.query('SELECT next_invoice_number($1) AS number', [enterpriseId]);
+    return r.rows[0].number;
   }
 
   async createInvoice(data: any, enterpriseId?: string): Promise<any> {
