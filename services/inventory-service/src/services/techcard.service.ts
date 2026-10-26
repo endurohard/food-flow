@@ -93,7 +93,12 @@ export class TechCardService {
           WHERE b.inventory_item_id = tci.inventory_item_id
             AND b.is_depleted = false
             AND b.quantity > 0
-            AND b.cost_price IS NOT NULL) AS avg_cost_price
+            AND b.cost_price IS NOT NULL) AS avg_cost_price,
+        -- Плановая себестоимость по собственной техкарте выпуска (миграция
+        -- 042). Нужна для заготовки, которую ещё ни разу не производили: у
+        -- неё нет ни партий, ни цены прихода — покупать её не у кого, — и
+        -- без этого строка считалась по нулю, занижая себестоимость блюда.
+        item_effective_cost(tci.inventory_item_id) AS effective_cost_price
        FROM tech_card_ingredients tci
        INNER JOIN inventory_items ii ON tci.inventory_item_id = ii.id
        WHERE tci.tech_card_id = $1`,
@@ -398,9 +403,16 @@ export class TechCardService {
       const avg = ing.avg_cost_price !== null && ing.avg_cost_price !== undefined
         ? parseFloat(ing.avg_cost_price)
         : NaN;
+      // Плановая цена по своей техкарте — для заготовки, которую ещё не
+      // производили: партий нет, прихода нет, но стоимость известна из
+      // состава. Без неё строка считалась по нулю.
+      const planned = parseFloat(ing.effective_cost_price);
       const fallback = parseFloat(ing.cost_price) || 0;
-      const unitPrice = Number.isFinite(avg) ? avg : fallback;
-      const priceSource = Number.isFinite(avg) ? 'stock_avg' : 'last_purchase';
+      const unitPrice = Number.isFinite(avg) ? avg
+        : (fallback > 0 ? fallback : (Number.isFinite(planned) ? planned : 0));
+      const priceSource = Number.isFinite(avg) ? 'stock_avg'
+        : (fallback > 0 ? 'last_purchase'
+          : (Number.isFinite(planned) && planned > 0 ? 'planned' : 'none'));
 
       // Брутто → нетто → выход (миграция 032).
       // Деньги считаются от БРУТТО: платим за то, что взяли со склада,

@@ -20,8 +20,13 @@ jest.mock('pg', () => {
  */
 function makeService(card: any, ingredients: any[]) {
   const svc = new TechCardService('postgresql://test');
+  // Запросы пишем в queries: иначе нельзя проверить, что цена заготовки
+  // берётся функцией БД, а не пересчитывается в коде.
+  const queries: { sql: string }[] = [];
   (svc as any).pool = {
+    queries,
     query: jest.fn(async (sql: string) => {
+      queries.push({ sql });
       if (/FROM tech_card_ingredients/.test(sql)) {
         return { rows: ingredients, rowCount: ingredients.length };
       }
@@ -81,6 +86,74 @@ describe('Себестоимость техкарты — источник це�
 
     expect(res.totalCost).toBe(0);
     expect(res.ingredients[0].priceSource).toBe('stock_avg');
+  });
+
+  it('заготовка без партий и без цены прихода считается по плановой', async () => {
+    // Заготовку не покупают — её производят. До первой варки нет ни партий,
+    // ни цены прихода, и строка считалась по нулю: себестоимость ЛЮБОГО
+    // блюда с заготовкой была занижена на её стоимость.
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-k', item_name: 'кимчи фирменный', quantity: '0.036',
+        cold_loss_percent: '0', hot_loss_percent: '0',
+        cost_price: '0', avg_cost_price: null, effective_cost_price: '166.97' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].unitPrice).toBeCloseTo(166.97, 2);
+    expect(res.ingredients[0].priceSource).toBe('planned');
+    expect(res.totalCost).toBeCloseTo(6.01, 2);
+  });
+
+  it('фактическая цена важнее плановой', async () => {
+    // Заготовку уже варили — считать надо по партиям, а не по плану.
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-k', item_name: 'кимчи', quantity: '1',
+        cold_loss_percent: '0', hot_loss_percent: '0',
+        cost_price: '0', avg_cost_price: '180', effective_cost_price: '166.97' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].unitPrice).toBe(180);
+    expect(res.ingredients[0].priceSource).toBe('stock_avg');
+  });
+
+  it('справочная цена важнее плановой', async () => {
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-k', item_name: 'кимчи', quantity: '1',
+        cold_loss_percent: '0', hot_loss_percent: '0',
+        cost_price: '200', avg_cost_price: null, effective_cost_price: '166.97' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].unitPrice).toBe(200);
+    expect(res.ingredients[0].priceSource).toBe('last_purchase');
+  });
+
+  it('без единого источника цены — ноль с явной пометкой, а не молчком', async () => {
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-x', item_name: 'новая позиция', quantity: '1',
+        cold_loss_percent: '0', hot_loss_percent: '0',
+        cost_price: '0', avg_cost_price: null, effective_cost_price: '0' }
+    ]);
+
+    const res = await svc.getCostCalculation('tc-1');
+
+    expect(res.ingredients[0].unitPrice).toBe(0);
+    expect(res.ingredients[0].priceSource).toBe('none');
+  });
+
+  it('цена заготовки запрашивается функцией БД, а не считается в коде', async () => {
+    const svc = makeService(card, [
+      { inventory_item_id: 'i-k', item_name: 'кимчи', quantity: '1',
+        cold_loss_percent: '0', hot_loss_percent: '0',
+        cost_price: '0', avg_cost_price: null, effective_cost_price: '166.97' }
+    ]);
+    await svc.getCostCalculation('tc-1');
+    const q = (svc as any).pool.queries.find((x: any) => /item_effective_cost/.test(x.sql));
+    expect(q).toBeDefined();
   });
 });
 
