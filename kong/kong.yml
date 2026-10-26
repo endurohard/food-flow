@@ -60,6 +60,10 @@ services:
         paths:
           - /api/tech-cards
         strip_path: false
+      - name: nomenclature-routes
+        paths:
+          - /api/nomenclature
+        strip_path: false
 
   - name: delivery-service
     url: http://delivery-service:3004

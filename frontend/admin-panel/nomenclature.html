@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+    <script src="js/auth.js"></script>
+    <script src="js/dish-visual.js"></script>
+  <style>
+    /* ══ Sedap Layout Override ══ */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-family) !important;
+      background: var(--admin-content-bg) !important;
+      color: var(--color-text-primary) !important;
+      min-height: 100vh;
+      display: flex !important;
+      overflow-x: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 250px !important;
+      flex-shrink: 0 !important;
+      background: var(--admin-sidebar-bg) !important;
+      height: 100vh !important;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: 300 !important;
+      box-shadow: 2px 0 8px rgba(0,0,0,.06) !important;
+      transition: transform .2s ease !important;
+      padding-top: 0 !important;
+      border-right: none !important;
+      transform: none !important;
+    }
+    /* hide old open-class behaviour */
+    .sidebar.open { left: 0 !important; transform: none !important; }
+
+    .sidebar-brand {
+      padding: 28px 24px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--admin-sidebar-border);
+    }
+    .sidebar-brand img { height: 40px; width: auto; display: block; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+    .sidebar-nav::-webkit-scrollbar { display: none; }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--color-grey-4);
+      padding: 0 24px 8px;
+      margin-top: 16px;
+    }
+    .nav-section-label:first-child { margin-top: 0; }
+
+    .nav-item {
+      position: relative;
+      display: flex !important;
+      align-items: center;
+      gap: 14px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--color-text-primary) !important;
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent !important;
+      border-left: none !important;
+    }
+    .nav-item:hover { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active { background: var(--admin-sidebar-active-bg) !important; color: var(--color-primary) !important; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: -12px; top: 50%;
+      transform: translateY(-50%);
+      width: 8px; height: 36px;
+      background: var(--admin-sidebar-active-bar);
+      border-radius: 0 20px 20px 0;
+    }
+    .nav-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+    .nav-item span { flex: 1; }
+    .nav-badge {
+      font-size: 11px; font-weight: 600;
+      background: var(--color-danger); color: #fff;
+      border-radius: 20px; padding: 2px 7px;
+      min-width: 20px; text-align: center;
+    }
+
+    /* hide OLD sidebar items (emoji ones) */
+    .sidebar-header, .sidebar-menu, .sidebar-title, .sidebar-item, .sidebar-icon { display: none !important; }
+
+    .sidebar-footer {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--admin-sidebar-border);
+      flex-shrink: 0;
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar {
+      color: var(--color-primary);
+      width: 36px; height: 36px;
+      background: var(--color-primary-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 12px; color: var(--color-grey-5); }
+
+    /* ── SIDEBAR OVERLAY (mobile) ── */
+    .sidebar-overlay {
+      display: none !important;
+      position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299;
+    }
+    .sidebar-overlay.active { display: block !important; }
+
+    /* ── MAIN WRAPPER ── */
+    .main-wrapper {
+      margin-left: 250px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      min-width: 0;
+    }
+
+    /* hide OLD navbar */
+    .navbar { display: none !important; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: var(--admin-topbar-bg);
+      border-bottom: 1px solid var(--admin-topbar-border);
+      padding: 0 30px;
+      height: 72px;
+      display: flex !important;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .topbar-hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: var(--color-text-primary); padding: 4px; border-radius: 4px;
+    }
+    .topbar-hamburger:hover { background: var(--admin-content-bg); }
+    .topbar-search { flex: 1; max-width: 360px; position: relative; }
+    .topbar-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-text-placeholder); width: 18px; height: 18px; }
+    .topbar-search input {
+      width: 100%; height: 42px; background: var(--admin-content-bg);
+      border: 1px solid var(--admin-topbar-border); border-radius: 8px;
+      padding: 0 16px 0 42px; font-family: var(--font-family); font-size: 14px;
+      color: var(--color-text-primary); outline: none; transition: border-color .15s;
+    }
+    .topbar-search input::placeholder { color: var(--color-text-placeholder); }
+    .topbar-search input:focus { border-color: var(--color-primary); }
+    .topbar-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .notif-group { display: flex; align-items: center; gap: 8px; }
+    .notif-btn {
+      position: relative; width: 40px; height: 40px; border-radius: 50%; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: filter .15s;
+    }
+    .notif-btn svg { width: 20px; height: 20px; }
+    .notif-btn.green  { background: var(--color-success-light); color: var(--color-primary); }
+    .notif-btn.blue   { background: var(--color-info-light);    color: var(--color-info);    }
+    .notif-btn.red    { background: var(--color-danger-light);  color: var(--color-danger);  }
+    .notif-btn.yellow { background: var(--color-warning-light); color: #c9a200;              }
+    .notif-btn:hover { filter: brightness(.92); }
+    .notif-count {
+      position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px;
+      border-radius: 50%; font-size: 10px; font-weight: 700; color: #fff;
+      display: flex; align-items: center; justify-content: center; padding: 0 4px; border: 2px solid #fff;
+    }
+    .notif-count.green  { background: var(--color-primary); }
+    .notif-count.blue   { background: var(--color-info);    }
+    .notif-count.red    { background: var(--color-danger);  }
+    .notif-count.yellow { background: var(--color-warning); }
+    .topbar-user {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px;
+      border-radius: 50px; cursor: pointer; transition: background .15s; text-decoration: none;
+    }
+    .topbar-user:hover { background: var(--admin-content-bg); }
+    .topbar-avatar {
+      color: var(--color-primary);
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-primary-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .topbar-user-text { display: flex; flex-direction: column; }
+    .topbar-user-greeting { font-size: 11px; color: var(--color-grey-5); line-height: 1; }
+    .topbar-user-name { font-size: 14px; font-weight: 600; color: var(--color-text-dark); line-height: 1.3; }
+
+    /* ── Content wrapper that used to start at top ── */
+    /* Push old container below topbar via main-wrapper */
+    .container {
+      padding: 30px !important;
+    }
+
+    /* ── Sedap card style override ── */
+    .card, .stat-card, .controls, .table-card, .section-card, .form-section, .settings-section {
+      background: var(--admin-card-bg) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 4px 4px rgba(0,0,0,.04) !important;
+      border: none !important;
+    }
+
+    /* ── Button primary ── */
+    .btn-primary, button[style*="background: var(--color-primary)"], button[style*="background:var(--color-primary)"],
+    button[style*="background: #667"], button[style*="background: linear"] {
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+    }
+
+    /* ── Color text overrides ── */
+    h1, h2, h3, .title, .page-title { color: var(--color-text-dark) !important; font-family: var(--font-family) !important; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-250px) !important; }
+      .sidebar.mobile-open { transform: translateX(0) !important; }
+      .main-wrapper { margin-left: 0 !important; }
+      .topbar-hamburger { display: flex !important; }
+      .topbar-search { max-width: 200px; }
+      .topbar-user-text { display: none; }
+    }
+  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление меню - FoodFlow</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Navbar */
+    .navbar {
+      background: var(--admin-card-bg);
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--admin-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .menu-toggle:hover {
+      background: var(--admin-content-bg);
+    }
+
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: -280px;
+      top: 0;
+      width: 280px;
+      height: 100vh;
+      background: var(--admin-card-bg);
+      border-right: 1px solid var(--admin-border);
+      transition: left 0.3s ease;
+      z-index: 200;
+      overflow-y: auto;
+      padding-top: 70px;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 150;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--admin-border);
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-grey-5);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-menu {
+      padding: 12px 0;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      color: var(--color-text-secondary);
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+
+    .sidebar-item:hover {
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+    }
+
+    .sidebar-item.active {
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
+    }
+
+    .sidebar-icon {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Container */
+    .container {
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    @media (min-width: 768px) {
+      .container {
+        padding: 32px;
+      }
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+    }
+
+    @media (min-width: 768px) {
+      .title {
+        font-size: 32px;
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--admin-border);
+      padding-bottom: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tabs::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .tabs::-webkit-scrollbar-track {
+      background: var(--admin-content-bg);
+    }
+
+    .tabs::-webkit-scrollbar-thumb {
+      background: var(--color-grey-3);
+      border-radius: 2px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -14px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .tab {
+        font-size: 16px;
+        padding: 12px 24px;
+      }
+    }
+
+    .tab:hover {
+      color: var(--color-text-primary);
+    }
+
+    .tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-primary-hover);
+      box-shadow: 0 4px 12px rgba(0, 176, 116, 0.25);
+    }
+
+    .btn-secondary {
+      background: var(--admin-card-bg);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--admin-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--admin-content-bg);
+    }
+
+    .btn-success {
+      background: var(--color-success);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: var(--color-success);
+    }
+
+    .btn-warning {
+      background: var(--color-warning);
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: var(--color-warning);
+    }
+
+    .btn-danger {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: var(--color-danger);
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .stats-bar {
+        gap: 16px;
+      }
+    }
+
+    .stat-card {
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .stat-icon {
+      font-size: 24px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .stat-icon {
+        font-size: 32px;
+        width: 50px;
+        height: 50px;
+      }
+    }
+
+    .stat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stat-label {
+      color: var(--color-grey-5);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+    }
+
+    @media (min-width: 768px) {
+      .stat-value {
+        font-size: 28px;
+      }
+    }
+
+    .content-layout {
+      display: grid;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .content-layout {
+        grid-template-columns: 280px 1fr;
+      }
+    }
+
+    /* Categories Sidebar */
+    .categories-sidebar {
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 16px;
+      padding: 20px;
+      height: fit-content;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (min-width: 1024px) {
+      .categories-sidebar {
+        position: sticky;
+        top: 100px;
+      }
+    }
+
+    .sidebar-header-cat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .sidebar-title-cat {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+    }
+
+    .category-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--color-text-secondary);
+    }
+
+    .category-item:hover {
+      background: var(--admin-content-bg);
+    }
+
+    .category-item.active {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .category-count {
+      background: var(--admin-content-bg);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+
+    .category-item.active .category-count {
+      background: rgba(255, 255, 255, 0.25);
+      color: white;
+    }
+
+    /* Dishes Grid */
+    .dishes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .dishes-grid {
+        gap: 20px;
+      }
+    }
+
+    .dish-card {
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .dish-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .dish-image {
+      width: 100%;
+      height: 160px;
+      background: var(--admin-content-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      position: relative;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    /* Фото и значок блюда в окне редактирования */
+    .dish-visual-editor { display: flex; flex-direction: column; gap: 14px; }
+    .dish-visual-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .dish-visual-preview { width: 96px; height: 96px; border-radius: 12px; overflow: hidden; flex: none; border: 1px solid var(--admin-border); }
+    .dish-visual-actions { display: flex; flex-direction: column; gap: 8px; }
+    .dish-visual-hint { font-size: 12px; color: var(--color-text-secondary); }
+    .dish-icon-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+    @media (max-width: 560px) { .dish-icon-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .dish-icon-btn { height: 48px; border-radius: 10px; border: 1px solid var(--admin-border); background: var(--admin-card-bg); color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .dish-icon-btn[aria-pressed="true"] { border: 2px solid var(--color-primary); background: var(--color-primary-light); color: var(--color-primary); }
+    .dish-tint-row { display: flex; align-items: center; gap: 10px; }
+    .dish-tint-btn { width: 32px; height: 32px; border-radius: 16px; border: 1px solid var(--color-grey-4); cursor: pointer; }
+    .dish-tint-btn[aria-pressed="true"] { border: 2px solid var(--color-text-primary); box-shadow: inset 0 0 0 2px var(--admin-card-bg); }
+
+    @media (min-width: 768px) {
+      .dish-image {
+        height: 200px;
+        font-size: 64px;
+      }
+    }
+
+    .dish-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-new {
+      background: var(--color-success);
+      color: white;
+    }
+
+    .badge-hot {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    .badge-sale {
+      background: var(--color-warning);
+      color: white;
+    }
+
+    .dish-content {
+      padding: 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dish-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin-bottom: 8px;
+    }
+
+    .dish-description {
+      color: var(--color-text-secondary);
+      font-size: 13px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .dish-info {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .info-tag {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--admin-content-bg);
+      color: var(--color-text-secondary);
+    }
+
+    .dish-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--admin-border);
+      margin-top: auto;
+    }
+
+    .dish-price {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .dish-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stop-list-badge {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+    }
+
+    .stop-list-text {
+      color: var(--color-danger);
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+    }
+
+    @media (min-width: 768px) {
+      .modal-title {
+        font-size: 24px;
+      }
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--color-grey-5);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .close-btn:hover {
+      color: var(--color-text-secondary);
+    }
+
+    .form-row {
+      display: grid;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      color: var(--color-text-secondary);
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 8px;
+      color: var(--color-text-primary);
+      font-size: 14px;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .form-checkbox input {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 8px;
+      color: var(--color-text-primary);
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px var(--color-primary-light);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-grey-5);
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: var(--admin-card-bg);
+      border: 1px solid var(--admin-border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      max-width: calc(100% - 40px);
+      color: var(--color-text-primary);
+    }
+
+    .notification.show {
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .modifiers-list, .modifier-item, .size-selector, .size-option,
+    .price-schemes, .price-scheme-card, .scheme-header {
+      /* Стили для модификаторов и схем цен */
+    }
+
+    .modifier-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: var(--admin-content-bg);
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .modifier-name {
+      font-weight: 600;
+      color: var(--color-text-primary);
+      font-size: 14px;
+    }
+
+    .modifier-price {
+      color: var(--color-primary);
+      font-size: 13px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1023px) {
+      .categories-sidebar {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+<!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebarMobile()"></div>
+
+<!-- ══════════════ SIDEBAR (Sedap) ══════════════ -->
+<aside class="sidebar" id="sidebar">
+
+  <!-- Logo -->
+  <a href="/admin-panel/dashboard.html" class="sidebar-brand">
+    <img src="../assets/logo.png" alt="FoodFlow" style="height: 40px; width: auto;">
+  </a>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Главное</div>
+
+    <a href="/admin-panel/pos.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M2 9h16"/><path d="M6 13h3"/></svg>
+      <span>Касса</span>
+    </a>
+
+
+    <a href="/admin-panel/dashboard.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>
+      <span>Панель</span>
+    </a>
+
+    <a href="/admin-panel/orders.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/></svg>
+      <span>Заказы</span>
+      <span class="nav-badge" id="navOrdersBadge" style="display:none"></span>
+    </a>
+
+    <a href="/admin-panel/menu.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v4a3 3 0 003 3 3 3 0 003-3V2"/><path d="M10 9v9"/><path d="M4 2v16"/><path d="M4 8h4"/></svg>
+      <span>Меню</span>
+    </a>
+
+    <a href="/admin-panel/nomenclature.html" class="nav-item active">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h4M3 10h4M3 16h4"/><path d="M9 4h8M9 10h8M9 16h8"/></svg>
+      <span>Номенклатура</span>
+    </a>
+
+    <a href="/admin-panel/tables.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M2 13h16M7 8v9"/></svg>
+      <span>Столы</span>
+    </a>
+
+    <div class="nav-section-label">Управление</div>
+
+    <a href="/admin-panel/inventory.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4H3a1 1 0 00-1 1v1a1 1 0 001 1h14a1 1 0 001-1V5a1 1 0 00-1-1z"/><path d="M3 6v9a2 2 0 002 2h10a2 2 0 002-2V6"/><path d="M8 10h4"/></svg>
+      <span>Склад</span>
+    </a>
+    <a href="/admin-panel/wholesale.html" class="nav-item">
+      <!-- Truck / wholesale icon -->
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 4h11v9H1z"/>
+        <path d="M12 7h4l3 3v3h-7"/>
+        <circle cx="5" cy="15.5" r="1.5"/>
+        <circle cx="15" cy="15.5" r="1.5"/>
+      </svg>
+      <span>Опт</span>
+    </a>
+    <a href="/admin-panel/finance.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="18" height="13" rx="2"/><path d="M1 8h18"/><circle cx="15.5" cy="13" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Финансы</span>
+    </a>
+
+    <a href="/admin-panel/enterprises.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18V8l8-6 8 6v10"/><path d="M8 18v-6h4v6"/></svg>
+      <span>Предприятия</span>
+    </a>
+
+    <a href="/admin-panel/loyalty.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="3"/><path d="M1 18v-1a6 6 0 0112 0v1"/><path d="M15 5a3 3 0 010 6"/><path d="M19 18v-1a4 4 0 00-4-4"/></svg>
+      <span>CRM</span>
+    </a>
+
+    <a href="/admin-panel/staff.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/></svg>
+      <span>Персонал</span>
+    </a>
+
+    <a href="/admin-panel/kds.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 17h6M10 14v3"/></svg>
+      <span>KDS</span>
+    </a>
+
+    <a href="/admin-panel/calls.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4l2 5-2.5 1.5a11 11 0 005 5L13 12l5 2v4a1 1 0 01-1 1C7 19 1 13 1 4a1 1 0 011-1z"/></svg>
+      <span>Звонки</span>
+    </a>
+
+    <a href="/admin-panel/hall-designer.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="18" height="18" rx="2"/><path d="M1 7h18M1 13h18M7 1v18"/></svg>
+      <span>Дизайнер зала</span>
+    </a>
+
+    <a href="/admin-panel/index.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="12" rx="2"/><path d="M7 18h6M5 14v4M15 14v4M3 8h14"/></svg>
+      <span>Принтеры</span>
+    </a>
+
+    <div class="nav-section-label">Анализ</div>
+
+    <a href="/admin-panel/analytics.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l4-6 4 3 4-8 4 4"/><path d="M2 18h16"/></svg>
+      <span>Аналитика</span>
+    </a>
+
+    <a href="/admin-panel/settings.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>
+      <span>Настройки</span>
+    </a>
+  </nav>
+
+  <!-- Sidebar footer -->
+  <div class="sidebar-footer">
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+        </svg>
+      </div>
+      <div class="sidebar-user-info">
+        <div class="sidebar-user-name" id="sidebarUserName">Admin</div>
+        <div class="sidebar-user-role">Администратор</div>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<script>
+AUTH.requireAuth();
+
+(function applyRoleUI() {
+  var role = AUTH.getRole();
+
+  // Role-based sidebar visibility using .nav-item links
+  if (role === 'cashier') {
+    // Кассир видит только кассу — ничего кроме оформления продаж
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('pos')) el.style.display = 'none';
+    });
+  } else if (role === 'chef') {
+    // chef sees only KDS
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!href.includes('kds')) el.style.display = 'none';
+    });
+  } else if (role === 'waiter') {
+    // waiter sees orders, tables, KDS
+    var allowed = ['pos', 'orders', 'tables', 'kds'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'viewer') {
+    // viewer sees dashboard and analytics only
+    var allowed = ['dashboard', 'analytics'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  } else if (role === 'operator') {
+    // operator sees orders, tables, KDS, inventory, calls, dashboard
+    var allowed = ['pos', 'orders', 'tables', 'kds', 'inventory', 'calls', 'dashboard'];
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+      var href = el.getAttribute('href') || '';
+      if (!allowed.some(function(p) { return href.includes(p); })) el.style.display = 'none';
+    });
+  }
+  // manager / owner / admin — no filtering
+
+  // Add logout button inside .sidebar-footer (after user info)
+  var footer = document.querySelector('.sidebar-footer');
+  if (footer && !footer.querySelector('.ff-logout-btn')) {
+    var user = AUTH.getUser();
+    var displayName = (user && (user.first_name || user.email)) || '';
+    var logoutDiv = document.createElement('div');
+    logoutDiv.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.08))';
+    logoutDiv.innerHTML = (displayName ? '<div style="font-size:12px;color:var(--color-grey-5);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + displayName + '</div>' : '') +
+      '<button class="ff-logout-btn" onclick="AUTH.logout()" ' +
+      'style="width:100%;padding:8px 12px;background:transparent;border:1px solid var(--admin-sidebar-border,rgba(0,0,0,0.12));border-radius:6px;color:var(--color-text-secondary,var(--color-text-secondary));cursor:pointer;font-size:13px;font-family:inherit;text-align:left;transition:background .15s"' +
+      ' onmouseover="this.style.background=\'var(--admin-sidebar-active-bg,rgba(0,176,116,0.07))\'"' +
+      ' onmouseout="this.style.background=\'transparent\'">' +
+      'Выйти из системы</button>';
+    footer.appendChild(logoutDiv);
+  }
+})();
+</script>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main-wrapper">
+
+  <!-- ── TOP NAVBAR (Sedap) ── -->
+  <header class="topbar">
+    <button class="topbar-hamburger" onclick="toggleSidebarMobile()" aria-label="Меню">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+
+    <div class="topbar-search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l3 3"/>
+      </svg>
+      <input type="text" placeholder="Поиск...">
+    </div>
+
+    <div class="topbar-right">
+      <div class="notif-group">
+        <button class="notif-btn green" title="Новые заказы">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v12a1 1 0 001 1h12a1 1 0 001-1V6l-3-4z"/><path d="M3 6h14"/><path d="M13 10a3 3 0 01-6 0"/>
+          </svg>
+          <span class="notif-count green" id="topbarOrderCount">0</span>
+        </button>
+        <button class="notif-btn blue" title="Сообщения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/>
+          </svg>
+          <span class="notif-count blue">3</span>
+        </button>
+        <button class="notif-btn red" title="Предупреждения">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 2L2 17h16L10 2z"/><path d="M10 8v4"/><circle cx="10" cy="14.5" r="0.5" fill="currentColor"/>
+          </svg>
+          <span class="notif-count red">1</span>
+        </button>
+        <button class="notif-btn yellow" title="Задачи">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="16" height="16" rx="2"/><path d="M6 10l3 3 5-5"/>
+          </svg>
+          <span class="notif-count yellow">7</span>
+        </button>
+      </div>
+
+      <a href="/admin-panel/user-profile.html" class="topbar-user">
+        <div class="topbar-avatar">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="6" r="4"/><path d="M2 18v-1a7 7 0 0114 0v1"/>
+          </svg>
+        </div>
+        <div class="topbar-user-text">
+          <span class="topbar-user-greeting">Привет,</span>
+          <span class="topbar-user-name" id="topbarUserName">Admin</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container">
+    <div class="header">
+      <h1 class="title">📒 Номенклатура</h1>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label class="nm-toggle" title="Порядок позиций на кассе вместо дерева групп">
+          <input type="checkbox" id="cashModeToggle" onchange="toggleCashMode()">
+          <span>Режим: порядок на кассе</span>
+        </label>
+        <label class="nm-toggle">
+          <input type="checkbox" id="showDeletedToggle" onchange="reloadTree()">
+          <span>Показать удалённые</span>
+        </label>
+        <button class="btn btn-primary" onclick="openGroupForm(null)">➕ Группа</button>
+      </div>
+    </div>
+
+    <!-- Вкладки по типу позиции -->
+    <div class="tabs">
+      <button class="tab active" data-type="" onclick="switchType('')">📋 Всё</button>
+      <button class="tab" data-type="dish" onclick="switchType('dish')">🍕 Блюда</button>
+      <button class="tab" data-type="good" onclick="switchType('good')">📦 Товары</button>
+      <button class="tab" data-type="prepared" onclick="switchType('prepared')">🥣 Заготовки</button>
+    </div>
+
+    <div style="margin:0 0 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="searchInput" placeholder="Поиск по названию или артикулу"
+             oninput="onSearchInput()"
+             style="flex:1;min-width:220px;padding:10px 14px;border:1px solid var(--color-grey-3,#ddd);border-radius:8px;font-family:inherit;font-size:14px">
+      <span id="countBadge" style="color:var(--color-text-secondary);font-size:13px"></span>
+    </div>
+
+    <!-- Inline-форма группы: модальных диалогов браузера здесь нет -->
+    <div id="groupForm" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--color-grey-3,#ddd);border-radius:10px;background:var(--color-white,#fff)">
+      <div style="font-weight:700;margin-bottom:12px" id="groupFormTitle">Новая группа</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Название*</span>
+          <input type="text" id="groupName" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Артикул</span>
+          <input type="text" id="groupSku" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Родительская группа</span>
+          <select id="groupParent" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
+        </label>
+      </div>
+      <div id="groupFormError" style="display:none;margin-top:10px;color:#e53935;font-size:13px"></div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="saveGroup()">Сохранить</button>
+        <button class="btn" onclick="closeGroupForm()" style="border:1px solid var(--color-grey-3,#ddd)">Отмена</button>
+      </div>
+    </div>
+
+    <!-- Inline-форма позиции -->
+    <div id="itemForm" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--color-grey-3,#ddd);border-radius:10px;background:var(--color-white,#fff)">
+      <div style="font-weight:700;margin-bottom:12px" id="itemFormTitle">Позиция</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Название*</span>
+          <input type="text" id="itemName" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Артикул</span>
+          <input type="text" id="itemSku" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Тип</span>
+          <select id="itemType" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Группа</span>
+          <select id="itemGroup" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Бухгалтерская категория</span>
+          <input type="text" id="itemAccounting" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Налоговая категория</span>
+          <input type="text" id="itemTax" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Продуктовая категория</span>
+          <input type="text" id="itemProduct" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+        <label style="display:block" id="itemUnitWrap">
+          <span style="font-size:12px;color:var(--color-text-secondary)">Единица измерения</span>
+          <input type="text" id="itemUnit" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+        </label>
+      </div>
+      <div id="itemFormError" style="display:none;margin-top:10px;color:#e53935;font-size:13px"></div>
+      <div style="margin-top:12px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="saveItem()">Сохранить</button>
+        <button class="btn" onclick="closeItemForm()" style="border:1px solid var(--color-grey-3,#ddd)">Отмена</button>
+      </div>
+    </div>
+
+    <div id="treeRoot"></div>
+    <div id="cashPanel" style="display:none"></div>
+  </div>
+</div>
+
+<div id="notification" class="notification"></div>
+
+<style>
+  .nm-toggle { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;
+               color:var(--color-text-secondary); user-select:none; }
+  .nm-toggle input { width:16px; height:16px; cursor:pointer; }
+  .nm-group { border:1px solid var(--color-grey-3,#e5e5e5); border-radius:10px; margin-bottom:10px;
+              background:var(--color-white,#fff); overflow:hidden; }
+  .nm-group-head { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
+                   background:var(--admin-sidebar-active-bg,rgba(0,0,0,0.02)); }
+  .nm-group-head:hover { background:rgba(0,0,0,0.04); }
+  .nm-caret { width:14px; display:inline-block; transition:transform .15s; color:var(--color-text-secondary); }
+  .nm-caret.open { transform:rotate(90deg); }
+  .nm-group-name { font-weight:600; flex:1; }
+  .nm-sku { font-size:12px; color:var(--color-text-secondary); font-family:ui-monospace,monospace; }
+  .nm-body { padding:0 14px 12px; }
+  .nm-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .nm-table th { text-align:left; padding:8px 10px; color:var(--color-text-secondary);
+                 font-weight:600; border-bottom:1px solid var(--color-grey-3,#eee); white-space:nowrap; }
+  .nm-table td { padding:8px 10px; border-bottom:1px solid var(--color-grey-2,#f3f3f3); }
+  .nm-table tr.deleted td { opacity:.5; text-decoration:line-through; }
+  .nm-type { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--color-grey-2,#f0f0f0);
+             color:var(--color-text-secondary); white-space:nowrap; }
+  .nm-actions button { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 5px; }
+  .nm-empty { padding:14px; color:var(--color-text-secondary); font-size:13px; }
+  .nm-error { padding:28px; background:rgba(229,57,53,.08); border:1px solid rgba(229,57,53,.35);
+              border-radius:12px; }
+  .nm-error-title { font-size:16px; font-weight:700; color:#e53935; margin-bottom:10px; }
+</style>
+
+<script>
+  // ═══════════════ Номенклатура ═══════════════
+  // Источник данных — только API (/api/nomenclature). localStorage здесь
+  // не используется вовсе: молчаливый откат на кэш однажды уже стоил
+  // пользователю потерянных категорий и блюд — экран показывал «Сохранено»,
+  // а запись оседала в браузере и исчезала при перезагрузке.
+
+  // Загрузка удалась? Пока false — любая запись запрещена.
+  let dataSourceOk = false;
+  let tree = { groups: [], ungrouped: [] };
+  let groupsFlat = [];
+  let currentType = '';
+  let searchTimer = null;
+  let openGroups = {};
+  let editingGroupId = null;
+  let editingItem = null;      // { id, source }
+  let cashMode = false;
+
+  const TYPE_LABEL = { dish: 'Блюдо', good: 'Товар', prepared: 'Заготовка' };
+
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Идентификаторы — UUID, в onclick они обязаны быть в кавычках,
+  // иначе получается невалидный JS и кнопка молча не работает.
+  function jsArg(v) { return "'" + String(v).replace(/'/g, "\\'") + "'"; }
+
+  async function apiError(res) {
+    try {
+      const data = await res.json();
+      return data.error || data.message || ('HTTP ' + res.status);
+    } catch (e) {
+      return 'HTTP ' + res.status;
+    }
+  }
+
+  function showNotification(msg) {
+    const n = document.getElementById('notification');
+    if (!n) return;
+    n.textContent = msg;
+    n.classList.add('show');
+    setTimeout(function () { n.classList.remove('show'); }, 4000);
+  }
+
+  // Ошибка видна на экране с причиной и кнопкой повтора — выдуманных
+  // данных вместо настоящих здесь не бывает.
+  function showDataError(message) {
+    const root = document.getElementById('treeRoot');
+    if (root) {
+      root.innerHTML = '<div class="nm-error">'
+        + '<div class="nm-error-title">⚠️ Номенклатура не загружена — сохранение отключено</div>'
+        + '<div style="color:var(--color-text-primary);line-height:1.5">' + esc(message) + '</div>'
+        + '<button class="btn btn-primary" style="margin-top:16px" onclick="reloadTree()">🔄 Повторить</button>'
+        + '</div>';
+    }
+    document.getElementById('countBadge').textContent = '';
+    showNotification('⚠️ ' + message);
+  }
+
+  // Сторож записи: без подтверждённой связи с сервером не выполняем
+  // операцию вовсе, а не «сохраняем локально».
+  function requireServer(action) {
+    if (!dataSourceOk) {
+      showNotification('⚠️ Нет связи с сервером — ' + action + ' не сохранится. Нажмите «Повторить».');
+      return false;
+    }
+    return true;
+  }
+
+  // ───────── загрузка ─────────
+
+  async function reloadTree() {
+    dataSourceOk = false;
+    const params = new URLSearchParams();
+    if (currentType) params.set('itemType', currentType);
+    if (document.getElementById('showDeletedToggle').checked) params.set('includeDeleted', 'true');
+    try {
+      const [treeRes, groupsRes] = await Promise.all([
+        AUTH.fetch('/api/nomenclature/tree?' + params.toString()),
+        AUTH.fetch('/api/nomenclature/groups?' + (params.has('includeDeleted') ? 'includeDeleted=true' : ''))
+      ]);
+      if (!treeRes.ok) throw new Error(await apiError(treeRes));
+      if (!groupsRes.ok) throw new Error(await apiError(groupsRes));
+      tree = await treeRes.json();
+      groupsFlat = (await groupsRes.json()).groups || [];
+      dataSourceOk = true;
+      renderTree();
+    } catch (e) {
+      showDataError(e.message || 'Сервер недоступен');
+    }
+  }
+
+  // ───────── отрисовка ─────────
+
+  function countItems(node) {
+    let n = node.items ? node.items.length : 0;
+    (node.children || []).forEach(function (c) { n += countItems(c); });
+    return n;
+  }
+
+  function itemRow(it) {
+    const deleted = !!it.deleted_at;
+    return '<tr class="' + (deleted ? 'deleted' : '') + '">'
+      + '<td>' + esc(it.name) + '</td>'
+      + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
+      + '<td><span class="nm-type">' + esc(TYPE_LABEL[it.item_type] || it.item_type) + '</span></td>'
+      + '<td>' + esc(it.unit || '—') + '</td>'
+      + '<td>' + esc(it.category || '—') + '</td>'
+      + '<td>' + esc(it.accounting_category || '—') + '</td>'
+      + '<td>' + esc(it.tax_category || '—') + '</td>'
+      + '<td>' + esc(it.prep_station || '—') + '</td>'
+      + '<td class="nm-actions" style="white-space:nowrap">'
+      + (deleted
+          ? '<button title="Восстановить" onclick="restoreItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">♻️</button>'
+          : '<button title="Изменить" onclick="openItemForm(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">✏️</button>'
+            + '<button title="Удалить" onclick="deleteItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">🗑️</button>')
+      + '</td></tr>';
+  }
+
+  function itemsTable(items) {
+    if (!items.length) return '<div class="nm-empty">Позиций нет</div>';
+    return '<table class="nm-table"><thead><tr>'
+      + '<th>Название</th><th>Артикул</th><th>Тип</th><th>Ед. изм.</th><th>Категория</th>'
+      + '<th>Бухгалтерская</th><th>Налоговая</th><th>Место приготовления</th><th></th>'
+      + '</tr></thead><tbody>'
+      + items.map(itemRow).join('')
+      + '</tbody></table>';
+  }
+
+  function groupNode(g, depth) {
+    const open = openGroups[g.id] !== false;
+    const total = countItems(g);
+    const deleted = !!g.deletedAt;
+    let html = '<div class="nm-group" style="margin-left:' + (depth * 16) + 'px">'
+      + '<div class="nm-group-head" onclick="toggleGroup(' + jsArg(g.id) + ')">'
+      + '<span class="nm-caret' + (open ? ' open' : '') + '">▶</span>'
+      + '<span class="nm-group-name"' + (deleted ? ' style="opacity:.5;text-decoration:line-through"' : '') + '>'
+      + '📁 ' + esc(g.name) + '</span>'
+      + '<span class="nm-sku">' + esc(g.sku || '') + '</span>'
+      + '<span class="nm-sku">' + total + ' поз.</span>'
+      + '<span class="nm-actions" onclick="event.stopPropagation()">'
+      + (deleted
+          ? '<button title="Восстановить" onclick="restoreGroup(' + jsArg(g.id) + ')">♻️</button>'
+          : '<button title="Изменить" onclick="openGroupForm(' + jsArg(g.id) + ')">✏️</button>'
+            + '<button title="Удалить" onclick="deleteGroup(' + jsArg(g.id) + ')">🗑️</button>')
+      + '</span></div>';
+    if (open) {
+      html += '<div class="nm-body">' + itemsTable(g.items || []);
+      (g.children || []).forEach(function (c) { html += groupNode(c, 0); });
+      html += '</div>';
+    }
+    return html + '</div>';
+  }
+
+  function renderTree() {
+    const root = document.getElementById('treeRoot');
+    let total = 0;
+    let html = '';
+    (tree.groups || []).forEach(function (g) { total += countItems(g); html += groupNode(g, 0); });
+    const ung = tree.ungrouped || [];
+    total += ung.length;
+    if (ung.length) {
+      html += '<div class="nm-group"><div class="nm-group-head" onclick="toggleGroup(\'__ungrouped__\')">'
+        + '<span class="nm-caret' + (openGroups['__ungrouped__'] !== false ? ' open' : '') + '">▶</span>'
+        + '<span class="nm-group-name">📄 Без группы</span>'
+        + '<span class="nm-sku">' + ung.length + ' поз.</span></div>'
+        + (openGroups['__ungrouped__'] !== false ? '<div class="nm-body">' + itemsTable(ung) + '</div>' : '')
+        + '</div>';
+    }
+    // Пустой справочник и сломанная загрузка — разные состояния,
+    // путать их нельзя: иначе ошибка выглядит как «просто ничего нет».
+    root.innerHTML = html || '<div class="nm-empty">Номенклатура пуста — создайте группу и добавьте позиции</div>';
+    document.getElementById('countBadge').textContent = 'позиций: ' + total;
+  }
+
+  function toggleGroup(id) {
+    openGroups[id] = openGroups[id] === false;
+    renderTree();
+  }
+
+  function switchType(type) {
+    currentType = type;
+    document.querySelectorAll('.tabs .tab').forEach(function (t) {
+      t.classList.toggle('active', (t.getAttribute('data-type') || '') === type);
+    });
+    reloadTree();
+  }
+
+  function onSearchInput() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 300);
+  }
+
+  async function runSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) { reloadTree(); return; }
+    const params = new URLSearchParams({ search: q });
+    if (currentType) params.set('itemType', currentType);
+    if (document.getElementById('showDeletedToggle').checked) params.set('includeDeleted', 'true');
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items?' + params.toString());
+      if (!res.ok) throw new Error(await apiError(res));
+      const data = await res.json();
+      dataSourceOk = true;
+      document.getElementById('treeRoot').innerHTML =
+        '<div class="nm-group"><div class="nm-body">' + itemsTable(data.items || []) + '</div></div>';
+      document.getElementById('countBadge').textContent = 'найдено: ' + (data.items || []).length;
+    } catch (e) {
+      showDataError(e.message || 'Поиск не выполнен');
+    }
+  }
+
+  // ───────── группы ─────────
+
+  function groupOptions(selected, excludeId) {
+    let html = '<option value="">— корень —</option>';
+    groupsFlat.forEach(function (g) {
+      if (excludeId && g.id === excludeId) return;   // в себя переносить нельзя
+      html += '<option value="' + esc(g.id) + '"' + (g.id === selected ? ' selected' : '') + '>'
+        + esc(g.name) + '</option>';
+    });
+    return html;
+  }
+
+  function openGroupForm(id) {
+    if (!requireServer('группа')) return;
+    editingGroupId = id || null;
+    const g = id ? groupsFlat.find(function (x) { return x.id === id; }) : null;
+    document.getElementById('groupFormTitle').textContent = g ? 'Изменить группу' : 'Новая группа';
+    document.getElementById('groupName').value = g ? g.name : '';
+    document.getElementById('groupSku').value = g && g.sku ? g.sku : '';
+    document.getElementById('groupParent').innerHTML = groupOptions(g ? g.parent_id : null, id);
+    document.getElementById('groupFormError').style.display = 'none';
+    document.getElementById('groupForm').style.display = 'block';
+    document.getElementById('groupName').focus();
+  }
+
+  function closeGroupForm() {
+    document.getElementById('groupForm').style.display = 'none';
+    editingGroupId = null;
+  }
+
+  function formError(elId, msg) {
+    const el = document.getElementById(elId);
+    el.textContent = '❌ Не сохранено: ' + msg;
+    el.style.display = 'block';
+  }
+
+  async function saveGroup() {
+    if (!requireServer('группа')) return;
+    const name = document.getElementById('groupName').value.trim();
+    if (!name) { formError('groupFormError', 'укажите название'); return; }
+    const body = {
+      name: name,
+      sku: document.getElementById('groupSku').value.trim() || null,
+      parentId: document.getElementById('groupParent').value || null
+    };
+    try {
+      const res = await AUTH.fetch(
+        editingGroupId ? '/api/nomenclature/groups/' + editingGroupId : '/api/nomenclature/groups',
+        {
+          method: editingGroupId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      if (!res.ok) throw new Error(await apiError(res));
+      closeGroupForm();
+      showNotification('✅ Группа сохранена');
+      await reloadTree();
+    } catch (e) {
+      // Форма остаётся открытой: введённое не должно теряться из-за отказа.
+      formError('groupFormError', e.message);
+    }
+  }
+
+  async function deleteGroup(id) {
+    if (!requireServer('удаление группы')) return;
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/groups/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await apiError(res));
+      showNotification('✅ Группа удалена');
+      await reloadTree();
+    } catch (e) {
+      showNotification('❌ Не удалено: ' + e.message);
+    }
+  }
+
+  async function restoreGroup(id) {
+    if (!requireServer('восстановление группы')) return;
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/groups/' + id + '/restore', { method: 'POST' });
+      if (!res.ok) throw new Error(await apiError(res));
+      showNotification('✅ Группа восстановлена');
+      await reloadTree();
+    } catch (e) {
+      showNotification('❌ Не восстановлено: ' + e.message);
+    }
+  }
+
+  // ───────── позиции ─────────
+
+  function findItem(id, source) {
+    let found = null;
+    function walk(node) {
+      (node.items || []).forEach(function (i) { if (i.id === id && i.source === source) found = i; });
+      (node.children || []).forEach(walk);
+    }
+    (tree.groups || []).forEach(walk);
+    (tree.ungrouped || []).forEach(function (i) { if (i.id === id && i.source === source) found = i; });
+    return found;
+  }
+
+  function openItemForm(id, source) {
+    if (!requireServer('позиция')) return;
+    const it = findItem(id, source);
+    if (!it) { showNotification('⚠️ Позиция не найдена на экране — обновите страницу'); return; }
+    editingItem = { id: id, source: source };
+    document.getElementById('itemFormTitle').textContent = 'Позиция: ' + it.name;
+    document.getElementById('itemName').value = it.name || '';
+    document.getElementById('itemSku').value = it.sku || '';
+    document.getElementById('itemAccounting').value = it.accounting_category || '';
+    document.getElementById('itemTax').value = it.tax_category || '';
+    document.getElementById('itemProduct').value = it.product_category || '';
+    document.getElementById('itemUnit').value = it.unit || '';
+    // Блюда и товары продаются, товары и заготовки хранятся — наборы типов
+    // у двух таблиц разные, подсовывать чужой тип нельзя.
+    const types = source === 'menu' ? ['dish', 'good'] : ['good', 'prepared'];
+    document.getElementById('itemType').innerHTML = types.map(function (t) {
+      return '<option value="' + t + '"' + (t === it.item_type ? ' selected' : '') + '>' + TYPE_LABEL[t] + '</option>';
+    }).join('');
+    document.getElementById('itemGroup').innerHTML = groupOptions(it.nomenclature_group_id, null);
+    // Единицу измерения у блюда этот экран не правит — она живёт в карточке меню.
+    document.getElementById('itemUnitWrap').style.display = source === 'inventory' ? 'block' : 'none';
+    document.getElementById('itemFormError').style.display = 'none';
+    document.getElementById('itemForm').style.display = 'block';
+    document.getElementById('itemName').focus();
+  }
+
+  function closeItemForm() {
+    document.getElementById('itemForm').style.display = 'none';
+    editingItem = null;
+  }
+
+  async function saveItem() {
+    if (!requireServer('позиция')) return;
+    if (!editingItem) return;
+    const name = document.getElementById('itemName').value.trim();
+    if (!name) { formError('itemFormError', 'укажите название'); return; }
+    const body = {
+      name: name,
+      sku: document.getElementById('itemSku').value.trim() || null,
+      itemType: document.getElementById('itemType').value,
+      groupId: document.getElementById('itemGroup').value || null,
+      accountingCategory: document.getElementById('itemAccounting').value.trim() || null,
+      taxCategory: document.getElementById('itemTax').value.trim() || null,
+      productCategory: document.getElementById('itemProduct').value.trim() || null
+    };
+    if (editingItem.source === 'inventory') {
+      const unit = document.getElementById('itemUnit').value.trim();
+      if (unit) body.unit = unit;
+    }
+    try {
+      const res = await AUTH.fetch(
+        '/api/nomenclature/items/' + editingItem.source + '/' + editingItem.id,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(await apiError(res));
+      closeItemForm();
+      showNotification('✅ Позиция сохранена');
+      await reloadTree();
+    } catch (e) {
+      formError('itemFormError', e.message);
+    }
+  }
+
+  async function deleteItem(id, source) {
+    if (!requireServer('удаление позиции')) return;
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await apiError(res));
+      showNotification('✅ Позиция помечена удалённой');
+      await reloadTree();
+    } catch (e) {
+      showNotification('❌ Не удалено: ' + e.message);
+    }
+  }
+
+  async function restoreItem(id, source) {
+    if (!requireServer('восстановление позиции')) return;
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id + '/restore',
+                                   { method: 'POST' });
+      if (!res.ok) throw new Error(await apiError(res));
+      showNotification('✅ Позиция восстановлена');
+      await reloadTree();
+    } catch (e) {
+      showNotification('❌ Не восстановлено: ' + e.message);
+    }
+  }
+
+  // ───────── режим «порядок на кассе» ─────────
+
+  function collectSellable() {
+    const out = [];
+    function walk(node) {
+      (node.items || []).forEach(function (i) { if (i.source === 'menu' && !i.deleted_at) out.push(i); });
+      (node.children || []).forEach(walk);
+    }
+    (tree.groups || []).forEach(walk);
+    (tree.ungrouped || []).forEach(function (i) { if (i.source === 'menu' && !i.deleted_at) out.push(i); });
+    return out.sort(function (a, b) {
+      return (a.cash_order || 0) - (b.cash_order || 0) || String(a.name).localeCompare(String(b.name));
+    });
+  }
+
+  function toggleCashMode() {
+    cashMode = document.getElementById('cashModeToggle').checked;
+    document.getElementById('treeRoot').style.display = cashMode ? 'none' : 'block';
+    document.getElementById('cashPanel').style.display = cashMode ? 'block' : 'none';
+    if (cashMode) renderCashPanel();
+  }
+
+  function renderCashPanel() {
+    const items = collectSellable();
+    if (!items.length) {
+      document.getElementById('cashPanel').innerHTML =
+        '<div class="nm-empty">Продаваемых позиций нет</div>';
+      return;
+    }
+    let html = '<div class="nm-group"><div class="nm-body">'
+      + '<div class="nm-empty">Порядок позиций на экране кассы. Меняйте стрелками, затем «Сохранить порядок».</div>'
+      + '<table class="nm-table"><thead><tr><th>#</th><th>Название</th><th>Артикул</th><th></th></tr></thead><tbody>';
+    items.forEach(function (it, idx) {
+      html += '<tr><td>' + (idx + 1) + '</td><td>' + esc(it.name) + '</td>'
+        + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
+        + '<td class="nm-actions" style="white-space:nowrap">'
+        + '<button title="Выше" onclick="moveCash(' + idx + ',-1)">⬆️</button>'
+        + '<button title="Ниже" onclick="moveCash(' + idx + ',1)">⬇️</button>'
+        + '</td></tr>';
+    });
+    html += '</tbody></table>'
+      + '<button class="btn btn-primary" style="margin-top:12px" onclick="saveCashOrder()">Сохранить порядок</button>'
+      + '</div></div>';
+    document.getElementById('cashPanel').innerHTML = html;
+  }
+
+  let cashOrderDraft = null;
+
+  function moveCash(idx, delta) {
+    if (!cashOrderDraft) cashOrderDraft = collectSellable();
+    const to = idx + delta;
+    if (to < 0 || to >= cashOrderDraft.length) return;
+    const tmp = cashOrderDraft[idx];
+    cashOrderDraft[idx] = cashOrderDraft[to];
+    cashOrderDraft[to] = tmp;
+    cashOrderDraft.forEach(function (it, i) { it.cash_order = i; });
+    // Перерисовываем из черновика, не из дерева: иначе стрелки «не работают»
+    // до сохранения, потому что дерево ещё хранит прежний порядок.
+    renderCashDraft();
+  }
+
+  function renderCashDraft() {
+    const items = cashOrderDraft;
+    let html = '<div class="nm-group"><div class="nm-body">'
+      + '<div class="nm-empty">Порядок позиций на экране кассы. Меняйте стрелками, затем «Сохранить порядок».</div>'
+      + '<table class="nm-table"><thead><tr><th>#</th><th>Название</th><th>Артикул</th><th></th></tr></thead><tbody>';
+    items.forEach(function (it, idx) {
+      html += '<tr><td>' + (idx + 1) + '</td><td>' + esc(it.name) + '</td>'
+        + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
+        + '<td class="nm-actions" style="white-space:nowrap">'
+        + '<button title="Выше" onclick="moveCash(' + idx + ',-1)">⬆️</button>'
+        + '<button title="Ниже" onclick="moveCash(' + idx + ',1)">⬇️</button>'
+        + '</td></tr>';
+    });
+    html += '</tbody></table>'
+      + '<button class="btn btn-primary" style="margin-top:12px" onclick="saveCashOrder()">Сохранить порядок</button>'
+      + '</div></div>';
+    document.getElementById('cashPanel').innerHTML = html;
+  }
+
+  async function saveCashOrder() {
+    if (!requireServer('порядок на кассе')) return;
+    const items = (cashOrderDraft || collectSellable()).map(function (it, i) {
+      return { id: it.id, cashOrder: i };
+    });
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/cash-order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items })
+      });
+      if (!res.ok) throw new Error(await apiError(res));
+      cashOrderDraft = null;
+      showNotification('✅ Порядок на кассе сохранён');
+      await reloadTree();
+      renderCashPanel();
+    } catch (e) {
+      showNotification('❌ Не сохранено: ' + e.message);
+    }
+  }
+
+  // ───────── старт ─────────
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const user = AUTH.getUser();
+    if (user) {
+      const el = document.getElementById('sidebarUserName');
+      if (el) el.textContent = user.first_name || user.email || 'Admin';
+      const tb = document.getElementById('topbarUserName');
+      if (tb) tb.textContent = user.first_name || user.email || 'Admin';
+    }
+    reloadTree();
+  });
+</script>
+</body>
+</html>

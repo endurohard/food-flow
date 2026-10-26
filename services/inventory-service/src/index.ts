@@ -10,6 +10,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import supplierRoutes from './routes/supplier.routes';
 import techCardRoutes from './routes/techcard.routes';
 import productionRoutes from './routes/production.routes';
+import nomenclatureRoutes from './routes/nomenclature.routes';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/inventory', productionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/tech-cards', techCardRoutes);
+app.use('/api/nomenclature', nomenclatureRoutes);
 
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not Found' });
