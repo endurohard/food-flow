@@ -180,8 +180,9 @@ export class WholesaleReturnService {
         );
         if (upd.rowCount === 0) throw new Error(`Return quantity exceeds shipped quantity for "${item.item_name}"`);
 
+        const costPrice = parseFloat(item.shipped_cost_price) || 0;
+
         if (item.disposition === 'restock') {
-          const costPrice = parseFloat(item.shipped_cost_price) || 0;
           await client.query(
             `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity)
              VALUES ($1, $2, $3)
@@ -201,9 +202,23 @@ export class WholesaleReturnService {
             [ret.enterprise_id, order.warehouse_id, item.inventory_item_id, qty, costPrice, ret.id,
              userId || null, `Возврат по ${order.invoice_number || order.id}`]
           );
+        } else {
+          // Списание: товар на склад НЕ возвращается — он негоден. Но
+          // движение писать обязательно: товар утрачен, деньги клиенту
+          // вернули, и без записи потеря не видна ни в движениях склада,
+          // ни в отчётах — её пришлось бы считать руками по возвратам.
+          //
+          // Остаток и партии не трогаем: этот товар ушёл со склада ещё при
+          // отгрузке, повторное списание увело бы остаток в минус.
+          await client.query(
+            `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type,
+               quantity, cost_price, reference_type, reference_id, performed_by, notes)
+             VALUES ($1, $2, $3, 'write_off', $4, $5, 'wholesale_return', $6, $7, $8)`,
+            [ret.enterprise_id, order.warehouse_id, item.inventory_item_id, qty, costPrice, ret.id,
+             userId || null,
+             `Списание при возврате по ${order.invoice_number || order.id}${item.reason ? ': ' + item.reason : ''}`]
+          );
         }
-        // write_off: товар не возвращается на склад — потеря фиксируется
-        // строкой wholesale_return_items (disposition = write_off)
       }
 
       // Кредит-нота гасит долг контрагента
