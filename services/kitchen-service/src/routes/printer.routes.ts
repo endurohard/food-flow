@@ -26,7 +26,8 @@ function mapStation(r: any) {
     id: r.id, name: r.name, type: r.type, address: r.address || undefined,
     device: r.device || undefined, bluetooth: r.bluetooth || undefined,
     categories: r.categories || [], copies: r.copies, enabled: r.enabled,
-    status: r.status, createdAt: r.created_at, updatedAt: r.updated_at,
+    status: r.status, agentId: r.agent_id || null,
+    createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 function mapSettings(r: any) {
@@ -241,7 +242,7 @@ router.get('/stations/:id', async (req: Request, res: Response) => {
  */
 router.post('/stations', async (req: Request, res: Response) => {
   try {
-    const { name, type, address, device, bluetooth, categories, copies, enabled } = req.body;
+    const { name, type, address, device, bluetooth, categories, copies, enabled, agentId } = req.body;
 
     if (!name || !type || !categories || categories.length === 0) {
       return res.status(400).json({
@@ -250,14 +251,30 @@ router.post('/stations', async (req: Request, res: Response) => {
       });
     }
 
+    // Агента проверяем по предприятию: иначе станцию можно было бы
+    // привязать к агенту чужой организации и отправлять ему свои чеки.
+    if (agentId) {
+      const own = await db.query(
+        'SELECT id FROM print_agents WHERE id = $1 AND enterprise_id = $2',
+        [agentId, req.enterpriseId]
+      );
+      if (!own.rows.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'Агент печати не найден в этом предприятии',
+        });
+      }
+    }
+
     const r = await db.query(
       `INSERT INTO printer_stations
-         (enterprise_id, name, type, address, device, bluetooth, categories, copies, enabled, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, 'offline')
+         (enterprise_id, name, type, address, device, bluetooth, categories, copies, enabled, status, agent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, 'offline', $10)
        RETURNING *`,
       [
         req.enterpriseId, name, type, address || null, device || null, bluetooth || null,
         JSON.stringify(categories), copies || 1, enabled !== undefined ? enabled : true,
+        agentId || null,
       ]
     );
 
@@ -283,7 +300,21 @@ router.post('/stations', async (req: Request, res: Response) => {
 router.put('/stations/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, type, address, device, bluetooth, categories, copies, enabled } = req.body;
+    const { name, type, address, device, bluetooth, categories, copies, enabled, agentId } = req.body;
+
+    // Та же проверка принадлежности агента, что и при создании станции.
+    if (agentId) {
+      const own = await db.query(
+        'SELECT id FROM print_agents WHERE id = $1 AND enterprise_id = $2',
+        [agentId, req.enterpriseId]
+      );
+      if (!own.rows.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'Агент печати не найден в этом предприятии',
+        });
+      }
+    }
 
     const r = await db.query(
       `UPDATE printer_stations SET
@@ -293,6 +324,8 @@ router.put('/stations/:id', async (req: Request, res: Response) => {
          categories = COALESCE($8::jsonb, categories),
          copies = COALESCE($9, copies),
          enabled = COALESCE($10, enabled),
+         -- agentId === null означает «отвязать», undefined — «не менять»
+         agent_id = CASE WHEN $12 THEN $11::uuid ELSE agent_id END,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND enterprise_id = $2
        RETURNING *`,
@@ -300,6 +333,7 @@ router.put('/stations/:id', async (req: Request, res: Response) => {
         id, req.enterpriseId, name ?? null, type ?? null, address ?? null, device ?? null,
         bluetooth ?? null, categories ? JSON.stringify(categories) : null,
         copies ?? null, enabled ?? null,
+        agentId ?? null, agentId !== undefined,
       ]
     );
 

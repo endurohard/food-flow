@@ -153,10 +153,14 @@ export class PrinterService {
         logger.info(`Kitchen order ${order.orderNumber} printed successfully`);
         return true;
       } else {
-        // Simulation mode - just log
+        // Принтер недоступен. Раньше здесь возвращался true и чек уходил
+        // только в лог: API отвечал «напечатано», бумаги не было. Теперь
+        // честный false — вызывающий обязан сказать об этом вслух.
         const receipt = await this.p.getText();
-        logger.info('SIMULATION MODE - Kitchen receipt:\n' + receipt);
-        return true;
+        logger.warn(
+          'Принтер недоступен, кухонный чек НЕ напечатан. Содержимое:\n' + receipt,
+        );
+        return false;
       }
     } catch (error) {
       logger.error('Failed to print kitchen order:', error);
@@ -298,8 +302,10 @@ export class PrinterService {
         return true;
       } else {
         const receipt = await this.p.getText();
-        logger.info('SIMULATION MODE - Receipt content:\n' + receipt);
-        return true;
+        logger.warn(
+          'Принтер недоступен, чек гостю НЕ напечатан. Содержимое:\n' + receipt,
+        );
+        return false;
       }
     } catch (error) {
       logger.error('Failed to print customer receipt:', error);
@@ -334,8 +340,10 @@ export class PrinterService {
         return true;
       } else {
         const receipt = await this.p.getText();
-        logger.info('SIMULATION MODE - Test print:\n' + receipt);
-        return true;
+        logger.warn(
+          'Принтер недоступен, тестовый чек НЕ напечатан. Содержимое:\n' + receipt,
+        );
+        return false;
       }
     } catch (error) {
       logger.error('Test print failed:', error);

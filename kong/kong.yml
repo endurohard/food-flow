@@ -112,6 +112,16 @@ services:
         paths:
           - /api/printers
         strip_path: false
+      # Канал агентов печати на точках: агент сам подключается сюда
+      # исходящим соединением, аутентификация по своему токену.
+      - name: print-agent-routes
+        paths:
+          - /api/print-agent
+        strip_path: false
+      - name: print-agents-admin-routes
+        paths:
+          - /api/print-agents
+        strip_path: false
 
   - name: wholesale-service
     url: http://wholesale-service:3013

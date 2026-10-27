@@ -1,0 +1,30 @@
+[Unit]
+# Агент печати FoodFlow: забирает задания с сервера и печатает на принтер,
+# который видит только из локальной сети точки.
+Description=FoodFlow Print Agent
+Documentation=https://github.com/foodflow/print-agent
+# Сеть нужна для опроса сервера; без неё агент стартует и уходит в бэкофф.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Путь к распакованной папке агента на точке — поправить под установку.
+WorkingDirectory=/opt/foodflow/print-agent
+ExecStart=/usr/bin/node /opt/foodflow/print-agent/src/index.js
+# Настройки читаются из /etc/foodflow/print-agent.json;
+# переменные окружения при необходимости перекрывают файл.
+Environment=NODE_ENV=production
+# Печать на /dev/usb/lp* требует прав: группа lp вместо запуска от root.
+User=foodflow
+Group=lp
+Restart=always
+RestartSec=5
+# Упавший принтер не должен уводить юнит в failed насовсем:
+# агент перезапускается бесконечно, лимит стартов снят.
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

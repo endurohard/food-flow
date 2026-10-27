@@ -17,6 +17,8 @@ import { KitchenDisplayService } from './services/kitchen-display.service';
 import kitchenRoutes from './routes/kitchen.routes';
 import printerRoutes from './routes/printer.routes';
 import stationRoutes from './routes/station.routes';
+import printAgentRoutes from './routes/print-agent.routes';
+import printAgentsAdminRoutes from './routes/print-agents-admin.routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -78,6 +80,10 @@ app.set('io', io);
 app.use('/api/kitchen', kitchenRoutes);
 app.use('/api/printers', printerRoutes);
 app.use('/api/stations', stationRoutes);
+// Канал агентов печати (аутентификация по токену агента, не по JWT)
+app.use('/api/print-agent', printAgentRoutes);
+// Управление агентами из админки (JWT пользователя)
+app.use('/api/print-agents', printAgentsAdminRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

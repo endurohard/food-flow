@@ -1,14 +1,18 @@
 import amqp, { Channel, Connection } from 'amqplib';
+import pkg from 'pg';
+const { Pool } = pkg;
 import { logger } from '../utils/logger';
 import { config } from '../config';
 import { PrinterService, OrderPrintData } from './printer.service';
 import { KitchenDisplayService, KitchenOrder } from './kitchen-display.service';
+import { PrintQueueService } from './print-queue.service';
 
 export class RabbitMQService {
   private connection: Connection | null = null;
   private channel: Channel | null = null;
   private printerService: PrinterService;
   private kitchenDisplayService: KitchenDisplayService;
+  private printQueue: PrintQueueService;
 
   private readonly EXCHANGE = 'orders_exchange';
   private readonly KITCHEN_QUEUE = 'kitchen_orders_queue';
@@ -20,6 +24,9 @@ export class RabbitMQService {
   ) {
     this.printerService = printerService;
     this.kitchenDisplayService = kitchenDisplayService;
+    this.printQueue = new PrintQueueService(
+      new Pool({ connectionString: config.database.url }),
+    );
   }
 
   async connect(): Promise<void> {
@@ -118,11 +125,59 @@ export class RabbitMQService {
         timestamp: new Date(orderData.timestamp || Date.now()),
       };
 
-      // Print kitchen order if auto-print is enabled
+      // Печать идёт через агентов на точках: задание кладётся в очередь,
+      // печатает агент из локальной сети принтера. Прямая печать с сервера
+      // остаётся запасным путём — она работает только когда сервер стоит
+      // в одной сети с принтером (локальная установка).
       if (config.printer.autoPrint) {
-        const printed = await this.printerService.printKitchenOrder(printData);
-        if (printed) {
-          logger.info(`Kitchen order ${orderData.orderNumber} printed`);
+        let queuedByAgents = 0;
+
+        if (orderData.enterpriseId) {
+          try {
+            const itemCategories: Record<string, string> = {};
+            for (const item of orderData.items || []) {
+              if (item.name && item.category) itemCategories[item.name] = item.category;
+            }
+
+            const result = await this.printQueue.enqueueOrderToStations({
+              enterpriseId: orderData.enterpriseId,
+              orderId: orderData.id,
+              order: {
+                orderNumber: printData.orderNumber,
+                restaurant: printData.restaurant,
+                customer: printData.customer,
+                items: printData.items,
+                total: printData.total,
+                orderType: printData.orderType,
+                specialInstructions: printData.specialInstructions,
+                timestamp: printData.timestamp,
+              },
+              itemCategories,
+            });
+
+            queuedByAgents = result.queued;
+            if (result.queued) {
+              logger.info(
+                `Заказ ${orderData.orderNumber}: заданий печати поставлено ${result.queued}`,
+              );
+            }
+            // Пропущенные станции называем вслух: «чек не вышел» иначе
+            // выглядит как поломка сервиса, а причина — непривязанный агент.
+            for (const reason of result.skipped) {
+              logger.warn(`Заказ ${orderData.orderNumber}: станция пропущена — ${reason}`);
+            }
+          } catch (error) {
+            logger.error('Не удалось поставить задания печати агентам:', error);
+          }
+        }
+
+        if (queuedByAgents === 0) {
+          const printed = await this.printerService.printKitchenOrder(printData);
+          if (!printed) {
+            logger.warn(
+              `Заказ ${orderData.orderNumber}: чек НЕ напечатан — нет агента печати и локальный принтер недоступен`,
+            );
+          }
         }
       }
 

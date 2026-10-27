@@ -992,6 +992,53 @@ AUTH.requireAuth();
 
                 <!-- Main Content -->
     <div class="container">
+        <!-- Ошибка связи с сервером: показывается вместо данных, а не вместо неё -->
+        <div id="dataError" style="display:none; margin-bottom:16px; padding:14px 16px; border:1px solid #f0b4b4; background:#fdf0f0; border-radius:10px; color:#8a2020;">
+            <div id="dataErrorText" style="margin-bottom:10px;"></div>
+            <button class="btn btn-sm btn-primary" type="button" onclick="reloadAll()">Повторить</button>
+        </div>
+
+        <!-- Агенты печати на точках -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Агенты печати</h2>
+                <button class="btn btn-primary btn-sm" onclick="toggleAgentForm()">
+                    + Добавить агента
+                </button>
+            </div>
+            <div class="card-body">
+                <p style="color: var(--color-grey-5); font-size: 13px; margin-bottom: 14px;">
+                    Агент — программа на компьютере точки, который видит принтеры в своей сети.
+                    Сервер складывает задания в очередь, агент их забирает и печатает.
+                    Проброс портов и публичный адрес для кухни не нужны.
+                </p>
+
+                <!-- Inline-форма вместо prompt(): во встроенном браузере VS Code диалоги заблокированы -->
+                <div id="agentForm" style="display:none; margin-bottom:16px; padding:14px; border:1px solid var(--color-grey-3, #e3e3e3); border-radius:10px;">
+                    <div class="form-group">
+                        <label>Название агента *</label>
+                        <input type="text" class="form-control" id="agentName" placeholder="Например: Кухня — основной ПК">
+                    </div>
+                    <div id="agentFormError" style="display:none; color:#8a2020; font-size:13px; margin-bottom:10px;"></div>
+                    <button class="btn btn-primary btn-sm" type="button" onclick="createAgent()">Создать и показать токен</button>
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="toggleAgentForm(false)">Отмена</button>
+                </div>
+
+                <!-- Токен показывается ОДИН раз: в базе только его хеш -->
+                <div id="tokenBox" style="display:none; margin-bottom:16px; padding:14px; border:1px solid #b9dcb9; background:#f1f8f1; border-radius:10px;">
+                    <div style="font-weight:600; margin-bottom:8px;">Токен агента — сохраните его сейчас</div>
+                    <div style="color:#5a6b5a; font-size:13px; margin-bottom:10px;">
+                        Токен показывается один раз и восстановить его нельзя: в базе хранится только хеш.
+                        Укажите его при установке агента на компьютер точки.
+                    </div>
+                    <code id="tokenValue" style="display:block; padding:10px; background:#fff; border:1px solid #cfe3cf; border-radius:6px; word-break:break-all; font-size:13px;"></code>
+                    <button class="btn btn-sm btn-secondary" type="button" style="margin-top:10px;" onclick="hideToken()">Я сохранил</button>
+                </div>
+
+                <div id="agentList"></div>
+            </div>
+        </div>
+
         <!-- Список станций -->
         <div class="card">
             <div class="card-header">
@@ -1074,6 +1121,19 @@ AUTH.requireAuth();
                 </button>
             </div>
         </div>
+
+        <!-- Журнал печати -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Журнал печати</h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadJobs()">Обновить</button>
+            </div>
+            <div class="card-body">
+                <div id="jobList"></div>
+                <!-- Предпросмотр чека: видно, что именно уехало на принтер, без бумаги -->
+                <pre id="jobPreview" style="display:none; margin-top:14px; padding:12px; background:#f7f7f7; border:1px solid #e3e3e3; border-radius:8px; font-size:12px; white-space:pre-wrap; overflow-x:auto;"></pre>
+            </div>
+        </div>
     </div>
 
     <!-- Модальное окно добавления/редактирования станции -->
@@ -1093,10 +1153,22 @@ AUTH.requireAuth();
                     </div>
 
                     <div class="form-group">
+                        <label>Агент печати *</label>
+                        <select class="form-control" id="stationAgent">
+                            <option value="">— не выбран —</option>
+                        </select>
+                        <small style="color: var(--color-grey-5); font-size: 12px; margin-top: 6px; display: block;">
+                            Печатать будет этот агент. Без агента станция чеки не получит:
+                            сервер не видит принтер в сети точки.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
                         <label>Тип принтера *</label>
                         <select class="form-control" id="printerType" required>
                             <option value="network">Сетевой принтер (TCP/IP)</option>
-                            <option value="usb">USB принтер</option>
+                            <option value="usb">USB принтер / порт</option>
+                            <option value="system">Системный принтер (драйвер Windows / CUPS)</option>
                             <option value="bluetooth">Bluetooth принтер</option>
                         </select>
                     </div>
@@ -1110,8 +1182,16 @@ AUTH.requireAuth();
                     </div>
 
                     <div class="form-group" id="usbPrinterGroup" style="display: none;">
-                        <label>USB устройство *</label>
-                        <input type="text" class="form-control" id="usbDevice" placeholder="/dev/usb/lp0">
+                        <label>USB устройство / порт *</label>
+                        <input type="text" class="form-control" id="usbDevice" placeholder="/dev/usb/lp0 или COM3">
+                    </div>
+
+                    <div class="form-group" id="systemPrinterGroup" style="display: none;">
+                        <label>Имя системного принтера *</label>
+                        <input type="text" class="form-control" id="systemPrinterName" placeholder="\\\\localhost\\XP-80C или XP-80C">
+                        <small style="color: var(--color-grey-5); font-size: 12px; margin-top: 6px; display: block;">
+                            Windows: имя общего ресурса принтера. Linux/macOS: имя очереди CUPS (<code>lpstat -p</code>).
+                        </small>
                     </div>
 
                     <div class="form-group" id="bluetoothPrinterGroup" style="display: none;">
@@ -1172,57 +1252,346 @@ AUTH.requireAuth();
     </div>
 
     <script>
-        // API Configuration — тот же origin (kong), через AUTH.fetch (токен + tenant-scope)
-        const API_BASE_URL = AUTH.API_BASE + '/api/printers';
+        // API: AUTH.fetch сам подставляет базу, Bearer-токен и обновляет истёкший.
+        // Сырой fetch получил бы 401 и экран выглядел бы пустым.
+        const API_PRINTERS = AUTH.API_BASE + '/api/printers';
+        const API_AGENTS = AUTH.API_BASE + '/api/print-agents';
 
-        // State
+        // Состояние
         let stations = [];
+        let agents = [];
+        let jobs = [];
         let globalSettings = {};
         let editingStationId = null;
+        // Запись разрешена только при подтверждённой связи с сервером:
+        // иначе «Сохранено» ложится в браузер, а не в базу.
+        let dataSourceOk = false;
 
-        // Sidebar functions
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            sidebar.classList.toggle('open');
-            overlay.classList.toggle('active');
+        // ─── Служебное ────────────────────────────────────────
+
+        /** Безопасная подстановка id в onclick: id станции числовой, агента — UUID. */
+        function jsArg(v) {
+            return JSON.stringify(String(v));
         }
 
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            sidebar.classList.remove('open');
-            overlay.classList.remove('active');
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
         }
 
-        // Load data from API
-        async function loadStations() {
-            try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/stations`);
-                const data = await response.json();
-                if (data.success) {
-                    stations = data.data;
-                    renderStations();
-                }
-            } catch (error) {
-                console.error('Failed to load stations:', error);
-                // Без mock: показываем реальный (пустой) список своего предприятия
-                stations = [];
-                renderStations();
+        function showDataError(message) {
+            dataSourceOk = false;
+            const box = document.getElementById('dataError');
+            document.getElementById('dataErrorText').textContent = message;
+            box.style.display = 'block';
+        }
+
+        function clearDataError() {
+            document.getElementById('dataError').style.display = 'none';
+        }
+
+        /** Сторож записи: без подтверждённой связи операция не выполняется вовсе. */
+        function requireServer(action) {
+            if (dataSourceOk) return true;
+            showDataError(`Не удалось ${action}: нет связи с сервером. Данные не сохранены.`);
+            return false;
+        }
+
+        /** Тост вместо alert(): во встроенном браузере VS Code диалоги заблокированы. */
+        function toast(message, kind) {
+            let el = document.getElementById('ffToast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'ffToast';
+                el.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:9999;max-width:420px;' +
+                    'padding:12px 16px;border-radius:10px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.15);';
+                document.body.appendChild(el);
             }
+            const ok = kind !== 'error';
+            el.style.background = ok ? '#f1f8f1' : '#fdf0f0';
+            el.style.border = '1px solid ' + (ok ? '#b9dcb9' : '#f0b4b4');
+            el.style.color = ok ? '#2c5c2c' : '#8a2020';
+            el.textContent = message;
+            el.style.display = 'block';
+            clearTimeout(el._t);
+            el._t = setTimeout(() => { el.style.display = 'none'; }, 6000);
+        }
+
+        /** Текст ошибки из ответа сервера, а не общее «что-то пошло не так». */
+        async function apiError(res) {
+            try {
+                const body = await res.json();
+                return body.error || body.message || `HTTP ${res.status}`;
+            } catch {
+                return `HTTP ${res.status}`;
+            }
+        }
+
+        // ─── Агенты печати ────────────────────────────────────
+
+        async function loadAgents() {
+            const res = await AUTH.fetch(API_AGENTS);
+            if (!res.ok) throw new Error(await apiError(res));
+            const data = await res.json();
+            agents = data.data || [];
+            renderAgents();
+            fillAgentSelect();
+        }
+
+        function renderAgents() {
+            const list = document.getElementById('agentList');
+
+            if (agents.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>Агентов пока нет. ' +
+                    'Создайте агента и установите его на компьютер точки.</p></div>';
+                return;
+            }
+
+            list.innerHTML = agents.map((a) => {
+                const online = a.online
+                    ? '<span class="status-badge status-online">На связи</span>'
+                    : '<span class="status-badge status-offline">Нет связи</span>';
+                const off = a.enabled ? '' : ' <span class="status-badge status-offline">Выключен</span>';
+                const seen = a.lastSeenAt
+                    ? new Date(a.lastSeenAt).toLocaleString('ru-RU')
+                    : 'ни разу не подключался';
+                const host = a.hostname ? ` · ${esc(a.hostname)}` : '';
+                const ver = a.agentVersion ? ` · v${esc(a.agentVersion)}` : '';
+                const myStations = stations.filter((s) => String(s.agentId) === String(a.id)).length;
+
+                return `
+                <div class="station-item">
+                    <div class="station-icon">🖧</div>
+                    <div class="station-info">
+                        <div class="station-name">${esc(a.name)} ${online}${off}</div>
+                        <div class="station-details">
+                            <span>Последняя связь: ${esc(seen)}${host}${ver}</span>
+                            <span>Станций: ${myStations}</span>
+                        </div>
+                    </div>
+                    <div class="station-actions">
+                        <button class="btn btn-warning btn-sm" onclick="testAgent(${jsArg(a.id)})" title="Тестовая печать">🧪</button>
+                        <button class="btn btn-secondary btn-sm" onclick="rotateAgentToken(${jsArg(a.id)})" title="Перевыпустить токен">🔑</button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleAgent(${jsArg(a.id)}, ${!a.enabled})" title="${a.enabled ? 'Выключить' : 'Включить'}">${a.enabled ? '⏸' : '▶'}</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteAgent(${jsArg(a.id)})" title="Удалить">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function fillAgentSelect() {
+            const sel = document.getElementById('stationAgent');
+            const current = sel.value;
+            sel.innerHTML = '<option value="">— не выбран —</option>' +
+                agents.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}${a.online ? ' (на связи)' : ''}</option>`).join('');
+            sel.value = current;
+        }
+
+        function toggleAgentForm(show) {
+            const form = document.getElementById('agentForm');
+            const visible = show === undefined ? form.style.display === 'none' : show;
+            form.style.display = visible ? 'block' : 'none';
+            document.getElementById('agentFormError').style.display = 'none';
+            if (visible) document.getElementById('agentName').focus();
+        }
+
+        function hideToken() {
+            document.getElementById('tokenBox').style.display = 'none';
+            document.getElementById('tokenValue').textContent = '';
+        }
+
+        async function createAgent() {
+            if (!requireServer('создать агента')) return;
+
+            const name = document.getElementById('agentName').value.trim();
+            const err = document.getElementById('agentFormError');
+            if (!name) {
+                err.textContent = 'Укажите название агента';
+                err.style.display = 'block';
+                return;
+            }
+
+            try {
+                const res = await AUTH.fetch(API_AGENTS, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+
+                // Токен показываем один раз: в базе только его хеш.
+                document.getElementById('tokenValue').textContent = data.token;
+                document.getElementById('tokenBox').style.display = 'block';
+                document.getElementById('agentName').value = '';
+                toggleAgentForm(false);
+                await loadAgents();
+            } catch (e) {
+                err.textContent = `❌ Не создано: ${e.message}`;
+                err.style.display = 'block';
+            }
+        }
+
+        async function rotateAgentToken(id) {
+            if (!requireServer('перевыпустить токен')) return;
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/${encodeURIComponent(id)}/rotate-token`, { method: 'POST' });
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                document.getElementById('tokenValue').textContent = data.token;
+                document.getElementById('tokenBox').style.display = 'block';
+                toast('Токен перевыпущен. Старый больше не работает — обновите его на точке.');
+            } catch (e) {
+                toast(`❌ Не удалось перевыпустить токен: ${e.message}`, 'error');
+            }
+        }
+
+        async function toggleAgent(id, enabled) {
+            if (!requireServer('изменить агента')) return;
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/${encodeURIComponent(id)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                await loadAgents();
+                toast(enabled ? 'Агент включён' : 'Агент выключен');
+            } catch (e) {
+                toast(`❌ Не сохранено: ${e.message}`, 'error');
+            }
+        }
+
+        async function deleteAgent(id) {
+            if (!requireServer('удалить агента')) return;
+            const agent = agents.find((a) => String(a.id) === String(id));
+            // Подтверждение инлайном: confirm() в встроенном браузере заблокирован.
+            if (document.getElementById('agentList').dataset.confirmDelete !== String(id)) {
+                document.getElementById('agentList').dataset.confirmDelete = String(id);
+                toast(`Нажмите «Удалить» ещё раз, чтобы удалить агента «${agent ? agent.name : id}»`, 'error');
+                return;
+            }
+            document.getElementById('agentList').dataset.confirmDelete = '';
+
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(await apiError(res));
+                await loadAgents();
+                await loadStations();
+                toast('Агент удалён');
+            } catch (e) {
+                toast(`❌ Не удалено: ${e.message}`, 'error');
+            }
+        }
+
+        async function testAgent(id) {
+            if (!requireServer('отправить тестовую печать')) return;
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/${encodeURIComponent(id)}/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                // Сервер отвечает «задание поставлено», а не «напечатано»:
+                // факт печати подтверждает агент, это видно в журнале.
+                toast(data.message || 'Задание отправлено агенту', data.agentOnline ? 'ok' : 'error');
+                await loadJobs();
+            } catch (e) {
+                toast(`❌ ${e.message}`, 'error');
+            }
+        }
+
+        // ─── Журнал печати ────────────────────────────────────
+
+        async function loadJobs() {
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/jobs/list?limit=30`);
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                jobs = data.data || [];
+                renderJobs();
+            } catch (e) {
+                document.getElementById('jobList').innerHTML =
+                    `<div class="empty-state"><p>Журнал недоступен: ${esc(e.message)}</p></div>`;
+            }
+        }
+
+        const JOB_STATUS = {
+            queued: 'В очереди',
+            in_progress: 'Печатается',
+            done: 'Напечатано',
+            failed: 'Ошибка'
+        };
+        const JOB_KIND = { kitchen: 'Кухня', receipt: 'Чек гостю', test: 'Тест' };
+
+        function renderJobs() {
+            const list = document.getElementById('jobList');
+            if (jobs.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>Заданий печати пока нет</p></div>';
+                return;
+            }
+
+            list.innerHTML = jobs.map((j) => {
+                const when = new Date(j.createdAt).toLocaleString('ru-RU');
+                const cls = j.status === 'done' ? 'status-online'
+                    : j.status === 'failed' ? 'status-offline' : 'status-testing';
+                const err = j.lastError ? `<span title="${esc(j.lastError)}">⚠ ${esc(j.lastError)}</span>` : '';
+                return `
+                <div class="station-item">
+                    <div class="station-info">
+                        <div class="station-name">
+                            ${esc(JOB_KIND[j.kind] || j.kind)} · ${esc(j.stationName || 'без станции')}
+                            <span class="status-badge ${cls}">${esc(JOB_STATUS[j.status] || j.status)}</span>
+                        </div>
+                        <div class="station-details">
+                            <span>${esc(when)}</span>
+                            <span>Агент: ${esc(j.agentName || '—')}</span>
+                            <span>Копий: ${j.copies}</span>
+                            <span>Попыток: ${j.attempts}</span>
+                            ${err}
+                        </div>
+                    </div>
+                    <div class="station-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="showJobPreview(${jsArg(j.id)})" title="Посмотреть чек">👁</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function showJobPreview(id) {
+            const box = document.getElementById('jobPreview');
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/jobs/${encodeURIComponent(id)}/preview`);
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                box.textContent = data.data.preview || '(пусто)';
+                box.style.display = 'block';
+                box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch (e) {
+                box.textContent = `Не удалось получить чек: ${e.message}`;
+                box.style.display = 'block';
+            }
+        }
+
+        // ─── Станции ──────────────────────────────────────────
+
+        async function loadStations() {
+            const res = await AUTH.fetch(`${API_PRINTERS}/stations`);
+            if (!res.ok) throw new Error(await apiError(res));
+            const data = await res.json();
+            stations = data.data || [];
+            renderStations();
         }
 
         async function loadSettings() {
-            try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/settings`);
-                const data = await response.json();
-                if (data.success) {
-                    globalSettings = data.data;
-                    applySettings();
-                }
-            } catch (error) {
-                console.error('Failed to load settings:', error);
-            }
+            const res = await AUTH.fetch(`${API_PRINTERS}/settings`);
+            if (!res.ok) throw new Error(await apiError(res));
+            const data = await res.json();
+            globalSettings = data.data || {};
+            applySettings();
         }
 
         function applySettings() {
@@ -1252,56 +1621,53 @@ AUTH.requireAuth();
             if (stations.length === 0) {
                 list.innerHTML = `
                     <div class="empty-state">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                        </svg>
                         <p>Нет настроенных станций печати</p>
                     </div>
                 `;
+                updateStats();
                 return;
             }
 
-            list.innerHTML = stations.map(station => `
+            list.innerHTML = stations.map((station) => {
+                const agent = agents.find((a) => String(a.id) === String(station.agentId));
+                // Станция без агента чеки не получит — говорим об этом прямо,
+                // иначе «не печатает» выглядит как поломка сервиса.
+                const agentInfo = agent
+                    ? `<span>Агент: ${esc(agent.name)}${agent.online ? '' : ' (нет связи)'}</span>`
+                    : '<span style="color:#8a2020">⚠ Агент не привязан — печати не будет</span>';
+                const where = station.address || station.device || station.bluetooth || '—';
+
+                return `
                 <div class="station-item">
                     <div class="station-icon">🖨️</div>
                     <div class="station-info">
-                        <div class="station-name">${station.name}</div>
+                        <div class="station-name">${esc(station.name)}</div>
                         <div class="station-details">
-                            <span>📍 ${station.address || station.device || station.bluetooth}</span>
-                            <span>📦 ${station.categories.length} категорий</span>
-                            <span>📄 ${station.copies}x копий</span>
-                            <span class="status-badge status-${station.status}">${getStatusText(station.status)}</span>
+                            <span>${esc(where)}</span>
+                            <span>${station.categories.length ? station.categories.length + ' категорий' : 'все категории'}</span>
+                            <span>${station.copies}x копий</span>
+                            ${agentInfo}
+                            <span class="status-badge status-${esc(station.status)}">${esc(getStatusText(station.status))}</span>
                         </div>
                     </div>
                     <div class="station-actions">
-                        <button class="btn btn-warning btn-sm" onclick="testStationPrinter(${station.id})" title="Тест печати">
-                            🧪
-                        </button>
-                        <button class="btn btn-primary btn-sm" onclick="editStation(${station.id})" title="Редактировать">
-                            ✏️
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteStation(${station.id})" title="Удалить">
-                            🗑️
-                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="editStation(${jsArg(station.id)})" title="Редактировать">✏️</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteStation(${jsArg(station.id)})" title="Удалить">🗑️</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
 
             updateStats();
         }
 
         function updateStats() {
             document.getElementById('totalStations').textContent = stations.length;
-            document.getElementById('onlineStations').textContent = stations.filter(s => s.status === 'online').length;
-            document.getElementById('offlineStations').textContent = stations.filter(s => s.status === 'offline').length;
+            document.getElementById('onlineStations').textContent = stations.filter((s) => s.status === 'online').length;
+            document.getElementById('offlineStations').textContent = stations.filter((s) => s.status === 'offline').length;
         }
 
         function getStatusText(status) {
-            const texts = {
-                online: 'Онлайн',
-                offline: 'Офлайн',
-                testing: 'Тестирование'
-            };
+            const texts = { online: 'Онлайн', offline: 'Офлайн', testing: 'Тестирование' };
             return texts[status] || status;
         }
 
@@ -1310,39 +1676,50 @@ AUTH.requireAuth();
             document.getElementById('modalTitle').textContent = 'Добавить станцию печати';
             document.getElementById('stationForm').reset();
             document.getElementById('stationId').value = '';
-            document.querySelectorAll('.category-checkbox').forEach(cb => {
-                cb.checked = ['pizza', 'burger', 'sushi'].includes(cb.value);
-            });
+            document.getElementById('stationAgent').value = '';
+            document.querySelectorAll('.category-checkbox').forEach((cb) => { cb.checked = false; });
+            updatePrinterTypeFields();
             document.getElementById('stationModal').classList.add('show');
         }
 
         function closeStationModal() {
             document.getElementById('stationModal').classList.remove('show');
-            document.getElementById('testResult').className = 'printer-test-result';
-            document.getElementById('testResult').textContent = '';
+            const tr = document.getElementById('testResult');
+            tr.className = 'printer-test-result';
+            tr.textContent = '';
         }
 
         function editStation(id) {
-            const station = stations.find(s => s.id === id);
+            // id станции числовой (SERIAL), но сравнение по строке надёжнее:
+            // из onclick он приходит строкой.
+            const station = stations.find((s) => String(s.id) === String(id));
             if (!station) return;
 
-            editingStationId = id;
+            editingStationId = station.id;
             document.getElementById('modalTitle').textContent = 'Редактировать станцию';
             document.getElementById('stationId').value = station.id;
             document.getElementById('stationName').value = station.name;
             document.getElementById('printerType').value = station.type;
             document.getElementById('stationCopies').value = station.copies;
             document.getElementById('stationEnabled').checked = station.enabled;
+            document.getElementById('stationAgent').value = station.agentId || '';
+
+            document.getElementById('printerAddress').value = '';
+            document.getElementById('usbDevice').value = '';
+            document.getElementById('systemPrinterName').value = '';
+            document.getElementById('bluetoothAddress').value = '';
 
             if (station.type === 'network') {
-                document.getElementById('printerAddress').value = station.address;
+                document.getElementById('printerAddress').value = station.address || '';
             } else if (station.type === 'usb') {
-                document.getElementById('usbDevice').value = station.device;
+                document.getElementById('usbDevice').value = station.device || '';
+            } else if (station.type === 'system') {
+                document.getElementById('systemPrinterName').value = station.device || '';
             } else if (station.type === 'bluetooth') {
-                document.getElementById('bluetoothAddress').value = station.bluetooth;
+                document.getElementById('bluetoothAddress').value = station.bluetooth || station.device || '';
             }
 
-            document.querySelectorAll('.category-checkbox').forEach(cb => {
+            document.querySelectorAll('.category-checkbox').forEach((cb) => {
                 cb.checked = station.categories.includes(cb.value);
             });
 
@@ -1351,230 +1728,204 @@ AUTH.requireAuth();
         }
 
         async function deleteStation(id) {
-            if (!confirm('Вы уверены, что хотите удалить эту станцию?')) {
+            if (!requireServer('удалить станцию')) return;
+
+            const station = stations.find((s) => String(s.id) === String(id));
+            const list = document.getElementById('stationList');
+            if (list.dataset.confirmDelete !== String(id)) {
+                list.dataset.confirmDelete = String(id);
+                toast(`Нажмите «Удалить» ещё раз, чтобы удалить станцию «${station ? station.name : id}»`, 'error');
                 return;
             }
+            list.dataset.confirmDelete = '';
 
             try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/stations/${id}`, {
-                    method: 'DELETE'
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    alert('✅ Станция удалена');
-                    await loadStations();
-                } else {
-                    alert('❌ Ошибка удаления станции');
-                }
-            } catch (error) {
-                console.error('Delete failed:', error);
-                // Fallback to local delete
-                stations = stations.filter(s => s.id !== id);
-                renderStations();
+                const res = await AUTH.fetch(`${API_PRINTERS}/stations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(await apiError(res));
+                await loadStations();
+                renderAgents();
+                toast('Станция удалена');
+            } catch (e) {
+                // Локально ничего не удаляем: экран не должен показывать
+                // состояние, которого нет в базе.
+                toast(`❌ Не удалено: ${e.message}`, 'error');
             }
         }
 
         async function saveStation() {
-            const name = document.getElementById('stationName').value.trim();
-            const type = document.getElementById('printerType').value;
-            const copies = parseInt(document.getElementById('stationCopies').value);
-            const enabled = document.getElementById('stationEnabled').checked;
+            if (!requireServer('сохранить станцию')) return;
 
-            if (!name) {
-                alert('Введите название станции');
-                return;
-            }
-
-            let address = '';
-            if (type === 'network') {
-                address = document.getElementById('printerAddress').value.trim();
-                if (!address) {
-                    alert('Введите IP адрес и порт принтера');
-                    return;
-                }
-            } else if (type === 'usb') {
-                address = document.getElementById('usbDevice').value.trim();
-            } else if (type === 'bluetooth') {
-                address = document.getElementById('bluetoothAddress').value.trim();
-            }
-
-            const categories = Array.from(document.querySelectorAll('.category-checkbox:checked'))
-                .map(cb => cb.value);
-
-            if (categories.length === 0) {
-                alert('Выберите хотя бы одну категорию блюд');
-                return;
-            }
-
-            const stationData = {
-                name,
-                type,
-                address,
-                categories,
-                copies,
-                enabled,
-                status: 'offline'
+            const tr = document.getElementById('testResult');
+            const fail = (msg) => {
+                tr.className = 'printer-test-result error';
+                tr.textContent = `❌ Не сохранено: ${msg}`;
             };
 
-            try {
-                let response;
-                if (editingStationId) {
-                    response = await AUTH.fetch(`${API_BASE_URL}/stations/${editingStationId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(stationData)
-                    });
-                } else {
-                    response = await AUTH.fetch(`${API_BASE_URL}/stations`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(stationData)
-                    });
-                }
-
-                const data = await response.json();
-
-                if (data.success) {
-                    alert('✅ Станция сохранена');
-                    await loadStations();
-                    closeStationModal();
-                } else {
-                    alert('❌ Ошибка сохранения станции');
-                }
-            } catch (error) {
-                console.error('Save failed:', error);
-                alert('❌ Ошибка сохранения. Проверьте подключение к серверу.');
-            }
-        }
-
-        async function testPrinter() {
-            const testResult = document.getElementById('testResult');
-            testResult.className = 'printer-test-result';
-            testResult.textContent = 'Отправка тестовой печати...';
-
+            const name = document.getElementById('stationName').value.trim();
             const type = document.getElementById('printerType').value;
-            let address = '';
+            const copies = Number(document.getElementById('stationCopies').value) || 1;
+            const enabled = document.getElementById('stationEnabled').checked;
+            const agentId = document.getElementById('stationAgent').value || null;
+
+            if (!name) return fail('укажите название станции');
+
+            let address = null;
+            let device = null;
+            let bluetooth = null;
 
             if (type === 'network') {
                 address = document.getElementById('printerAddress').value.trim();
+                if (!address) return fail('укажите IP-адрес и порт принтера');
             } else if (type === 'usb') {
-                address = document.getElementById('usbDevice').value.trim();
+                device = document.getElementById('usbDevice').value.trim();
+                if (!device) return fail('укажите путь к устройству принтера');
+            } else if (type === 'system') {
+                device = document.getElementById('systemPrinterName').value.trim();
+                if (!device) return fail('укажите имя системного принтера');
             } else if (type === 'bluetooth') {
-                address = document.getElementById('bluetoothAddress').value.trim();
+                bluetooth = document.getElementById('bluetoothAddress').value.trim();
+                device = bluetooth;
+                if (!bluetooth) return fail('укажите адрес Bluetooth-принтера');
             }
 
-            if (!address) {
-                testResult.className = 'printer-test-result error';
-                testResult.textContent = '❌ Введите адрес принтера';
-                return;
-            }
+            const categories = Array.from(document.querySelectorAll('.category-checkbox:checked')).map((cb) => cb.value);
+
+            const payload = { name, type, address, device, bluetooth, categories, copies, enabled, agentId };
 
             try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/test-station`, {
-                    method: 'POST',
+                const url = editingStationId
+                    ? `${API_PRINTERS}/stations/${encodeURIComponent(editingStationId)}`
+                    : `${API_PRINTERS}/stations`;
+                const res = await AUTH.fetch(url, {
+                    method: editingStationId ? 'PUT' : 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type, address })
+                    body: JSON.stringify(payload)
                 });
+                if (!res.ok) throw new Error(await apiError(res));
 
-                const data = await response.json();
-
-                if (data.success) {
-                    testResult.className = 'printer-test-result success';
-                    testResult.textContent = '✅ Тестовая печать успешно отправлена!';
-                } else {
-                    throw new Error(data.error || 'Ошибка печати');
-                }
-            } catch (error) {
-                testResult.className = 'printer-test-result error';
-                testResult.textContent = `❌ Ошибка: ${error.message}`;
+                await loadStations();
+                renderAgents();
+                closeStationModal();
+                toast(agentId ? 'Станция сохранена' : 'Станция сохранена, но агент не привязан — печати не будет');
+            } catch (e) {
+                // Модалку не закрываем: введённое не должно теряться.
+                fail(e.message);
             }
         }
 
-        async function testStationPrinter(id) {
-            const station = stations.find(s => s.id === id);
-            if (!station) return;
+        /**
+         * Тестовый чек печатает агент на точке, а не сервер: сервер не видит
+         * принтер в сети заведения. Поэтому тест возможен только для уже
+         * сохранённой станции с привязанным агентом — печатается то, что
+         * лежит в базе, а не то, что набрано в форме.
+         */
+        async function testPrinter() {
+            const tr = document.getElementById('testResult');
+            const show = (cls, text) => {
+                tr.className = `printer-test-result ${cls}`;
+                tr.textContent = text;
+            };
 
-            station.status = 'testing';
-            renderStations();
+            if (!requireServer('отправить тестовую печать')) return;
 
-            try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/test-station`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        type: station.type,
-                        address: station.address
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    station.status = 'online';
-                    station.lastPrint = new Date();
-                    alert('✅ Тестовая печать успешно отправлена!');
-                } else {
-                    throw new Error(data.error || 'Ошибка печати');
-                }
-            } catch (error) {
-                station.status = 'offline';
-                alert(`❌ Ошибка: ${error.message}`);
+            if (!editingStationId) {
+                return show('error', '❌ Сначала сохраните станцию: тест печатает агент по записи из базы.');
             }
 
-            renderStations();
+            const station = stations.find((s) => String(s.id) === String(editingStationId));
+            const agentId = (station && station.agentId) || null;
+            if (!agentId) {
+                return show('error', '❌ К станции не привязан агент печати — выберите агента и сохраните станцию.');
+            }
+
+            const formAgentId = document.getElementById('stationAgent').value || null;
+            const changed = String(formAgentId || '') !== String(agentId);
+
+            show('', '⏳ Ставлю задание в очередь…');
+
+            try {
+                const res = await AUTH.fetch(`${API_AGENTS}/${encodeURIComponent(agentId)}/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stationId: editingStationId })
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+
+                // «Задание поставлено» — не «напечатано»: факт печати
+                // подтверждает агент, это видно в журнале печати.
+                const note = changed ? ' Несохранённые изменения формы в тесте не участвуют.' : '';
+                show(data.agentOnline ? 'success' : 'error',
+                    (data.message || 'Задание отправлено агенту.') + note);
+                await loadJobs();
+            } catch (e) {
+                show('error', `❌ Тест не отправлен: ${e.message}`);
+            }
         }
 
         async function saveGlobalSettings() {
+            if (!requireServer('сохранить настройки')) return;
+
             const settings = {
                 autoPrint: document.getElementById('autoPrint').checked,
-                defaultCopies: parseInt(document.getElementById('defaultCopies').value),
-                fontSize: parseInt(document.getElementById('fontSize').value),
-                paperWidth: parseInt(document.getElementById('paperWidth').value),
+                defaultCopies: Number(document.getElementById('defaultCopies').value) || 1,
+                fontSize: Number(document.getElementById('fontSize').value) || 12,
+                paperWidth: Number(document.getElementById('paperWidth').value) || 80,
                 encoding: document.getElementById('encoding').value,
                 printLogo: document.getElementById('printLogo').checked
             };
 
             try {
-                const response = await AUTH.fetch(`${API_BASE_URL}/settings`, {
+                const res = await AUTH.fetch(`${API_PRINTERS}/settings`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(settings)
                 });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    globalSettings = data.data;
-                    alert('✅ Настройки сохранены!');
-                } else {
-                    alert('❌ Ошибка сохранения настроек');
-                }
-            } catch (error) {
-                console.error('Save settings failed:', error);
-                alert('❌ Ошибка сохранения. Проверьте подключение к серверу.');
+                if (!res.ok) throw new Error(await apiError(res));
+                const data = await res.json();
+                globalSettings = data.data;
+                toast('Настройки сохранены');
+            } catch (e) {
+                toast(`❌ Не сохранено: ${e.message}`, 'error');
             }
         }
-
-        // Переключение полей в зависимости от типа принтера
-        document.getElementById('printerType').addEventListener('change', updatePrinterTypeFields);
 
         function updatePrinterTypeFields() {
             const type = document.getElementById('printerType').value;
             document.getElementById('networkPrinterGroup').style.display = type === 'network' ? 'block' : 'none';
             document.getElementById('usbPrinterGroup').style.display = type === 'usb' ? 'block' : 'none';
+            document.getElementById('systemPrinterGroup').style.display = type === 'system' ? 'block' : 'none';
             document.getElementById('bluetoothPrinterGroup').style.display = type === 'bluetooth' ? 'block' : 'none';
         }
 
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', async () => {
-            await loadStations();
-            await loadSettings();
-        });
+        // ─── Загрузка ─────────────────────────────────────────
 
-        // Периодическое обновление статуса станций
-        setInterval(async () => {
-            await loadStations();
+        async function reloadAll() {
+            try {
+                // Станции грузим раньше агентов: renderAgents считает их число.
+                await loadStations();
+                await loadAgents();
+                await loadSettings();
+                dataSourceOk = true;
+                clearDataError();
+                renderStations();
+                renderAgents();
+                await loadJobs();
+            } catch (e) {
+                // Никаких демо-данных и localStorage: фальшивые данные на
+                // экране хуже пустого экрана — по ним принимают решения.
+                showDataError(`Не удалось загрузить данные: ${e.message}`);
+            }
+        }
+
+        document.getElementById('printerType').addEventListener('change', updatePrinterTypeFields);
+
+        document.addEventListener('DOMContentLoaded', reloadAll);
+
+        // Периодическое обновление: статус агентов и станций меняется сам
+        setInterval(() => {
+            if (document.getElementById('stationModal').classList.contains('show')) return;
+            reloadAll();
         }, 30000);
     </script>
 </div><!-- /main-wrapper -->
