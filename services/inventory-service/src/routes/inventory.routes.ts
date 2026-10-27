@@ -88,7 +88,15 @@ router.get('/warehouses', authenticateUser, requireRole('admin', 'owner', 'manag
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
     const restaurantId = req.query.restaurantId as string;
-    if (!restaurantId) return res.status(400).json({ error: 'restaurantId is required' });
+    // Без restaurantId отдаём все склады предприятия, а не 400: экран склада
+    // грузит список, не выбирая точку, и получал «restaurantId is required» —
+    // приход и списание выглядели недоступными при существующих складах.
+    // super_admin обязан указать точку: без тенанта отбирать нечем.
+    if (!restaurantId) {
+      if (isSuper) return res.status(400).json({ error: 'restaurantId is required' });
+      const warehouses = await inventoryService.listWarehousesByEnterprise(req.enterpriseId!);
+      return res.json({ warehouses });
+    }
     const warehouses = await inventoryService.listWarehouses(restaurantId, isSuper ? undefined : req.enterpriseId);
     return res.json({ warehouses });
   } catch (error) {

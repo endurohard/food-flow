@@ -154,6 +154,23 @@ export class InventoryService {
     return result.rows;
   }
 
+  /**
+   * Склады предприятия целиком, без привязки к точке.
+   *
+   * Экран склада (inventory.html) грузит список складов, не выбирая точку:
+   * приход и списание пишутся на склад предприятия. Требовать restaurantId
+   * означало отдавать ему 400 и показывать «у предприятия нет складов» при
+   * существующих складах — поэтому отбор только по тенанту.
+   */
+  async listWarehousesByEnterprise(enterpriseId: string): Promise<any[]> {
+    const result = await this.pool.query(
+      `SELECT w.*, (SELECT COUNT(*) FROM inventory_stock s WHERE s.warehouse_id = w.id) as items_count
+       FROM warehouses w WHERE w.enterprise_id = $1 AND w.is_active = true ORDER BY w.name`,
+      [enterpriseId]
+    );
+    return result.rows;
+  }
+
   async createWarehouse(restaurantId: string, data: any, enterpriseId?: string): Promise<any> {
     const result = await this.pool.query(
       `INSERT INTO warehouses (restaurant_id, enterprise_id, name, warehouse_type)
