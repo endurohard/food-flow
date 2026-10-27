@@ -78,6 +78,10 @@ services:
       DATABASE_URL: postgresql://foodflow:foodflow_secret@postgres:5432/foodflow
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      # Ключ шифрования чужих секретов (пароль подключения к ВАТС). Без него
+      # роут настроек ВАТС отдаёт 503, а не сохраняет пароль открытым.
+      # Терять и менять нельзя: сохранённые пароли станут нечитаемыми.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY required}
     expose:
       - "3001"
     networks:
