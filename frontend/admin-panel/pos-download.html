@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Приложение кассы — FoodFlow</title>
+    <!--
+      Публичная страница скачивания APK кассы.
+
+      Открывается на самом терминале (кассир заходит браузером по адресу
+      своей организации), поэтому без входа в админку: до установки
+      приложения у человека ещё нет сессии. Секретов страница не содержит —
+      APK один на всю платформу, а адрес сервера виден и так в адресной строке.
+
+      Организация определяется по поддомену через публичный /api/enterprises/by-host.
+      Персонализация под организацию: имя в заголовке, имя скачиваемого файла
+      и QR/код привязки, по которому касса узнаёт адрес своего сервера.
+
+      Модальных диалогов (alert/confirm/prompt) здесь нет намеренно: страницу
+      открывают во встроенном браузере, где они заблокированы.
+    -->
+    <style>
+        :root {
+            --bg: #14171C;
+            --surface: #1C2026;
+            --surface-2: #262B33;
+            --text: #E8EAED;
+            --text-dim: #B3B8C0;
+            --primary: #1F9254;
+            --error: #CF5B5B;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 24px 16px 48px;
+        }
+        .wrap { max-width: 760px; margin: 0 auto; }
+        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .brand-mark {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: var(--primary); display: flex; align-items: center;
+            justify-content: center; font-size: 22px;
+        }
+        .brand-name { font-size: 20px; font-weight: 700; }
+        h1 { font-size: 26px; margin: 20px 0 6px; }
+        .org {
+            display: inline-block; padding: 4px 12px; border-radius: 999px;
+            background: rgba(31, 146, 84, 0.16); color: #5FD39A;
+            font-size: 13px; font-weight: 700;
+        }
+        .sub { color: var(--text-dim); font-size: 15px; line-height: 1.5; margin: 10px 0 24px; }
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 20px; margin-bottom: 16px;
+        }
+        .card h2 { font-size: 17px; margin: 0 0 12px; }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 16px 20px; border: none; border-radius: 12px;
+            background: var(--primary); color: #fff; font-size: 17px; font-weight: 700;
+            text-decoration: none; cursor: pointer; font-family: inherit;
+        }
+        .btn[aria-disabled="true"] { background: var(--surface-2); color: var(--text-dim); cursor: not-allowed; }
+        .meta { margin-top: 12px; font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+        .meta b { color: var(--text); font-weight: 600; }
+        .err {
+            margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+            background: rgba(207, 91, 91, 0.12); border: 1px solid rgba(207, 91, 91, 0.4);
+            color: #F0A5A5; font-size: 14px; line-height: 1.5;
+        }
+        .qr-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+        .qr-box { background: #fff; padding: 12px; border-radius: 12px; line-height: 0; }
+        .qr-box table { border-collapse: collapse; border-spacing: 0; }
+        .qr-box td { width: 5px; height: 5px; padding: 0; }
+        .qr-box td.on { background: #000; }
+        .qr-side { flex: 1; min-width: 220px; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+        .copybox { display: flex; gap: 8px; }
+        .copybox input {
+            flex: 1; min-width: 0; padding: 10px 12px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface-2);
+            color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 14px;
+        }
+        .copybox button {
+            padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text); cursor: pointer;
+            font-family: inherit; font-size: 13px; white-space: nowrap;
+        }
+        .code-big {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #5FD39A;
+        }
+        ol { padding-left: 22px; margin: 0; line-height: 1.8; color: var(--text-dim); font-size: 14px; }
+        ol b { color: var(--text); }
+        .hint { font-size: 13px; color: var(--text-dim); margin-top: 10px; line-height: 1.6; }
+        .toast {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+            background: var(--surface-2); border: 1px solid var(--border);
+            color: var(--text); padding: 12px 18px; border-radius: 10px;
+            font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="brand">
+        <div class="brand-mark">🍽️</div>
+        <div class="brand-name">FoodFlow</div>
+    </div>
+
+    <span class="org" id="orgBadge" hidden></span>
+    <h1>Приложение кассы для Android</h1>
+    <p class="sub">
+        Касса для смарт-терминалов АТОЛ Sigma и обычных Android-устройств.
+        Работает без интернета: чек печатается сразу, заказы догружаются на сервер,
+        когда связь появится.
+    </p>
+
+    <div class="card">
+        <h2>1. Скачать приложение</h2>
+        <a class="btn" id="dlBtn" href="/downloads/pos.apk" download>⬇ Скачать APK</a>
+        <div class="meta" id="dlMeta">Проверяем наличие сборки на сервере…</div>
+        <div id="dlError"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. Привязать к организации</h2>
+        <div class="qr-row">
+            <div class="qr-box" id="qrBox"></div>
+            <div class="qr-side">
+                <div class="field">
+                    <label>Код организации (вводится в приложении вручную)</label>
+                    <div class="code-big" id="shortCode">—</div>
+                </div>
+                <div class="field">
+                    <label>Адрес сервера</label>
+                    <div class="copybox">
+                        <input type="text" id="apiBase" readonly>
+                        <button type="button" onclick="copyField('apiBase')">Копировать</button>
+                    </div>
+                </div>
+                <div class="hint" id="qrHint">
+                    В приложении на первом экране нажмите «Сканировать QR» — адрес
+                    подставится сам. Если камеры нет, введите код организации.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Установка на терминал</h2>
+        <ol>
+            <li>Разрешите установку из неизвестных источников: <b>Настройки → Безопасность</b>.</li>
+            <li>Откройте скачанный файл и нажмите <b>Установить</b>.</li>
+            <li>Запустите <b>FoodFlow Касса</b>, отсканируйте QR с этой страницы.</li>
+            <li>Войдите своей рабочей почтой и паролем — теми же, что в админке.</li>
+            <li>Для фискальных чеков на терминале должен быть установлен
+                <b>Драйвер ККТ 10</b> от АТОЛ.</li>
+        </ol>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/vendor/qrcode-generator.js"></script>
+<script src="js/pos-binding.js"></script>
+<script>
+    const HOST = window.location.hostname;
+    const API_BASE = window.location.origin;
+    const LABEL = POS_BINDING.orgLabel(HOST);
+
+    document.getElementById('apiBase').value = API_BASE;
+    document.getElementById('shortCode').textContent = LABEL || '—';
+    if (!LABEL) {
+        document.getElementById('qrHint').innerHTML =
+            'Адрес открыт не с поддомена организации, поэтому короткого кода нет — ' +
+            'в приложении укажите адрес сервера целиком.';
+    }
+
+    function showToast(text) {
+        const t = document.getElementById('toast');
+        t.textContent = text;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    function copyField(id) {
+        const el = document.getElementById(id);
+        el.select();
+        // clipboard API недоступен без https — поэтому с откатом на execCommand
+        const done = (navigator.clipboard && navigator.clipboard.writeText)
+            ? navigator.clipboard.writeText(el.value).then(() => true).catch(() => false)
+            : Promise.resolve(document.execCommand('copy'));
+        Promise.resolve(done).then(ok => showToast(ok ? 'Скопировано' : 'Скопируйте вручную'));
+    }
+
+    // QR рисуем таблицей: без canvas он печатается и масштабируется,
+    // а на старых прошивках Sigma canvas местами отрисовывается пустым.
+    function renderQr(text) {
+        const qr = window.qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        const n = qr.getModuleCount();
+        let html = '<table>';
+        for (let r = 0; r < n; r++) {
+            html += '<tr>';
+            for (let c = 0; c < n; c++) {
+                html += qr.isDark(r, c) ? '<td class="on"></td>' : '<td></td>';
+            }
+            html += '</tr>';
+        }
+        document.getElementById('qrBox').innerHTML = html + '</table>';
+    }
+
+    function bindingUrl(orgName) {
+        return POS_BINDING.bindingUrl(API_BASE, LABEL, orgName);
+    }
+
+    renderQr(bindingUrl(null));
+
+    // Имя организации по поддомену — публичный роут, токена здесь нет
+    (async function loadOrg() {
+        if (!LABEL) return;
+        try {
+            const res = await fetch(API_BASE + '/api/enterprises/by-host?host=' + encodeURIComponent(HOST));
+            if (!res.ok) return;
+            const org = (await res.json()).enterprise;
+            if (!org || !org.name) return;
+            const badge = document.getElementById('orgBadge');
+            badge.textContent = org.name;
+            badge.hidden = false;
+            document.title = 'Приложение кассы — ' + org.name;
+            renderQr(bindingUrl(org.name));
+        } catch (e) {
+            /* поддомен не привязан — страница работает и без имени организации */
+        }
+    })();
+
+    function fmtSize(bytes) {
+        return (bytes / (1024 * 1024)).toFixed(1).replace('.', ',') + ' МБ';
+    }
+
+    // Наличие сборки проверяем до нажатия: мёртвая кнопка «Скачать»,
+    // отдающая 404-страницу вместо файла, хуже честного сообщения.
+    (async function loadBuild() {
+        const meta = document.getElementById('dlMeta');
+        const btn = document.getElementById('dlBtn');
+        const err = document.getElementById('dlError');
+        try {
+            const res = await fetch('/downloads/pos.json', { cache: 'no-store' });
+            if (res.status === 404) {
+                btn.setAttribute('aria-disabled', 'true');
+                btn.removeAttribute('href');
+                meta.textContent = '';
+                err.innerHTML = '<div class="err">Сборка кассы не загружена на этот сервер. ' +
+                    'Обратитесь к администратору платформы.</div>';
+                return;
+            }
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const b = await res.json();
+            const parts = [];
+            if (b.versionName) parts.push('Версия <b>' + b.versionName +
+                (b.versionCode ? ' (' + b.versionCode + ')' : '') + '</b>');
+            parts.push('Размер <b>' + fmtSize(b.size) + '</b>');
+            if (b.minSdk) parts.push('Android <b>' + b.minSdk + '+</b>');
+            if (b.uploadedAt) {
+                parts.push('Обновлено <b>' +
+                    new Date(b.uploadedAt).toLocaleDateString('ru-RU') + '</b>');
+            }
+            let html = parts.join(' · ');
+            if (b.fileName) html += '<br>Файл: <b>' + b.fileName + '</b>';
+            if (b.sha256) html += '<br>SHA-256: ' + b.sha256;
+            meta.innerHTML = html;
+        } catch (e) {
+            meta.textContent = '';
+            err.innerHTML = '<div class="err">Не удалось получить данные о сборке: ' +
+                e.message + '</div>';
+        }
+    })();
+</script>
+</body>
+</html>

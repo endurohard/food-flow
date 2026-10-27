@@ -175,6 +175,11 @@ services:
         paths:
           - /admin-panel
         strip_path: false
+      # Раздача APK кассы: отдельный роут, т.к. путь не начинается с /admin-panel
+      - name: pos-downloads
+        paths:
+          - /downloads
+        strip_path: false
       - name: root-redirect
         paths:
           - /

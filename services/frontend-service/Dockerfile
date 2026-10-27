@@ -9,7 +9,7 @@ COPY package*.json ./
 RUN npm install --production
 
 # Copy application code
-COPY index.js ./
+COPY index.js downloads.js ./
 
 # Create public directory
 RUN mkdir -p public

@@ -1614,6 +1614,35 @@ AUTH.requireAuth();
 
         <!-- Integrations Tab -->
         <div id="integration" class="tab-content">
+            <!-- Приложение кассы: ссылка на публичную страницу скачивания APK.
+                 Страница открывается без входа — её адрес дают кассиру,
+                 чтобы установить кассу прямо на терминале. -->
+            <div class="card" style="margin-bottom:24px;">
+                <div class="card-header">
+                    <h2>📱 Приложение кассы (Android)</h2>
+                    <p style="margin: 8px 0 0 0; font-size: 14px; color: var(--color-text-secondary);">
+                        APK для смарт-терминалов АТОЛ Sigma и Android-устройств.
+                        На странице скачивания есть QR привязки к вашей организации.
+                    </p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label>Ссылка для кассира</label>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <input type="text" class="form-control" id="posAppLink" readonly
+                                   style="flex:1;min-width:260px;">
+                            <button type="button" class="btn btn-secondary" onclick="copyPosAppLink()">Копировать</button>
+                            <a class="btn btn-primary" id="posAppOpen" href="/admin-panel/pos-download.html"
+                               target="_blank" rel="noopener">Открыть страницу</a>
+                        </div>
+                    </div>
+                    <p style="font-size:13px;color:var(--color-text-secondary);margin:0;">
+                        Откройте ссылку на самом терминале, скачайте APK и отсканируйте QR —
+                        адрес сервера подставится автоматически.
+                    </p>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="card-header">
                     <h2>Интеграции</h2>
@@ -1629,6 +1658,26 @@ AUTH.requireAuth();
     <div class="notification" id="notification"></div>
 
     <script>
+        // Ссылка на страницу скачивания кассы — абсолютная: её копируют
+        // и открывают на терминале, где относительный путь бесполезен
+        (function initPosAppLink() {
+            const link = window.location.origin + '/admin-panel/pos-download.html';
+            const input = document.getElementById('posAppLink');
+            if (input) input.value = link;
+        })();
+
+        function copyPosAppLink() {
+            const input = document.getElementById('posAppLink');
+            if (!input) return;
+            input.select();
+            const done = (navigator.clipboard && navigator.clipboard.writeText)
+                ? navigator.clipboard.writeText(input.value).then(() => true).catch(() => false)
+                : Promise.resolve(document.execCommand('copy'));
+            Promise.resolve(done).then(ok => showNotification(
+                ok ? 'Ссылка скопирована' : 'Скопируйте ссылку вручную'
+            ));
+        }
+
         // Sidebar toggle
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');

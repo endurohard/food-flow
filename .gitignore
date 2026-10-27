@@ -41,3 +41,7 @@ Wiki/.obsidian/
 # Дизайн: выгрузки канваса и черновики концептов — в репозиторий не идут
 *.zip
 frontend/design-concepts/
+
+# Собранный APK кассы: бинарник раздаётся через /downloads, а не хранится в git.
+# Публикуется скриптом scripts/publish-pos-apk.sh
+frontend/downloads/
