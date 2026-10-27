@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.foodflow.pos.PosApplication
+import ru.foodflow.pos.BuildConfig
+import ru.foodflow.pos.data.Binding
 import ru.foodflow.pos.data.Cart
 import ru.foodflow.pos.data.CartLine
 import ru.foodflow.pos.data.CartModifier
@@ -116,6 +118,23 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
             if (it.startsWith("http://") || it.startsWith("https://")) it else "https://$it"
         }
         settings.apiBase = normalized
+        _screen.value = if (settings.isLoggedIn) Screen.POS else Screen.LOGIN
+    }
+
+    /**
+     * Привязка терминала к организации: на вход — содержимое QR, короткий код
+     * организации или полный адрес. Неразобранный код нельзя молча принять:
+     * касса ушла бы работать не на тот сервер, поэтому ошибка видна на экране.
+     */
+    fun applyBinding(raw: String) {
+        val target = Binding.parse(raw, BuildConfig.PLATFORM_DOMAIN)
+        if (target == null) {
+            _toast.value = "Не удалось разобрать код привязки — отсканируйте QR заново"
+            return
+        }
+        settings.apiBase = target.apiBase
+        settings.enterpriseName = target.orgName
+        _toast.value = target.orgName?.let { "Организация: $it" } ?: "Сервер: ${target.apiBase}"
         _screen.value = if (settings.isLoggedIn) Screen.POS else Screen.LOGIN
     }
 

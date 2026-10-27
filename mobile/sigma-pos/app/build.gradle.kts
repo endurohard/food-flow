@@ -19,6 +19,25 @@ android {
 
         // Базовый URL Kong по умолчанию; на устройстве меняется в настройках
         buildConfigField("String", "DEFAULT_API_BASE", "\"https://foodflow.local\"")
+        // Базовый домен платформы: по нему короткий код организации (jezva)
+        // разворачивается в адрес https://jezva.food-flow.ru. Полный адрес из QR
+        // всегда главнее — это только для ручного ввода кода.
+        buildConfigField("String", "PLATFORM_DOMAIN", "\"food-flow.ru\"")
+    }
+
+    // signingConfigs объявляется ДО buildTypes: блоки вычисляются по порядку,
+    // и при обратном порядке findByName("release") всегда возвращает null —
+    // релиз молча уходит с debug-ключом, а такой apk нельзя обновить поверх.
+    signingConfigs {
+        val ksPath = (project.findProperty("FF_KEYSTORE") as String?)
+        if (ksPath != null && file(ksPath).exists()) {
+            create("release") {
+                storeFile = file(ksPath)
+                storePassword = project.findProperty("FF_KEYSTORE_PASSWORD") as String?
+                keyAlias = project.findProperty("FF_KEY_ALIAS") as String?
+                keyPassword = project.findProperty("FF_KEY_PASSWORD") as String?
+            }
+        }
     }
 
     buildTypes {
@@ -35,18 +54,6 @@ android {
             // Подпись релиза задаётся через ~/.gradle/gradle.properties
             // (FF_KEYSTORE / FF_KEYSTORE_PASSWORD / FF_KEY_ALIAS / FF_KEY_PASSWORD)
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
-        }
-    }
-
-    signingConfigs {
-        val ksPath = (project.findProperty("FF_KEYSTORE") as String?)
-        if (ksPath != null && file(ksPath).exists()) {
-            create("release") {
-                storeFile = file(ksPath)
-                storePassword = project.findProperty("FF_KEYSTORE_PASSWORD") as String?
-                keyAlias = project.findProperty("FF_KEY_ALIAS") as String?
-                keyPassword = project.findProperty("FF_KEY_PASSWORD") as String?
-            }
         }
     }
 
@@ -99,6 +106,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
+    // Сканирование QR привязки к организации: zxing-android-embedded даёт
+    // готовую активность камеры, своей реализации превью не нужно
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     // Шифрованное хранение токена и настроек
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

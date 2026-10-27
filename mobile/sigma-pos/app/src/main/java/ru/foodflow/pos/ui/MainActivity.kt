@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = FoodFlowColors) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    PosApp()
+                    PosApp(deepLink = intent?.data?.toString())
                 }
             }
         }
@@ -54,10 +54,16 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PosApp(vm: PosViewModel = viewModel()) {
+private fun PosApp(vm: PosViewModel = viewModel(), deepLink: String? = null) {
     val screen by vm.screen.collectAsState()
     val toast by vm.toast.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+
+    // Ссылка ffpos://setup применяется один раз на запуск: повторный вызов
+    // при рекомпозиции сбрасывал бы адрес сервера уже настроенной кассы
+    LaunchedEffect(deepLink) {
+        deepLink?.let { vm.applyBinding(it) }
+    }
 
     LaunchedEffect(toast) {
         toast?.let {

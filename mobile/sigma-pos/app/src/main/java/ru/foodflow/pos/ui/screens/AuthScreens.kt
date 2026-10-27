@@ -1,5 +1,6 @@
 package ru.foodflow.pos.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,7 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -32,16 +37,32 @@ import androidx.compose.ui.unit.dp
 import ru.foodflow.pos.ui.PosViewModel
 import ru.foodflow.pos.ui.Screen
 
-/** Первый запуск: куда подключаться. Адрес Kong того же вида, что в браузере. */
+/**
+ * Первый запуск: привязка терминала к организации.
+ *
+ * Основной путь — сканировать QR со страницы `/admin-panel/pos-download.html`
+ * той организации, которой принадлежит терминал: APK один на всю платформу,
+ * адрес сервера приходит из кода привязки. Ручной ввод кода организации и
+ * полного адреса оставлен как резерв: камера может быть залита светом или
+ * отсутствовать вовсе.
+ */
 @Composable
 fun SetupScreen(vm: PosViewModel, padding: PaddingValues) {
+    var code by remember { mutableStateOf("") }
+    var manual by remember { mutableStateOf(vm.settings.apiBase.isNotBlank()) }
     var url by remember { mutableStateOf(vm.settings.apiBase.ifBlank { "https://" }) }
+
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        // Отмена сканирования — не ошибка: человек мог закрыть камеру сам
+        result.contents?.let { vm.applyBinding(it) }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .padding(32.dp),
+            .padding(32.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -52,30 +73,77 @@ fun SetupScreen(vm: PosViewModel, padding: PaddingValues) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Укажите адрес сервера FoodFlow — тот же, по которому открывается админка",
+            "Отсканируйте QR со страницы «Приложение кассы» в админке вашей организации",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = {
+                scanner.launch(
+                    ScanOptions()
+                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setPrompt("Наведите камеру на QR привязки")
+                        .setBeepEnabled(false)
+                        .setOrientationLocked(false)
+                )
+            },
+            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().height(56.dp)
+        ) {
+            Text("Сканировать QR")
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "или введите код организации",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = url,
-            onValueChange = { url = it },
-            label = { Text("Адрес сервера") },
-            placeholder = { Text("https://foodflow.example.ru") },
+            value = code,
+            onValueChange = { code = it.trim() },
+            label = { Text("Код организации") },
+            placeholder = { Text("например, jezva") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Done
-            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
         Button(
-            onClick = { vm.saveServerUrl(url) },
-            enabled = url.length > 8,
+            onClick = { vm.applyBinding(code) },
+            enabled = code.length >= 2,
             modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().height(52.dp)
         ) {
-            Text("Продолжить")
+            Text("Привязать")
+        }
+
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = { manual = !manual }) {
+            Text(if (manual) "Скрыть ввод адреса" else "Указать адрес сервера вручную")
+        }
+
+        if (manual) {
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("Адрес сервера") },
+                placeholder = { Text("https://foodflow.example.ru") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done
+                ),
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth()
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { vm.applyBinding(url) },
+                enabled = url.length > 8,
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().height(52.dp)
+            ) {
+                Text("Продолжить")
+            }
         }
     }
 }
@@ -100,6 +168,15 @@ fun LoginScreen(vm: PosViewModel, padding: PaddingValues) {
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
+        // Организация из кода привязки: видно, на какой сервер уйдут продажи
+        vm.settings.enterpriseName?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                it,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
             value = email,

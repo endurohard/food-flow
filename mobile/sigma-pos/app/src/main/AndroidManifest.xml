@@ -36,6 +36,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Привязка к организации по ссылке: тот же код, что в QR.
+                 Нужен, когда страницу скачивания открыли на самом терминале —
+                 нажатие ссылки настраивает кассу без камеры. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ffpos" android:host="setup" />
+            </intent-filter>
         </activity>
 
         <!-- Перезапуск очереди синхронизации после загрузки устройства -->

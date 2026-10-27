@@ -58,6 +58,14 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_RESTAURANT, null)
         set(v) = prefs.edit().putString(KEY_RESTAURANT, v).apply()
 
+    /**
+     * Имя организации из кода привязки. Нужно только для показа на экране
+     * входа: кассир видит, к какой организации привязан терминал, до логина.
+     */
+    var enterpriseName: String?
+        get() = prefs.getString(KEY_ENTERPRISE_NAME, null)
+        set(v) = prefs.edit().putString(KEY_ENTERPRISE_NAME, v).apply()
+
     var restaurantName: String?
         get() = prefs.getString(KEY_RESTAURANT_NAME, null)
         set(v) = prefs.edit().putString(KEY_RESTAURANT_NAME, v).apply()
@@ -106,6 +114,7 @@ class Settings(context: Context) {
         const val KEY_USER_NAME = "user_name"
         const val KEY_ROLE = "enterprise_role"
         const val KEY_RESTAURANT = "restaurant_id"
+        const val KEY_ENTERPRISE_NAME = "enterprise_name"
         const val KEY_RESTAURANT_NAME = "restaurant_name"
         const val KEY_REGISTER = "register_id"
         const val KEY_TAXATION = "taxation_type"
