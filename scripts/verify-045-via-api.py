@@ -97,10 +97,14 @@ for name, o in orgs.items():
 
     st, wh = http("/api/inventory/warehouses", token)
     check(f"[{name}] GET /api/inventory/warehouses → 200", st == 200, f"HTTP {st}")
-    whs = wh.get("data") if isinstance(wh, dict) else wh
+    # Ответ роута — {"warehouses": [...]}, а не {"data": [...]}: имя поля сверено
+    # с res.json() в inventory.routes.ts. Чтение по чужому ключу давало пустой
+    # список, и проверка «нет чужих складов» проходила, ничего не проверив.
+    whs = wh.get("warehouses") if isinstance(wh, dict) else wh
     whs = whs if isinstance(whs, list) else []
+    check(f"[{name}] склады предприятия вообще пришли", len(whs) > 0, f"{len(whs)} шт.")
     check(f"[{name}] видит только свои склады",
-          all(w.get("enterpriseId", w.get("enterprise_id", o["id"])) == o["id"] for w in whs),
+          whs and all(w.get("enterprise_id") == o["id"] for w in whs),
           f"{len(whs)} шт.")
 
     total_items = 0
@@ -111,11 +115,15 @@ for name, o in orgs.items():
         if st != 200:
             check(f"[{name}] GET /api/inventory/stock/{wid} → 200", False, f"HTTP {st} {stock}")
             continue
-        items = stock.get("data") if isinstance(stock, dict) else stock
+        # Ответ — {"stock": [...]}, имя сверено с res.json() роута stock/:id
+        items = stock.get("stock") if isinstance(stock, dict) else stock
         items = items if isinstance(items, list) else []
         total_items += len(items)
         for it in items:
-            iid = it.get("inventoryItemId") or it.get("inventory_item_id") or it.get("id")
+            iid = it.get("inventory_item_id")
+            if not iid:
+                check(f"[{name}] в позиции остатка есть inventory_item_id", False, str(it)[:200])
+                continue
             owner = q(f"""SELECT e.name FROM inventory_items i
                             JOIN enterprises e ON e.id = i.enterprise_id
                            WHERE i.id = '{iid}'""")
