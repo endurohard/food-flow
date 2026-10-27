@@ -13,6 +13,21 @@ import {
   requireSuperAdmin
 } from '../middleware/enterprise.middleware';
 import { config } from '../config';
+import { encryptSecret, maskSecret } from '../utils/secrets';
+
+// Адрес ВАТС выдаётся в карточке портала и ОБЯЗАН содержать порт: клиентская
+// библиотека дописывает :10150, если порта нет, и подключение уходит в пустоту.
+const vatsSettingsSchema = Joi.object({
+  vats_enabled: Joi.boolean().required(),
+  vats_host: Joi.string().max(255).pattern(/^[a-z0-9.-]+:\d{2,5}$/i)
+    .messages({ 'string.pattern.base': 'Адрес должен быть в виде host:port, например org.vats05.ru:443' })
+    .allow('', null),
+  // Пустая строка = «не менять». Иначе открытие формы и сохранение без ввода
+  // пароля затирало бы сохранённый пароль, а маска уехала бы в базу.
+  vats_password: Joi.string().max(255).allow('', null),
+  vats_client_type: Joi.string().max(50).default('foodflow'),
+  vats_protocol_version: Joi.number().integer().valid(1, 2).default(1)
+});
 
 const createEnterpriseSchema = Joi.object({
   name: Joi.string().min(1).max(200).required(),
@@ -1031,5 +1046,103 @@ router.get(
     }
   }
 );
+
+// ===== Интеграция с ВАТС =====
+// Настройки правит владелец/админ своего предприятия: реквизиты клиент берёт
+// в карточке ВАТС-портала и вводит сам.
+
+router.get('/:id/vats-settings', authenticateUser, async (req: any, res) => {
+  try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && req.enterpriseId !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Чужое предприятие' });
+    }
+    const r = await pool.query(
+      `SELECT vats_enabled, vats_host, vats_password, vats_client_type,
+              vats_protocol_version, vats_last_connected_at, vats_last_error
+         FROM enterprises WHERE id = $1`,
+      [req.params.id]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Предприятие не найдено' });
+    const row = r.rows[0];
+    // Поля перечислены явно: `...row` протащил бы наружу и сам шифротекст
+    // пароля, и любое поле, добавленное в таблицу позже.
+    return res.json({
+      vats_enabled: row.vats_enabled,
+      vats_host: row.vats_host,
+      vats_client_type: row.vats_client_type,
+      vats_protocol_version: row.vats_protocol_version,
+      vats_last_connected_at: row.vats_last_connected_at,
+      vats_last_error: row.vats_last_error,
+      vats_password: maskSecret(row.vats_password),
+      vats_password_set: !!row.vats_password
+    });
+  } catch (e: any) {
+    console.error('vats-settings get:', e);
+    return res.status(500).json({ error: 'Не удалось получить настройки ВАТС' });
+  }
+});
+
+router.put('/:id/vats-settings', authenticateUser, async (req: any, res) => {
+  try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && req.enterpriseId !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Чужое предприятие' });
+    }
+    const { error: vErr, value } = vatsSettingsSchema.validate(req.body, { stripUnknown: true });
+    if (vErr) {
+      return res.status(400).json({ error: 'Validation error', message: vErr.details[0].message });
+    }
+
+    // Пустой пароль = «оставить прежний». Это не каприз UI: форма открывается
+    // с маской, и без такой трактовки сохранение настроек без повторного
+    // ввода пароля затирало бы рабочее подключение.
+    const keepPassword = !value.vats_password;
+    const encrypted = keepPassword ? null : encryptSecret(value.vats_password);
+
+    const r = await pool.query(
+      `UPDATE enterprises
+          SET vats_enabled = $1,
+              vats_host = NULLIF($2, ''),
+              vats_password = CASE WHEN $3::boolean THEN vats_password ELSE $4 END,
+              vats_client_type = $5,
+              vats_protocol_version = $6,
+              updated_at = NOW()
+        WHERE id = $7
+        RETURNING vats_enabled, vats_host, vats_client_type, vats_protocol_version`,
+      [value.vats_enabled, value.vats_host || '', keepPassword, encrypted,
+       value.vats_client_type, value.vats_protocol_version, req.params.id]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Предприятие не найдено' });
+    // Перечисляем поля явно, а не отдаём строку базы целиком: иначе любое
+    // новое поле (в т.ч. vats_password) автоматически уедет клиенту.
+    const s = r.rows[0];
+    return res.json({
+      success: true,
+      settings: {
+        vats_enabled: s.vats_enabled,
+        vats_host: s.vats_host,
+        vats_client_type: s.vats_client_type,
+        vats_protocol_version: s.vats_protocol_version
+      }
+    });
+  } catch (e: any) {
+    // CHECK из миграции 039: включение без адреса или пароля.
+    if (e.code === '23514' && String(e.constraint).includes('vats_enabled_needs_creds')) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'Чтобы включить интеграцию, укажите адрес и пароль из ВАТС-портала'
+      });
+    }
+    if (String(e.message).includes('ENCRYPTION_KEY')) {
+      return res.status(503).json({
+        error: 'Service misconfigured',
+        message: 'На сервере не настроен ключ шифрования — пароль сохранить нельзя'
+      });
+    }
+    console.error('vats-settings put:', e);
+    return res.status(500).json({ error: 'Не удалось сохранить настройки ВАТС' });
+  }
+});
 
 export default router;
