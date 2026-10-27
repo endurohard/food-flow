@@ -187,6 +187,15 @@ router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res:
     if (error.message === 'Invoice already confirmed' || error.message === 'Invoice not found') {
       return res.status(400).json({ error: error.message });
     }
+    // Накладная выписана на склад другого предприятия (заведена мимо API —
+    // скриптом или импортом). Триггер миграции 045 не даёт оприходовать товар
+    // на чужой склад; это ошибка данных, а не сбой сервиса.
+    if (error.code === '23514' && /tenant_mismatch/.test(String(error.message))) {
+      return res.status(400).json({
+        error: 'TenantMismatch',
+        message: 'Склад накладной принадлежит другому предприятию — приёмка невозможна. Укажите свой склад.'
+      });
+    }
     console.error('Confirm invoice error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
