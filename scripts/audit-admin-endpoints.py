@@ -91,18 +91,38 @@ for page in PAGES:
     # страницу надо прочитать целиком, http() режет тело
     full = sh(["curl", "-s", BASE + ADMIN + "/" + page])
     urls = set()
-    for m in re.finditer(r"""(?:AUTH\.fetch|apiJson|fetch)\(\s*[`'"]([^`'"]*?/api/[^`'"]*)[`'"]""", full):
-        urls.add(m.group(1))
-    # AUTH.fetch('/api/...') c конкатенацией базового URL
-    for m in re.finditer(r"""AUTH\.API_BASE\s*\+\s*[`'"]([^`'"]+)[`'"]""", full):
-        urls.add(m.group(1))
+    # Берём не только URL, но и метод из опций запроса: слепой GET на роут,
+    # который фронт зовёт POST'ом (/crm/points/redeem) или PUT'ом
+    # (/nomenclature/cash-order), даёт 404 от самого Express — артефакт
+    # проверки, а не мёртвый эндпоинт.
+    for m in re.finditer(
+            r"""(?:AUTH\.fetch|apiJson|fetch)\(\s*[`'"]([^`'"]*?/api/[^`'"]*)[`'"]\s*(,\s*\{(?:[^{}]|\{[^{}]*\})*\})?""",
+            full):
+        url, opts = m.group(1), (m.group(2) or "")
+        mm = re.search(r"method\s*:\s*['\"](\w+)['\"]", opts)
+        method = (mm.group(1) if mm else "GET").upper()
+        if method == "GET":
+            urls.add(url)
+    # AUTH.API_BASE + '/api/...' — это базовый URL раздела, а не готовый
+    # эндпоинт: конкретные вызовы делаются конкатенацией ниже по коду.
+    # Проверять его слепым GET бессмысленно, поэтому НЕ добавляем.
 
     gets = sorted(u for u in urls if "${" not in u and "' +" not in u and '" +' not in u)
+    # URL с хвостовым '/' — это шаблон, куда фронт подставляет id
+    # ('/api/x/' + id). Дёргать его без id бессмысленно: 404/500 от такого
+    # запроса — артефакт проверки, а не поломка экрана. Такие же артефакты
+    # дают базовые URL без ресурса (AUTH.API_BASE + '/api/printers') и роуты
+    # других методов (PUT /nomenclature/cash-order, POST /crm/points/redeem).
+    # Проверять их надо живым сценарием с настоящим id, а не слепым GET.
+    skipped = [u for u in gets if u.endswith('/')]
+    gets = [u for u in gets if not u.endswith('/')]
     if not gets:
         print(f"\n--- {page}: статических GET-URL не найдено")
         continue
 
     print(f"\n--- {page}")
+    if skipped:
+        print(f"    (пропущено шаблонов с id: {len(skipped)})")
     for u in gets:
         path = u if u.startswith("/") else "/" + u
         if not path.startswith("/api"):
