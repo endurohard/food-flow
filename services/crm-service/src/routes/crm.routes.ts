@@ -174,10 +174,33 @@ router.post('/promotions', authenticateUser, requireRole('admin', 'owner', 'mana
     });
     const { error, value } = schema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
+    // Без тенанта акция легла бы с enterprise_id = NULL и стала бы видна всем
+    // предприятиям сразу: отбор в listPromotions идёт по enterprise_id, и
+    // строка без него не принадлежит никому. Поэтому 403 до вставки.
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
     value.enterpriseId = req.enterpriseId;
     const promotion = await crmService.createPromotion(value);
     return res.status(201).json({ promotion });
-  } catch (error) { console.error('Create promotion error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+  } catch (error: any) {
+    // Дубль промокода внутри предприятия — ожидаемый ввод, а не сбой сервера:
+    // 500 заставлял оператора гадать, почему «Сохранить» не срабатывает.
+    if (error.code === '23505' && String(error.constraint).includes('promotions_code_per_enterprise')) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Промокод с таким кодом у вас уже есть — выберите другой'
+      });
+    }
+    if (error.code === '23514' && String(error.constraint).includes('promotions_valid_period')) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'Дата окончания акции не может быть раньше даты начала'
+      });
+    }
+    console.error('Create promotion error:', error); return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.put('/promotions/:id', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
