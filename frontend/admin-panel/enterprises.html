@@ -838,6 +838,14 @@ AUTH.requireAuth();
 
     try {
       const res = await AUTH.fetch('/api/enterprises');
+      // 403 здесь — не сбой, а отсутствие прав: экран управления организациями
+      // работает только у super_admin. Говорим это словами, а не «HTTP 403».
+      if (res.status === 403) {
+        loading.innerHTML = 'Раздел «Организации» доступен только супер-администратору. '
+          + 'Настройки своего предприятия — на странице '
+          + '<a href="/admin-panel/settings.html">Настройки</a>.';
+        return;
+      }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       enterprises = data.enterprises || data.data || [];
@@ -986,7 +994,14 @@ AUTH.requireAuth();
 
   function openAddUserModal() {
     if (!selectedUsersEntId) {
-      alert('Сначала выберите предприятие');
+      // alert() заблокирован во встроенном браузере VS Code — кнопка выглядела
+      // бы мёртвой. Говорим о проблеме inline, в том же блоке, что и ошибки.
+      const el = document.getElementById('usersAlert');
+      if (el) {
+        el.className = 'alert alert-error';
+        el.textContent = 'Сначала выберите предприятие';
+        el.style.display = '';
+      }
       return;
     }
     document.getElementById('addUserId').value = '';
@@ -1114,8 +1129,26 @@ AUTH.requireAuth();
     }
   }
 
+  // Деактивация подтверждается вторым нажатием: confirm() заблокирован во
+  // встроенном браузере VS Code, и кнопка выглядела бы мёртвой. Образец —
+  // сброс настроек в settings.html.
+  let pendingDeactivate = null;
+
   async function deactivateUser(userId) {
-    if (!confirm('Деактивировать пользователя?')) return;
+    const el = document.getElementById('usersAlert');
+    if (pendingDeactivate !== userId) {
+      pendingDeactivate = userId;
+      if (el) {
+        el.className = 'alert alert-error';
+        el.textContent = 'Нажмите «Деактивировать» ещё раз для подтверждения';
+        el.style.display = '';
+      }
+      // Подтверждение не висит бесконечно: случайный второй клик через минуту
+      // не должен деактивировать сотрудника
+      setTimeout(() => { if (pendingDeactivate === userId) pendingDeactivate = null; }, 5000);
+      return;
+    }
+    pendingDeactivate = null;
     try {
       const res = await AUTH.fetch('/api/enterprises/' + selectedUsersEntId + '/users/' + userId, {
         method: 'PUT',

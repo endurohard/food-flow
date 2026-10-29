@@ -247,10 +247,22 @@ AUTH.hydrateEnterprise = async function () {
   } catch (e) { /* ignore — фильтрация всё равно работает по ff_business_type */ }
 };
 
+// Экраны только для super_admin: пункты меню на них обязаны скрываться у всех
+// остальных. Иначе владелец видит в меню «Организации» / «Супер-админ», жмёт и
+// получает пустой экран с «Ошибка загрузки: HTTP 403» — эндпоинты под
+// requireSuperAdmin ему недоступны по праву, а меню об этом не знало.
+const SUPER_ADMIN_PAGES = ['enterprises.html', 'super-admin.html'];
+
 AUTH.applyBusinessType = function () {
   const type = this.getBusinessType();
+  const isSuper = this.getRole() === 'super_admin';
   document.querySelectorAll('a.nav-item[href]').forEach((a) => {
     const page = (a.getAttribute('href') || '').split('/').pop();
+    // Сначала роль: отбор по типу заведения к правам доступа отношения не имеет
+    if (SUPER_ADMIN_PAGES.includes(page) && !isSuper) {
+      a.style.setProperty('display', 'none', 'important');
+      return;
+    }
     const allowed = MODULE_ACCESS[page];
     // Скрываем с !important — страничные стили задают display на .nav-item с !important
     if (!allowed || !type || allowed.includes(type)) {

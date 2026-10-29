@@ -26,11 +26,12 @@ import urllib.request
 BASE = "http://localhost"
 ADMIN = "/admin-panel"
 PG = "food-flow-postgres"
-PAGES = [
-    "index.html", "inventory.html", "menu.html", "staff.html", "loyalty.html",
-    "settings.html", "wholesale.html", "pos-download.html", "orders.html",
-    "reports.html", "techcards.html", "nomenclature.html",
-]
+# Список страниц берём с самого прода (см. ниже), а не фиксируем руками:
+# в прошлый раз в списке были несуществующие reports.html/techcards.html,
+# а половина реальных экранов (dashboard, finance, analytics, calls, kds,
+# pos, tables, hall-designer, orders, enterprises, user-profile) не
+# проверялась вовсе — осмотр выглядел полным, покрывая 12 файлов из 22.
+PAGES: list = []
 
 
 def sh(cmd):
@@ -82,6 +83,21 @@ if token.count(".") != 2:
 
 broken = []
 checked = 0
+
+# Страницы берём из каталога контейнера frontend-service: это ровно те файлы,
+# которые браузер и может открыть. Жёсткий список в коде скрипта разошёлся бы
+# с реальностью (и уже расходился).
+PAGES = sorted(
+    p for p in sh(["docker", "exec", "frontend-service",
+                   "sh", "-c", "ls /app/public/admin-panel/*.html"]).split()
+    if p.endswith(".html")
+)
+PAGES = [p.rsplit("/", 1)[-1] for p in PAGES]
+print(f"\n===== Экранов к осмотру: {len(PAGES)}")
+print("  " + ", ".join(PAGES))
+if not PAGES:
+    print("ПРОВЕРКА НЕ СОСТОЯЛАСЬ: не удалось получить список страниц из контейнера")
+    sys.exit(1)
 
 for page in PAGES:
     st, html = http(f"{ADMIN}/{page}")
