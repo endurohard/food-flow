@@ -36,6 +36,10 @@ services:
         paths:
           - /api/orders
         strip_path: false
+      - name: pos-routes
+        paths:
+          - /api/pos
+        strip_path: false
       - name: cart-routes
         paths:
           - /api/cart

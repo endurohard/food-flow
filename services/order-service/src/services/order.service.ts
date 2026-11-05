@@ -477,7 +477,7 @@ export class OrderService {
    * Идемпотентно на стороне inventory-service (проверка по reference_id),
    * поэтому повторный переход статуса не списывает дважды.
    */
-  private async deductStockForOrder(order: any): Promise<void> {
+  async deductStockForOrder(order: any): Promise<void> {
     if (!config.autoDeductStock) return;
     if (!config.internalToken) {
       logger.warn('AUTO_DEDUCT_STOCK включён, но INTERNAL_TOKEN не задан — списание пропущено');

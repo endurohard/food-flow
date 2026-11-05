@@ -9,9 +9,17 @@ import { logger } from './utils/logger';
 import ordersRouter, { orderService } from './routes/orders';
 import tablesRouter from './routes/tables';
 import discountsRouter from './routes/discounts';
+import { createPosRouter } from './routes/pos';
+import { PosSaleService } from './services/pos-sale.service';
 
 const app = express();
 const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
+const posPool = new Pool({ connectionString: config.database.url });
+const posSaleService = new PosSaleService(
+  posPool,
+  orderService.outbox,
+  order => orderService.deductStockForOrder(order)
+);
 
 app.use(helmet());
 app.use(cors());
@@ -46,6 +54,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 app.use('/api/orders', ordersRouter);
+app.use('/api/pos', createPosRouter(posSaleService));
 app.use('/api/tables', tablesRouter);
 app.use('/api/discounts', discountsRouter);
 
@@ -72,6 +81,7 @@ const shutdown = (signal: string) => {
   orderService.outbox.stop();
   server.close(async () => {
     await healthPool.end().catch(() => {});
+    await posPool.end().catch(() => {});
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10_000);
