@@ -251,6 +251,63 @@ router.post('/:id/staff', authenticateUser, async (req, res) => {
   }
 });
 
+// ── Кассир режима кассы ──────────────────────────────────────────────────
+// Создаёт кассира (role=cashier + PIN), который может заходить в /cash-register.html.
+
+const createCashierSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).max(128).required(),
+  firstName: Joi.string().min(1).max(100).required(),
+  lastName: Joi.string().max(100).allow('', null).optional(),
+  pin: Joi.string().min(4).max(100).required(),
+});
+
+router.post('/:id/cashiers', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = createCashierSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: error.message });
+    }
+
+    // Права: супер-админ — сквозной; иначе владелец/админ ИМЕННО этой организации
+    if (req.userRole !== 'super_admin') {
+      const memberships = await enterpriseService.getUserEnterprises(req.userId!);
+      const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
+      if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Создавать кассира может владелец или админ организации'
+        });
+      }
+    }
+
+    const cashier = await enterpriseService.createCashier(req.params.id, value);
+    return res.status(201).json({ success: true, cashier });
+  } catch (error: any) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to create cashier:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Не удалось создать кассира' : error.message, message: error.message });
+  }
+});
+
+router.get('/:id/cashiers', authenticateUser, async (req, res) => {
+  try {
+    if (req.userRole !== 'super_admin') {
+      const memberships = await enterpriseService.getUserEnterprises(req.userId!);
+      const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
+      if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Смотреть кассиров может владелец или админ организации' });
+      }
+    }
+    const cashiers = await enterpriseService.listCashiers(req.params.id);
+    return res.status(200).json({ success: true, cashiers });
+  } catch (error: any) {
+    const status = error.statusCode || 500;
+    if (status >= 500) console.error('Failed to list cashiers:', error);
+    return res.status(status).json({ error: status >= 500 ? 'Не удалось получить кассиров' : error.message, message: error.message });
+  }
+});
+
 // Все ниже — только super_admin (requireSuperAdmin), без enterpriseContext.
 
 function genPassword(): string {

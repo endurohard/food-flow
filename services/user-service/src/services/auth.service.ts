@@ -303,6 +303,61 @@ export class AuthService {
   async close(): Promise<void> {
     await this.pool.end();
   }
+
+  // ── Сессии режима кассы ──────────────────────────────────────────────
+  // Одна сессия = вход кассира в режим кассы после ввода PIN.
+  // Статус 'active' — продажи разрешены, 'locked' — ожидание PIN, продажи откл.
+
+  async createCashRegisterSession(userId: string, registerId: string): Promise<string> {
+    const sessionId = crypto.randomUUID();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 8 * 60 * 1000); // 8 минут на неактивность
+
+    await this.pool.query(
+      `INSERT INTO cash_register_sessions (id, user_id, register_id, status, expires_at)
+       VALUES ($1, $2, $3, 'active', $4)`,
+      [sessionId, userId, registerId, expiresAt]
+    );
+    return sessionId;
+  }
+
+  async getCashRegisterSession(sessionId: string): Promise<any> {
+    const result = await this.pool.query(
+      `SELECT id, user_id, register_id, status, locked_at, expires_at, created_at
+       FROM cash_register_sessions WHERE id = $1`,
+      [sessionId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async getCashRegisterSessionByRegister(registerId: string, userId: string): Promise<any> {
+    const result = await this.pool.query(
+      `SELECT id, user_id, register_id, status, locked_at, expires_at, created_at
+       FROM cash_register_sessions
+       WHERE register_id = $1 AND user_id = $2`,
+      [registerId, userId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async setCashRegisterSessionStatus(sessionId: string, status: 'active' | 'locked', lockedAt?: Date): Promise<void> {
+    if (status === 'locked') {
+      await this.pool.query(
+        `UPDATE cash_register_sessions
+         SET status = 'locked', locked_at = $1, expires_at = $2
+         WHERE id = $3`,
+        [lockedAt, lockedAt, sessionId]
+      );
+    } else {
+      const now = new Date();
+      await this.pool.query(
+        `UPDATE cash_register_sessions
+         SET status = 'active', locked_at = NULL, expires_at = $1
+         WHERE id = $2`,
+        [now, sessionId]
+      );
+    }
+  }
 }
 
 export class AuthError extends Error {

@@ -54,7 +54,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 app.use('/api/orders', ordersRouter);
-app.use('/api/pos', createPosRouter(posSaleService));
+app.use('/api/pos', createPosRouter(posSaleService, posPool));
 app.use('/api/tables', tablesRouter);
 app.use('/api/discounts', discountsRouter);
 

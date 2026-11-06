@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Касса — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <script src="/js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Экраны ── */
+    .screen {
+      display: none;
+      flex: 1;
+      position: relative;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .screen.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card {
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      padding: 24px 20px;
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    h1 { font-size: 20px; }
+    h2 { font-size: 18px; }
+    h3 { font-size: 15px; margin-bottom: 8px; }
+
+    p { margin: 0 0 14px; font-size: 14px; line-height: 1.5; }
+
+    .label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      margin-bottom: 6px;
+    }
+
+    input[type="email"], input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 14px 12px;
+      font-size: 16px;
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      background: var(--admin-panel-bg);
+      color: var(--color-text-primary);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus {
+      border-color: var(--color-primary);
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      transition: background 0.15s, transform 0.05s;
+    }
+    button:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+      width: 100%;
+      padding: 14px;
+      font-size: 17px;
+      margin-top: 8px;
+    }
+    .btn-primary:hover { background: #18794e; }
+
+    .btn-secondary {
+      background: var(--admin-panel-bg);
+      color: var(--color-text-primary);
+      border: 1px solid var(--admin-panel-border);
+      padding: 12px 16px;
+      font-size: 15px;
+    }
+    .btn-secondary:hover { background: var(--admin-panel-bg-2); }
+
+    .btn-block { width: 100%; }
+
+    /* ── PIN input (numeric, tablet-friendly) ── */
+    .pin-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .pin-row input {
+      flex: 1;
+      font-size: 26px;
+      letter-spacing: 8px;
+      text-align: center;
+      padding: 12px;
+      height: 56px;
+      border-radius: var(--radius-md);
+    }
+
+    /* ── Тил (продажи) ── */
+    .till-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 16px 8px;
+      border-bottom: 1px solid var(--admin-panel-border);
+    }
+    .till-header h1 { margin: 0; font-size: 18px; }
+    .till-total {
+      font-size: 14px; color: var(--color-text-secondary);
+      text-align: right; flex: 1; min-width: 80px;
+    }
+    .till-total strong { display: block; font-size: 24px; color: var(--color-text-primary); }
+
+    .till-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .till-menu {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--admin-panel-bg);
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      gap: 12px;
+    }
+    .menu-item .name { font-weight: 500; }
+    .menu-item .price { font-size: 14px; color: var(--color-text-secondary); white-space: nowrap; }
+
+    .menu-item .qty-controls { display: flex; align-items: center; gap: 6px; }
+    .menu-item .qty {
+      width: 36px;
+      height: 36px;
+      font-size: 18px;
+      text-align: center;
+      border: 1px solid var(--admin-panel-border);
+      background: var(--admin-panel-bg);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+    .menu-item .remove {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--color-danger);
+      font-size: 16px;
+      border: 1px solid var(--color-danger);
+    }
+
+    .till-cart {
+      border-top: 1px solid var(--admin-panel-border);
+      padding: 12px;
+      background: var(--admin-panel-bg);
+    }
+    .till-cart h3 { margin: 0 0 8px; }
+
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--admin-panel-border-2);
+    }
+    .cart-item .name { font-size: 14px; }
+    .cart-item .price { font-size: 14px; color: var(--color-text-secondary); }
+
+    .till-total-box {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 2px solid var(--color-primary);
+    }
+    .till-total-box .amount { font-size: 22px; font-weight: 700; }
+
+    .pay-methods {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .pay-methods label {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      border: 1px solid var(--admin-panel-border);
+      background: var(--admin-panel-bg);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-size: 15px;
+    }
+    .pay-methods input { display: none; }
+    .pay-methods input:checked + span { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+    .till-actions { margin-top: 12px; }
+    .till-actions .btn-checkout {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 14px;
+      font-size: 18px;
+      border-radius: var(--radius-md);
+    }
+
+    .success-msg {
+      background: #e8f5e9;
+      color: #1b5e20;
+      padding: 12px;
+      border-radius: var(--radius-md);
+      margin-top: 12px;
+      text-align: center;
+      font-size: 15px;
+    }
+
+    /* ── override admin-panel colors for the standalone cash page ── */
+    body, .card { background: var(--admin-content-bg) !important; }
+    .screen { background: var(--admin-content-bg) !important; }
+
+    @media (max-width: 600px) {
+      .card { padding: 16px 14px; }
+      .till-header { padding: 12px 12px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 1. Login -->
+  <div id="login-screen" class="screen">
+    <div class="card">
+      <h1>Вход на кассу</h1>
+      <p style="margin-top:-8px;margin-bottom:16px">Укажите логин и пароль кассира.</p>
+      <label class="label">Логин (email)</label>
+      <input id="login-email" type="email" placeholder="name@cafe.example" autocomplete="email">
+      <label class="label">Пароль</label>
+      <input id="login-password" type="password" placeholder="Пароль" autocomplete="current-password">
+      <button class="btn btn-primary" id="btn-login">Войти</button>
+    </div>
+  </div>
+
+  <!-- 2. PIN -->
+  <div id="pin-screen" class="screen">
+    <div class="card">
+      <h2>Введите PIN кассира</h2>
+      <p class="label" style="margin-bottom:12px">Это нужно для входа в режим кассы (продажи).</p>
+      <div class="pin-row">
+        <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="00000" maxlength="6">
+      </div>
+      <button class="btn btn-primary" id="btn-verify-pin">Войти как кассир</button>
+      <p id="pin-error" style="color:var(--color-danger);font-size:13px;margin-top:8px"></p>
+    </div>
+  </div>
+
+  <!-- 3. Тил / продажи -->
+  <div id="till-screen" class="screen">
+    <div class="till-body">
+      <div class="till-header">
+        <h1 style="margin:0">Касса #<span id="register-name">—</span></h1>
+        <div class="till-total" id="till-total-label">Итого</div>
+          <div style="text-align:right;min-width:110px">
+            <div style="font-size:14px;color:var(--color-text-secondary)">продажи</div>
+            <div style="font-size:20px;font-weight:700;color:var(--color-text-primary)" id="till-total-value">0 00 ₽</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+          <button class="btn btn-secondary" id="btn-lock" style="font-size:15px;padding:10px 14px">Заблокировать кассу</button>
+        </div>
+      </div>
+
+      <div class="till-menu" id="menu-list">
+        <p style="color:var(--color-text-secondary);text-align:center;padding:32px 0">Загрузка меню…</p>
+      </div>
+
+      <div class="till-cart" id="cart-list">
+        <h3 style="margin:0 0 8px">Корзина</h3>
+        <div id="cart-empty" style="color:var(--color-text-secondary);font-size:14px">Продуктов нет</div>
+      </div>
+
+      <div class="pay-methods" id="pay-methods">
+        <label>
+          <input type="radio" name="payment" value="cash" checked>
+          <span>Наличные</span>
+        </label>
+        <label>
+          <input type="radio" name="payment" value="card">
+          <span>Картой</span>
+        </label>
+      </div>
+
+      <div class="till-actions">
+        <button class="btn btn-checkout" id="btn-checkout">Оплатить</button>
+      </div>
+
+      <div id="success-msg" style="display:none;color:#1b5e20;text-align:center;padding:8px 0;font-size:14px"></div>
+    </div>
+  </div>
+
+  <!-- 4. Блокировка / ожидание PIN -->
+  <div id="locked-screen" class="screen overlay">
+    <div class="card" style="padding:24px">
+      <h2 style="margin:0 0 6px">Касса заблокирована</h2>
+      <p style="margin:0 0 16px">Чтобы вернуть кассу, введите PIN кассира.</p>
+      <div class="pin-row">
+        <input id="unlock-pin" type="password" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="00000" maxlength="6">
+      </div>
+      <button class="btn btn-primary" id="btn-unlock">Разблокировать</button>
+      <p id="unlock-error" style="color:var(--color-danger);font-size:13px;margin-top:8px"></p>
+    </div>
+  </div>
+
+  <script src="/js/cash-register.js"></script>
+</body>
+</html>

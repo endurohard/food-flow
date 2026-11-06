@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Устройства — FoodFlow</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <script src="/js/auth.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--admin-content-bg);
+      color: var(--color-text-primary);
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    .page-header {
+      background: var(--admin-sidebar-bg);
+      border-bottom: 1px solid var(--admin-sidebar-border);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .page-header h1 { margin: 0; font-size: 18px; }
+    .page-header .breadcrumb { font-size: 12px; color: var(--color-text-secondary); margin-left: 8px; }
+    .page-header .breadcrumb a { color: var(--color-primary); text-decoration: none; }
+
+    .card {
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin: 20px 0;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label { display: block; font-size: 13px; font-weight: 500; color: var(--color-text-secondary); margin-bottom: 6px; }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      background: var(--admin-panel-bg);
+      color: var(--color-text-primary);
+      outline: none;
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--color-primary); }
+
+    .btn {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      transition: background 0.15s, transform 0.05s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 12px 18px;
+      font-size: 15px;
+    }
+    .btn-secondary {
+      background: var(--admin-panel-bg);
+      color: var(--color-text-primary);
+      border: 1px solid var(--admin-panel-border);
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+
+    .grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .grid-form { grid-template-columns: 1fr; } }
+
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin: 24px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--admin-panel-border);
+    }
+
+    .cashier-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--admin-content-bg);
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .cashier-table th, .cashier-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--admin-panel-border);
+    }
+    .cashier-table tr:last-child td { border-bottom: none; }
+    .cashier-table th { background: var(--admin-sidebar-bg); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-secondary); }
+    .cashier-table .pin-hash { font-family: monospace; color: var(--color-text-secondary); font-size: 12px; }
+
+    .kassa-picker {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .kassa-picker select {
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid var(--admin-panel-border);
+      border-radius: var(--radius-md);
+      background: var(--admin-panel-bg);
+      color: var(--color-text-primary);
+      outline: none;
+    }
+
+    .card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--admin-panel-border);
+    }
+    .card-row:last-child { border-bottom: none; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1b5e20;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      display: none;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <span>🍳 FoodFlow</span>
+    <h1>Устройства</h1>
+    <span class="breadcrumb"><a href="/admin-panel/index.html">Админ-панель</a> / Устройства</span>
+  </header>
+
+  <main style="max-width: 820px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 20px;">
+    <!-- Создание кассира -->
+    <div class="card">
+      <h2 class="section-title">Новый кассир (режим кассы)</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin:0 0 16px">
+        Заводит кассира с логином/паролем и PIN-блокировкой для режима кассы.
+      </p>
+      <form id="cashier-form" class="stack">
+        <div class="grid-form">
+          <div class="form-group">
+            <label class="form-label">ФИО</label>
+            <input type="text" class="form-input" id="c-name" placeholder="Иванов Иван" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Количество касс (1–3)</label>
+            <select class="form-select" id="c-registers">
+              <option value="1">1 касса</option>
+              <option value="2">2 кассы</option>
+              <option value="3">3 кассы</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email (логин)</label>
+          <input type="email" class="form-input" id="c-email" placeholder="name@cafe.example" required>
+        </div>
+        <div class="grid-form">
+          <div class="form-group">
+            <label class="form-label">Пароль (логина)</label>
+            <input type="password" class="form-input" id="c-password" placeholder="минимум 6 символов" minlength="6" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">PIN (блокировка кассы, 4–6 символов)</label>
+            <input type="password" class="form-input" id="c-pin" placeholder="0000" minlength="4" maxlength="6" autocomplete="new-password">
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap">
+          <button type="submit" class="btn btn-primary" style="flex:1;min-width:120px">Создать кассира</button>
+          <button type="button" class="btn btn-secondary" onclick="location.href='/admin-panel/index.html'">Отмена</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Созданные кассиры</h2>
+      <p style="color:var(--color-text-secondary);font-size:13px;margin:0 0 12px">
+        Список кассиров с их режимом кассы (PIN, режим, статус).
+      </p>
+      <div id="cashiers-list" style="overflow-x:auto">
+        <p style="color:var(--color-text-secondary)">Загрузка…</p>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    (function () {
+      'use strict';
+      var AUTH = window.AUTH;
+      var toastEl = document.getElementById('toast');
+      var enterpriseId = null;
+
+      // Берём enterpriseId из аккаунта текущего пользователя
+      var user = AUTH.getUser();
+      if (user && user.enterpriseId) { enterpriseId = user.enterpriseId; }
+
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.style.display = 'block';
+        setTimeout(function () { toastEl.style.display = 'none'; }, 3000);
+      }
+
+      async function loadCashiers() {
+        var list = document.getElementById('cashiers-list');
+        if (!enterpriseId) {
+          list.innerHTML = '<p style="color:var(--color-text-secondary)">Сначала выберите организацию</p>';
+          return;
+        }
+        try {
+          var res = await AUTH.fetch('/api/enterprises/' + enterpriseId + '/cashiers', { method: 'GET' });
+          if (res.ok) {
+            var data = await res.json();
+            var rows = data.cashiers || [];
+            if (!rows.length) {
+              list.innerHTML = '<p style="color:var(--color-text-secondary)">Кассиры ещё не созданы.</p>';
+              return;
+            }
+            var html = '<table class="cashier-table"><thead><tr>' +
+              '<th>ФИО</th><th>Email</th><th>Режим кассы (PIN)</th><th>Количество касс</th><th>Статус</th>' +
+              '</tr></thead><tbody>';
+            rows.forEach(function (c) {
+              var pin = c.pinHash ? '••••••' : '—';
+              html += '<tr>' +
+                '<td>' + escapeHtml(c.first_name || '') + ' ' + escapeHtml(c.last_name || '') + '</td>' +
+                '<td>' + escapeHtml(c.email) + '</td>' +
+                '<td class="pin-hash">' + escapeHtml(pin) + '</td>' +
+                '<td>' + (c.registerCount || 1) + '</td>' +
+                '<td>' + (c.isActive ? 'активен' : 'неактивен') + '</td>' +
+                '</tr>';
+            });
+            html += '</tbody></table>';
+            list.innerHTML = html;
+          } else {
+            var body = await res.json().catch(function () { return {}; });
+            list.innerHTML = '<p style="color:#cf5b5b">Ошибка: ' + (body.message || 'Неизвестная ошибка') + '</p>';
+          }
+        } catch (e) {
+          list.innerHTML = '<p style="color:#cf5b5b">Ошибка сети: ' + e.message + '</p>';
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      document.getElementById('cashier-form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var name = document.getElementById('c-name').value.trim();
+        var email = document.getElementById('c-email').value.trim();
+        var password = document.getElementById('c-password').value;
+        var pin = document.getElementById('c-pin').value;
+        var registerCount = document.getElementById('c-registers').value;
+
+        if (!name || !email || !password || !pin) {
+          showToast('Заполните все поля');
+          return;
+        }
+        if (password.length < 6) {
+          showToast('Пароль должен быть не менее 6 символов');
+          return;
+        }
+        if (pin.length < 4 || pin.length > 6) {
+          showToast('PIN должен быть 4–6 символов');
+          return;
+        }
+
+        var payload = {
+          email: email,
+          password: password,
+          firstName: name,
+          pin: pin,
+          registerCount: parseInt(registerCount, 10)
+        };
+
+        try {
+          var res = await AUTH.fetch('/api/enterprises/' + enterpriseId + '/cashiers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          var data = await res.json();
+          if (res.ok) {
+            showToast('Кассир создан: ' + data.cashier.first_name);
+            document.getElementById('cashier-form').reset();
+            loadCashiers();
+          } else {
+            showToast('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+          }
+        } catch (err) {
+          showToast('Ошибка сети: ' + err.message);
+        }
+      });
+
+      // --- init ---
+      if (!AUTH.isLoggedIn()) { window.location.href = '/admin-panel/login.html'; }
+      loadCashiers();
+    })();
+  </script>
+</body>
+</html>

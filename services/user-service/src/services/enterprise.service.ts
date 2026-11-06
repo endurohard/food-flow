@@ -2,6 +2,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
 import { config } from '../config';
+import { UserService } from './user.service';
 
 export interface CreateOwnerInput {
   email: string;
@@ -80,9 +81,11 @@ export interface UpdateEnterpriseInput {
 
 export class EnterpriseService {
   private pool: InstanceType<typeof Pool>;
+  private userService: UserService;
 
   constructor(connectionString: string) {
     this.pool = new Pool({ connectionString });
+    this.userService = new UserService(connectionString);
   }
 
   /**
@@ -272,6 +275,86 @@ export class EnterpriseService {
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Создать кассира для режима кассы (cashier role + PIN).
+   */
+  async createCashier(
+    enterpriseId: string,
+    data: { email: string; password: string; firstName: string; lastName?: string; phone?: string; pin: string }
+  ): Promise<any> {
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // login ищет по email.toLowerCase() — нормализуем, иначе кассир не войдёт
+      const email = data.email.toLowerCase();
+      const dup = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (dup.rows.length > 0) {
+        throw Object.assign(new Error('Пользователь с таким email уже существует'), { statusCode: 409 });
+      }
+
+      const ent = await client.query('SELECT id FROM enterprises WHERE id = $1', [enterpriseId]);
+      if (ent.rows.length === 0) {
+        throw Object.assign(new Error('Организация не найдена'), { statusCode: 404 });
+      }
+
+      const passwordHash = await bcrypt.hash(data.password, config.bcrypt.saltRounds);
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin)
+         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false)
+         RETURNING id, email, first_name, last_name, phone`,
+        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId]
+      );
+      const user = userResult.rows[0];
+
+      await client.query(
+        `INSERT INTO enterprise_users (enterprise_id, user_id, role) VALUES ($1, $2, 'cashier')`,
+        [enterpriseId, user.id]
+      );
+
+      // PIN режима кассы — храним хеш отдельно от password_hash
+      await this.userService.setCashRegisterPin(user.id, data.pin);
+
+      await client.query('COMMIT');
+      return { ...user, enterpriseRole: 'cashier' };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Список кассиров предприятия (role = cashier) */
+  async listCashiers(enterpriseId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.phone,
+                eu.role, eu.is_active, u.is_active AS user_active,
+                u.pin_hash
+         FROM enterprise_users eu
+         JOIN users u ON u.id = eu.user_id
+         WHERE eu.enterprise_id = $1 AND eu.role = 'cashier'
+         ORDER BY u.last_name NULLS LAST, u.first_name NULLS LAST`,
+        [enterpriseId]
+      );
+      return result.rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        phone: row.phone,
+        registerCount: 1,
+        isActive: row.is_active && row.user_active,
+        pinHash: row.pin_hash,
+      }));
     } finally {
       client.release();
     }

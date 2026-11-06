@@ -150,6 +150,37 @@ export class UserService {
     return result.rows[0];
   }
 
+  // ── PIN режима кассы ───────────────────────────────────────────────────
+  // PIN хранится отдельно от password_hash (bcrypt). Используется для входа
+  // в режим кассы и для блокировки/разблокировки кассы.
+
+  async setCashRegisterPin(userId: string, pin: string): Promise<void> {
+    const passwordHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
+    const result = await this.pool.query(
+      `UPDATE users SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 RETURNING id`,
+      [passwordHash, userId]
+    );
+    if (result.rows.length === 0) {
+      throw Object.assign(new Error('Кассир не найден'), { statusCode: 404 });
+    }
+  }
+
+  async verifyCashRegisterPin(userId: string, pin: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT pin_hash FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return false;
+    }
+    const row = result.rows[0];
+    if (!row.pin_hash) {
+      return false;
+    }
+    return bcrypt.compare(pin, row.pin_hash);
+  }
+
   async getAddresses(userId: string): Promise<any[]> {
     const result = await this.pool.query(
       `SELECT id, title, street_address, city, state, postal_code, country,
