@@ -290,6 +290,31 @@ router.post('/:id/cashiers', authenticateUser, async (req, res) => {
   }
 });
 
+const cashierPinSchema = Joi.object({
+  pin: Joi.string().pattern(/^[0-9]{4,6}$/).required()
+    .messages({ 'string.pattern.base': 'PIN — от 4 до 6 цифр' }),
+});
+
+router.put('/:id/cashiers/:userId/pin', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = cashierPinSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (req.userRole !== 'super_admin') {
+      const memberships = await enterpriseService.getUserEnterprises(req.userId!);
+      const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
+      if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Задавать PIN может владелец или админ организации' });
+      }
+    }
+    const ok = await enterpriseService.setCashierPin(req.params.id, req.params.userId, value.pin);
+    if (!ok) return res.status(404).json({ error: 'Not found', message: 'Кассир не найден в этой организации' });
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('Failed to set cashier PIN:', error);
+    return res.status(500).json({ error: 'Не удалось задать PIN', message: 'Не удалось задать PIN' });
+  }
+});
+
 router.get('/:id/cashiers', authenticateUser, async (req, res) => {
   try {
     if (req.userRole !== 'super_admin') {

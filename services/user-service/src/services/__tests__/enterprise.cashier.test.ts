@@ -59,4 +59,22 @@ it('кассир создаётся одной транзакцией вмест
   const eu = inside.find((q) => /INSERT INTO enterprise_users/.test(q.sql))!;
   expect(eu.sql).toMatch(/'cashier'/);
   expect(eu.params).toEqual([ENT, 'u-new']);
+
+  // Кадровая карточка — иначе кассира не видно в «Персонале»
+  const sp = inside.find((q) => /INSERT INTO staff_profiles/.test(q.sql))!;
+  expect(sp).toBeDefined();
+  expect(sp.sql).toMatch(/'cashier'/);
+  expect(sp.params).toEqual(['u-new', ENT]);
+});
+
+describe('PIN кассиру из «Персонала»', () => {
+  it('UPDATE только по кассиру этой организации', async () => {
+    const svc = new EnterpriseService('postgres://x/y');
+    await svc.setCashierPin(ENT, 'u-1', '5678');
+    expect(outside).toHaveLength(1);
+    const sql = outside[0];
+    expect(sql).toMatch(/eu\.enterprise_id = \$3/);
+    expect(sql).toMatch(/eu\.role = 'cashier'/);
+    expect(sql).toMatch(/u\.id = \$2/);
+  });
 });

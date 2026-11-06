@@ -1193,6 +1193,7 @@ AUTH.requireAuth();
     <!-- Кассиры -->
     <section class="dev-card">
       <h2>Кассиры</h2>
+      <p class="dev-muted" style="margin:0 0 10px">Здесь все сотрудники с ролью «Кассир», в том числе заведённые в «Персонале». Без PIN кассир не войдёт в режим кассы — задайте его в строке.</p>
       <div id="cashiersList"><p class="dev-muted">Загрузка…</p></div>
     </section>
   </div>
@@ -1296,12 +1297,31 @@ AUTH.requireAuth();
         var d = await call('/api/enterprises/' + enterpriseId + '/cashiers');
         var rows = d.cashiers || [];
         if (!rows.length) { box.innerHTML = '<p class="dev-muted">Кассиров пока нет.</p>'; return; }
-        box.innerHTML = '<table class="dev-table"><thead><tr><th>Имя</th><th>Логин</th><th>PIN</th><th>Статус</th></tr></thead><tbody>' +
+        box.innerHTML = '<table class="dev-table"><thead><tr><th>Имя</th><th>Логин</th><th>PIN</th><th>Статус</th><th>Сменить / задать PIN</th></tr></thead><tbody>' +
           rows.map(function (c) {
             return '<tr><td>' + esc(((c.firstName || '') + ' ' + (c.lastName || '')).trim()) + '</td><td>' + esc(c.email) + '</td>' +
-              '<td>' + (c.hasPin ? 'задан' : '<span class="dev-err">не задан</span>') + '</td>' +
-              '<td>' + (c.isActive ? 'активен' : 'отключён') + '</td></tr>';
+              '<td>' + (c.hasPin ? 'задан' : '<span class="dev-err">не задан — в режим кассы не войдёт</span>') + '</td>' +
+              '<td>' + (c.isActive ? 'активен' : 'отключён') + '</td>' +
+              '<td><form class="pin-form" data-id="' + esc(c.id) + '" style="display:flex;gap:6px">' +
+              '<input class="form-input" type="password" inputmode="numeric" maxlength="6" placeholder="4–6 цифр" style="width:110px" autocomplete="new-password">' +
+              '<button type="submit" class="btn btn-sm btn-primary">' + (c.hasPin ? 'Сменить' : 'Задать') + '</button></form></td></tr>';
           }).join('') + '</tbody></table>';
+        box.querySelectorAll('.pin-form').forEach(function (f) {
+          f.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var pin = f.querySelector('input').value;
+            if (!/^[0-9]{4,6}$/.test(pin)) { toast('PIN — от 4 до 6 цифр'); return; }
+            try {
+              await call('/api/enterprises/' + enterpriseId + '/cashiers/' + encodeURIComponent(f.dataset.id) + '/pin', {
+                method: 'PUT', body: JSON.stringify({ pin: pin }),
+              });
+              toast('PIN сохранён');
+              loadCashiers();
+            } catch (err) {
+              toast('❌ PIN не сохранён: ' + err.message);
+            }
+          });
+        });
       } catch (e) {
         box.innerHTML = '<p class="dev-err">Кассиры не загрузились: ' + esc(e.message) + '</p>';
       }

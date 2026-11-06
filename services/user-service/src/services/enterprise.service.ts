@@ -319,6 +319,13 @@ export class EnterpriseService {
         [enterpriseId, user.id]
       );
 
+      // Кадровая карточка — чтобы кассир сразу был виден в «Персонале»
+      // (экран персонала читает staff_profiles, а не enterprise_users)
+      await client.query(
+        `INSERT INTO staff_profiles (user_id, enterprise_id, position) VALUES ($1, $2, 'cashier')`,
+        [user.id, enterpriseId]
+      );
+
       await client.query('COMMIT');
       return { ...user, enterpriseRole: 'cashier' };
     } catch (error) {
@@ -327,6 +334,22 @@ export class EnterpriseService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * PIN кассиру, заведённому через «Персонал»: там PIN не задаётся, и без него
+   * кассир не войдёт в режим кассы. Только кассир этой же организации.
+   */
+  async setCashierPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
+    const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
+    const r = await this.pool.query(
+      `UPDATE users u SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+         FROM enterprise_users eu
+        WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role = 'cashier'
+        RETURNING u.id`,
+      [pinHash, userId, enterpriseId]
+    );
+    return r.rows.length > 0;
   }
 
   /** Список кассиров предприятия (role = cashier) */
