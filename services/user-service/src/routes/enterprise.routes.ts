@@ -325,6 +325,30 @@ router.put('/:id/cashiers/:userId/pin', authenticateUser, async (req, res) => {
   }
 });
 
+// ── Пароль сотрудника ───────────────────────────────────────────────────
+const staffPasswordSchema = Joi.object({
+  password: Joi.string().min(8).max(100).required()
+    .messages({ 'string.min': 'Пароль — минимум 8 символов' }),
+});
+
+router.put('/:id/staff/:userId/password', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = staffPasswordSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (Joi.string().uuid().validate(req.params.userId).error) {
+      return res.status(400).json({ error: 'Validation error', message: 'Некорректный id сотрудника' });
+    }
+    if (!(await requireOwnerOrAdmin(req, res, 'Менять пароль сотрудника'))) return;
+    const r = await enterpriseService.setStaffPassword(req.params.id, req.params.userId, value.password);
+    if (r === 'not_found') return res.status(404).json({ error: 'Not found', message: 'Сотрудник не найден в этой организации' });
+    if (r === 'owner') return res.status(403).json({ error: 'Forbidden', message: 'Пароль владельца меняется только в его профиле' });
+    return res.status(200).json({ success: true });
+  } catch (err: any) {
+    console.error('Failed to set staff password:', err);
+    return res.status(500).json({ error: 'Не удалось сменить пароль', message: 'Не удалось сменить пароль' });
+  }
+});
+
 // ── Планшеты кассы ──────────────────────────────────────────────────────
 // Владелец привязывает планшет к кассе один раз; дальше кассиры входят на нём
 // только PIN-ом (POST /api/auth/cash-register/pin-login).

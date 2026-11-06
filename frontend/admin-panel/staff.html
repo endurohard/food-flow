@@ -1499,7 +1499,7 @@ AUTH.requireAuth();
         <!-- Новому сотруднику нужен аккаунт для входа, иначе бэкенд отвергнет
              создание с 400 -->
         <div class="form-group" id="staffPasswordGroup">
-          <label class="form-label">Пароль для входа (минимум 8 символов):</label>
+          <label class="form-label" id="staffPasswordLabel">Пароль для входа (минимум 8 символов):</label>
           <input type="password" class="form-input" id="staffPassword" minlength="8" autocomplete="new-password">
         </div>
 
@@ -1882,8 +1882,13 @@ AUTH.requireAuth();
       });
       const pwdGroup = document.getElementById('staffPasswordGroup');
       const pwd = document.getElementById('staffPassword');
-      if (pwdGroup) pwdGroup.style.display = enabled ? '' : 'none';
+      // При правке поле пароля тоже видно: пусто — пароль не меняется
+      if (pwdGroup) pwdGroup.style.display = '';
       if (pwd) pwd.required = enabled;
+      const pwdLabel = document.getElementById('staffPasswordLabel');
+      if (pwdLabel) pwdLabel.textContent = enabled
+        ? 'Пароль для входа (минимум 8 символов):'
+        : 'Новый пароль (пусто — не менять, минимум 8 символов):';
       const hint = document.getElementById('staffEditHint');
       if (hint) hint.style.display = enabled ? 'none' : '';
     }
@@ -1947,6 +1952,11 @@ AUTH.requireAuth();
       const position = document.getElementById('staffRole').value;
       const hireDate = document.getElementById('staffStartDate').value || null;
       const pin = position === 'cashier' ? document.getElementById('staffPin').value.trim() : '';
+      const newPassword = editingStaffId ? document.getElementById('staffPassword').value : '';
+      if (newPassword && newPassword.length < 8) {
+        showNotification('❌ Пароль — минимум 8 символов');
+        return;
+      }
       if (pin && !/^[0-9]{4}$/.test(pin)) {
         showNotification('❌ PIN — ровно 4 цифры');
         return;
@@ -1970,7 +1980,16 @@ AUTH.requireAuth();
             try { await saveCashierPin(editingStaffId, pin); }
             catch (e) { throw new Error('Должность сохранена, но PIN — нет: ' + e.message); }
           }
-          showNotification(pin ? '✅ Сотрудник обновлён, PIN сохранён' : '✅ Сотрудник обновлён на сервере');
+          if (newPassword) {
+            const u = AUTH.getUser();
+            const pr = await AUTH.fetch(`/api/enterprises/${u.enterpriseId}/staff/${encodeURIComponent(editingStaffId)}/password`, {
+              method: 'PUT',
+              body: JSON.stringify({ password: newPassword })
+            });
+            if (!pr.ok) throw new Error('Данные сохранены, но пароль — нет: ' + await hrError(pr));
+          }
+          const done = [pin && 'PIN', newPassword && 'пароль'].filter(Boolean);
+          showNotification(done.length ? '✅ Сотрудник обновлён, сохранены: ' + done.join(', ') : '✅ Сотрудник обновлён на сервере');
         } else {
           const user = AUTH.getUser();
           // enterprise_id берём из токена: хардкод увёл бы запись в чужую организацию

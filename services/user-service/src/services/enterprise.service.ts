@@ -765,6 +765,44 @@ export class EnterpriseService {
     return true;
   }
 
+  /**
+   * Смена пароля сотруднику владельцем/админом организации. Пароль владельца
+   * так не меняется — иначе админ мог бы перехватить учётку владельца.
+   * Все входы сотрудника (refresh-токены) гасятся: старый пароль, кем-то
+   * подсмотренный, перестаёт давать доступ сразу, а не через 30 дней.
+   */
+  async setStaffPassword(enterpriseId: string, userId: string, password: string): Promise<'ok' | 'not_found' | 'owner'> {
+    const m = await this.pool.query(
+      'SELECT role FROM enterprise_users WHERE enterprise_id = $1 AND user_id = $2',
+      [enterpriseId, userId]
+    );
+    if (!m.rows[0]) return 'not_found';
+    if (m.rows[0].role === 'owner') return 'owner';
+    const hash = await bcrypt.hash(password, config.bcrypt.saltRounds);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+            AND EXISTS (SELECT 1 FROM enterprise_users eu
+                         WHERE eu.enterprise_id = $3 AND eu.user_id = $2 AND eu.role <> 'owner')`,
+        [hash, userId, enterpriseId]
+      );
+      await client.query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+        [userId]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+    return 'ok';
+  }
+
   /** Активация/деактивация пользователя предприятия. */
   async setMemberActive(enterpriseId: string, userId: string, isActive: boolean): Promise<boolean> {
     const r = await this.pool.query(
