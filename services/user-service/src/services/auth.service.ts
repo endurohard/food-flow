@@ -304,6 +304,96 @@ export class AuthService {
     await this.pool.end();
   }
 
+  // ── Вход кассира по PIN с привязанного планшета ─────────────────────────
+  // Логина и пароля на кассе нет: планшет предъявляет токен устройства,
+  // кассир — PIN. PIN уникален в пределах организации, поэтому по нему
+  // однозначно находится кассир. Ошибки PIN считаются по устройству.
+
+  static readonly PIN_MAX_FAILS = 5;
+  static readonly PIN_LOCK_MS = 5 * 60 * 1000;
+
+  async pinLogin(deviceToken: string, pin: string): Promise<{
+    user: any; tokens: AuthTokens; registerSessionId: string; register: any;
+  }> {
+    const dev = await this.pool.query(
+      `SELECT d.id, d.enterprise_id, d.register_id, d.locked_until > NOW() AS locked,
+              CEIL(EXTRACT(EPOCH FROM (d.locked_until - NOW())) / 60) AS lock_min,
+              r.name AS register_name, r.restaurant_id, r.status AS register_status
+         FROM cash_register_devices d
+         JOIN cash_registers r ON r.id = d.register_id AND r.enterprise_id = d.enterprise_id
+        WHERE d.token_hash = $1 AND d.revoked_at IS NULL`,
+      [this.hashToken(deviceToken)]
+    );
+    const device = dev.rows[0];
+    if (!device) throw new AuthError('Планшет не привязан к кассе или отвязан', 401, 'DEVICE_UNKNOWN');
+    if (device.locked) {
+      throw new AuthError(`Слишком много неверных PIN — подождите ${device.lock_min} мин`, 429, 'PIN_LOCKED');
+    }
+
+    const cands = await this.pool.query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.role, u.pin_hash
+         FROM enterprise_users eu
+         JOIN users u ON u.id = eu.user_id
+        WHERE eu.enterprise_id = $1 AND eu.role = 'cashier' AND eu.is_active = true
+          AND u.is_active = true AND u.pin_hash IS NOT NULL`,
+      [device.enterprise_id]
+    );
+    let user: any = null;
+    for (const c of cands.rows) {
+      if (await bcrypt.compare(pin, c.pin_hash)) { user = c; break; }
+    }
+
+    if (!user) {
+      await this.pool.query(
+        `UPDATE cash_register_devices
+            SET failed_attempts = failed_attempts + 1,
+                locked_until = CASE WHEN failed_attempts + 1 >= $2
+                                    THEN NOW() + ($3 || ' milliseconds')::interval END
+          WHERE id = $1`,
+        [device.id, AuthService.PIN_MAX_FAILS, String(AuthService.PIN_LOCK_MS)]
+      );
+      throw new AuthError('Неверный PIN', 401, 'INVALID_PIN');
+    }
+
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Серия ошибок обнуляется только успешным входом
+      await client.query(
+        `UPDATE cash_register_devices
+            SET failed_attempts = 0, locked_until = NULL, last_used_at = NOW()
+          WHERE id = $1`,
+        [device.id]
+      );
+      const tokens = await this.generateTokens(client, {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        enterpriseId: device.enterprise_id,
+        enterpriseRole: 'cashier',
+      });
+      await client.query('COMMIT');
+      const registerSessionId = await this.createCashRegisterSession(user.id, device.register_id);
+      const { pin_hash, ...safeUser } = user;
+      return {
+        user: { ...safeUser, enterprise_id: device.enterprise_id, enterprise_role: 'cashier' },
+        tokens,
+        registerSessionId,
+        register: {
+          id: device.register_id,
+          name: device.register_name,
+          restaurant_id: device.restaurant_id,
+          status: device.register_status,
+        },
+      };
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
   // ── Сессии режима кассы ──────────────────────────────────────────────
   // Одна сессия = вход кассира в режим кассы после ввода PIN.
   // 'active' — продажи разрешены, 'locked' — ждёт PIN. Срок — рабочая смена:
@@ -379,10 +469,13 @@ export class AuthService {
 
 export class AuthError extends Error {
   statusCode: number;
+  /** Машинный код для клиента (касса отличает «планшет отвязан» от «неверный PIN») */
+  code?: string;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode: number, code?: string) {
     super(message);
     this.statusCode = statusCode;
+    this.code = code;
     this.name = 'AuthError';
   }
 }

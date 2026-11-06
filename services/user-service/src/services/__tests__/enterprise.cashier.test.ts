@@ -71,8 +71,10 @@ describe('PIN кассиру из «Персонала»', () => {
   it('UPDATE только по кассиру этой организации', async () => {
     const svc = new EnterpriseService('postgres://x/y');
     await svc.setCashierPin(ENT, 'u-1', '5678');
-    expect(outside).toHaveLength(1);
-    const sql = outside[0];
+    // Первый запрос — проверка, что PIN не занят другим кассиром
+    expect(outside[0]).toMatch(/eu\.role = 'cashier' AND u\.pin_hash IS NOT NULL/);
+    const sql = outside.find((q) => /UPDATE users/.test(q))!;
+    expect(sql).toBeDefined();
     expect(sql).toMatch(/eu\.enterprise_id = \$3/);
     expect(sql).toMatch(/eu\.role = 'cashier'/);
     expect(sql).toMatch(/u\.id = \$2/);

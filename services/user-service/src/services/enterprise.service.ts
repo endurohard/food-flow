@@ -1,6 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { config } from '../config';
 
 export interface CreateOwnerInput {
@@ -305,6 +306,9 @@ export class EnterpriseService {
       // PIN пишется этой же вставкой: отдельное соединение UserService не видит
       // ещё не закоммиченного пользователя, отвечало «Кассир не найден» и
       // откатывало создание — кассира нельзя было завести вовсе
+      if (await this.pinTaken(client, enterpriseId, data.pin)) {
+        throw Object.assign(new Error('Этот PIN уже у другого кассира — выберите другой'), { statusCode: 409 });
+      }
       const pinHash = await bcrypt.hash(data.pin, config.bcrypt.saltRounds);
       const userResult = await client.query(
         `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin, pin_hash)
@@ -337,10 +341,70 @@ export class EnterpriseService {
   }
 
   /**
+   * PIN уникален в организации: на кассе кассир вводит только PIN, и по нему
+   * же определяется, кто вошёл. Два одинаковых PIN — продажи не на того.
+   */
+  private async pinTaken(q: { query: (sql: string, p?: any[]) => Promise<any> }, enterpriseId: string, pin: string, exceptUserId?: string): Promise<boolean> {
+    const r = await q.query(
+      `SELECT u.id, u.pin_hash FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
+        WHERE eu.enterprise_id = $1 AND eu.role = 'cashier' AND u.pin_hash IS NOT NULL`,
+      [enterpriseId]
+    );
+    for (const row of r.rows) {
+      if (row.id === exceptUserId) continue;
+      if (await bcrypt.compare(pin, row.pin_hash)) return true;
+    }
+    return false;
+  }
+
+  // ── Планшеты кассы ──────────────────────────────────────────────────────
+
+  /** Привязывает планшет к кассе. Токен отдаётся один раз, в базе — только sha256. */
+  async bindCashDevice(enterpriseId: string, registerId: string, createdBy: string, name?: string): Promise<any> {
+    const reg = await this.pool.query(
+      'SELECT id, name, restaurant_id, status FROM cash_registers WHERE id = $1 AND enterprise_id = $2',
+      [registerId, enterpriseId]
+    );
+    if (!reg.rows[0]) throw Object.assign(new Error('Касса не найдена в этой организации'), { statusCode: 404 });
+    const token = crypto.randomBytes(32).toString('hex');
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const r = await this.pool.query(
+      `INSERT INTO cash_register_devices (enterprise_id, register_id, name, token_hash, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, name, created_at`,
+      [enterpriseId, registerId, (name || 'Планшет').slice(0, 100), hash, createdBy]
+    );
+    return { device: { ...r.rows[0], register: reg.rows[0] }, deviceToken: token };
+  }
+
+  async listCashDevices(enterpriseId: string): Promise<any[]> {
+    const r = await this.pool.query(
+      `SELECT d.id, d.name, d.register_id, r.name AS register_name, d.last_used_at, d.created_at,
+              d.locked_until > NOW() AS locked
+         FROM cash_register_devices d JOIN cash_registers r ON r.id = d.register_id
+        WHERE d.enterprise_id = $1 AND d.revoked_at IS NULL
+        ORDER BY d.created_at`,
+      [enterpriseId]
+    );
+    return r.rows;
+  }
+
+  async revokeCashDevice(enterpriseId: string, deviceId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `UPDATE cash_register_devices SET revoked_at = NOW()
+        WHERE id = $1 AND enterprise_id = $2 AND revoked_at IS NULL RETURNING id`,
+      [deviceId, enterpriseId]
+    );
+    return r.rows.length > 0;
+  }
+
+  /**
    * PIN кассиру, заведённому через «Персонал»: там PIN не задаётся, и без него
    * кассир не войдёт в режим кассы. Только кассир этой же организации.
    */
   async setCashierPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
+    if (await this.pinTaken(this.pool, enterpriseId, pin, userId)) {
+      throw Object.assign(new Error('Этот PIN уже у другого кассира — выберите другой'), { statusCode: 409 });
+    }
     const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
     const r = await this.pool.query(
       `UPDATE users u SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP

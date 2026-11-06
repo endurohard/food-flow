@@ -1132,14 +1132,22 @@ AUTH.requireAuth();
       <h2>Режим кассы на планшете</h2>
       <ol class="dev-steps">
         <li>Заведите кассу точки — блок «Кассы» ниже.</li>
-        <li>Заведите кассира с PIN — блок «Новый кассир».</li>
-        <li>На планшете откройте адрес и войдите логином кассира, затем PIN.</li>
+        <li>Заведите кассира с PIN из 4 цифр — здесь или в «Персонале».</li>
+        <li>На планшете откройте адрес, один раз войдите своим логином владельца и выберите кассу — планшет привяжется.</li>
+        <li>Дальше кассиры входят на этом планшете только PIN-ом, без логина и пароля.</li>
       </ol>
       <div class="dev-url-row">
         <input class="form-input" id="kioskUrl" readonly onclick="this.select()">
         <a class="btn btn-primary" id="kioskOpen" target="_blank" rel="noopener">Открыть</a>
       </div>
-      <p class="dev-muted">Смену кассир открывает прямо на планшете. Кнопка «🔒 Заблокировать» закрывает продажи до ввода PIN.</p>
+      <p class="dev-muted">Смену кассир открывает прямо на планшете. «🔒 Заблокировать / сменить кассира» закрывает продажи до следующего PIN. После 5 неверных PIN подряд планшет блокируется на 5 минут.</p>
+    </section>
+
+    <!-- Привязанные планшеты -->
+    <section class="dev-card">
+      <h2>Привязанные планшеты</h2>
+      <p class="dev-muted" style="margin:0 0 10px">Потерянный или заменённый планшет отвяжите — по PIN на нём войти больше не получится.</p>
+      <div id="devicesList"><p class="dev-muted">Загрузка…</p></div>
     </section>
 
     <!-- Кассы -->
@@ -1291,6 +1299,35 @@ AUTH.requireAuth();
       }
     }
 
+    async function loadDevices() {
+      var box = $('devicesList');
+      try {
+        var d = await call('/api/enterprises/' + enterpriseId + '/cash-devices');
+        var rows = d.devices || [];
+        if (!rows.length) { box.innerHTML = '<p class="dev-muted">Планшетов пока нет — привяжите первый, открыв адрес выше на планшете.</p>'; return; }
+        box.innerHTML = '<table class="dev-table"><thead><tr><th>Планшет</th><th>Касса</th><th>Последний вход</th><th></th></tr></thead><tbody>' +
+          rows.map(function (x) {
+            return '<tr><td>' + esc(x.name) + (x.locked ? ' <span class="dev-err">заблокирован неверными PIN</span>' : '') + '</td>' +
+              '<td>' + esc(x.register_name) + '</td>' +
+              '<td>' + (x.last_used_at ? new Date(x.last_used_at).toLocaleString('ru-RU') : '—') + '</td>' +
+              '<td><button class="btn btn-sm btn-secondary dev-unbind" data-id="' + esc(x.id) + '">Отвязать</button></td></tr>';
+          }).join('') + '</tbody></table>';
+        box.querySelectorAll('.dev-unbind').forEach(function (b) {
+          b.addEventListener('click', async function () {
+            // Два нажатия вместо confirm(): во встроенном браузере диалоги заблокированы
+            if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Точно отвязать?'; return; }
+            try {
+              await call('/api/enterprises/' + enterpriseId + '/cash-devices/' + encodeURIComponent(b.dataset.id), { method: 'DELETE' });
+              toast('Планшет отвязан');
+              loadDevices();
+            } catch (err) { toast('❌ Не отвязан: ' + err.message); }
+          });
+        });
+      } catch (e) {
+        box.innerHTML = '<p class="dev-err">Планшеты не загрузились: ' + esc(e.message) + '</p>';
+      }
+    }
+
     async function loadCashiers() {
       var box = $('cashiersList');
       try {
@@ -1371,6 +1408,7 @@ AUTH.requireAuth();
       if (!enterpriseId) { showDataError('Аккаунт не привязан к организации — раздел недоступен.'); return; }
       try { await loadRestaurants(); } catch (e) { showDataError('Не удалось загрузить точки: ' + e.message); }
       loadRegisters();
+      loadDevices();
       loadCashiers();
     })();
   })();

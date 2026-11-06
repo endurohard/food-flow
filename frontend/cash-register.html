@@ -131,37 +131,24 @@
   </style>
 </head>
 <body>
-  <!-- 1. Вход -->
-  <div id="login-screen" class="screen center">
-    <form class="card" id="login-form" autocomplete="on">
-      <h1>Вход на кассу</h1>
-      <p class="muted">Логин и пароль кассира. Кассира заводит владелец в админке: «Устройства».</p>
-      <label class="label" for="login-email">Логин (email)</label>
-      <input id="login-email" type="email" autocomplete="username" required>
-      <label class="label" for="login-password">Пароль</label>
-      <input id="login-password" type="password" autocomplete="current-password" required>
-      <button class="btn-primary" type="submit" id="btn-login">Войти</button>
-      <p class="error" id="login-error"></p>
-    </form>
-  </div>
-
-  <!-- 2. Выбор кассы / открытие смены -->
-  <div id="setup-screen" class="screen center">
+  <!-- 0. Привязка планшета (один раз, владельцем) -->
+  <div id="activate-screen" class="screen center">
     <div class="card">
-      <h1 id="setup-title">Выбор кассы</h1>
-      <p class="muted" id="setup-hint">Загрузка…</p>
-      <div class="choice-list" id="setup-list"></div>
-      <div id="open-shift" style="display:none">
-        <label class="label" for="opening-balance">Наличные в кассе на начало смены, ₽</label>
-        <input id="opening-balance" type="number" inputmode="decimal" min="0" step="0.01" value="0">
-        <button class="btn-primary" id="btn-open-shift">Открыть смену</button>
-      </div>
-      <p class="error" id="setup-error"></p>
-      <button class="btn-secondary" style="margin-top:14px" data-action="logout">Выйти</button>
+      <h1>Привязка планшета к кассе</h1>
+      <p class="muted">Один раз: войдите владельцем или админом и выберите кассу. Дальше кассиры входят на этом планшете только PIN-ом.</p>
+      <form id="activate-form" autocomplete="off">
+        <label class="label" for="act-email">Логин владельца (email)</label>
+        <input id="act-email" type="email" autocomplete="username" required>
+        <label class="label" for="act-password">Пароль</label>
+        <input id="act-password" type="password" autocomplete="current-password" required>
+        <button class="btn-primary" type="submit" id="btn-activate">Войти</button>
+      </form>
+      <div class="choice-list" id="act-registers" style="margin-top:14px"></div>
+      <p class="error" id="act-error"></p>
     </div>
   </div>
 
-  <!-- 3. PIN (вход в режим кассы и снятие блокировки) -->
+  <!-- 1. PIN -->
   <div id="pin-screen" class="screen center">
     <div class="card" style="max-width:380px">
       <h2 id="pin-title">Введите PIN кассира</h2>
@@ -169,15 +156,27 @@
       <div class="pin-dots" id="pin-dots"></div>
       <div class="keypad" id="keypad"></div>
       <p class="error" id="pin-error"></p>
-      <button class="btn-secondary" style="margin-top:10px;width:100%" data-action="logout">Сменить кассира</button>
     </div>
   </div>
 
-  <!-- 4. Продажи -->
+  <!-- 2. Открытие смены -->
+  <div id="setup-screen" class="screen center">
+    <div class="card">
+      <h1 id="setup-title">Смена закрыта</h1>
+      <p class="muted">Пересчитайте наличные в кассе и откройте смену.</p>
+      <label class="label" for="opening-balance">Наличные в кассе на начало смены, ₽</label>
+      <input id="opening-balance" type="number" inputmode="decimal" min="0" step="0.01" value="0">
+      <button class="btn-primary" id="btn-open-shift">Открыть смену</button>
+      <p class="error" id="setup-error"></p>
+      <button class="btn-secondary" style="margin-top:14px" id="btn-setup-back">Назад к PIN</button>
+    </div>
+  </div>
+
+  <!-- 3. Продажи -->
   <div id="till-screen" class="screen">
     <div class="till-header">
       <div class="title"><span id="till-register">Касса</span><small id="till-sub"></small></div>
-      <button class="btn-secondary" id="btn-lock">🔒 Заблокировать</button>
+      <button class="btn-secondary" id="btn-lock">🔒 Заблокировать / сменить кассира</button>
       <button class="btn-danger" id="btn-close-shift">Закрыть смену</button>
     </div>
     <div class="till-main">

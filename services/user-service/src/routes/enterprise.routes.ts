@@ -312,8 +312,67 @@ router.put('/:id/cashiers/:userId/pin', authenticateUser, async (req, res) => {
     if (!ok) return res.status(404).json({ error: 'Not found', message: 'Кассир не найден в этой организации' });
     return res.status(200).json({ success: true });
   } catch (error: any) {
+    if (error.statusCode && error.statusCode < 500) {
+      return res.status(error.statusCode).json({ error: error.message, message: error.message });
+    }
     console.error('Failed to set cashier PIN:', error);
     return res.status(500).json({ error: 'Не удалось задать PIN', message: 'Не удалось задать PIN' });
+  }
+});
+
+// ── Планшеты кассы ──────────────────────────────────────────────────────
+// Владелец привязывает планшет к кассе один раз; дальше кассиры входят на нём
+// только PIN-ом (POST /api/auth/cash-register/pin-login).
+
+async function requireOwnerOrAdmin(req: any, res: any, action: string): Promise<boolean> {
+  if (req.userRole === 'super_admin') return true;
+  const memberships = await enterpriseService.getUserEnterprises(req.userId!);
+  const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
+  if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
+    res.status(403).json({ error: 'Forbidden', message: action + ' может владелец или админ организации' });
+    return false;
+  }
+  return true;
+}
+
+const bindDeviceSchema = Joi.object({
+  registerId: Joi.string().uuid().required(),
+  name: Joi.string().trim().max(100).allow('').optional(),
+});
+
+router.post('/:id/cash-devices', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = bindDeviceSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (!(await requireOwnerOrAdmin(req, res, 'Привязать планшет'))) return;
+    const r = await enterpriseService.bindCashDevice(req.params.id, value.registerId, req.userId!, value.name);
+    return res.status(201).json({ success: true, ...r });
+  } catch (error: any) {
+    if (error.statusCode && error.statusCode < 500) return res.status(error.statusCode).json({ error: error.message, message: error.message });
+    console.error('Failed to bind cash device:', error);
+    return res.status(500).json({ error: 'Не удалось привязать планшет', message: 'Не удалось привязать планшет' });
+  }
+});
+
+router.get('/:id/cash-devices', authenticateUser, async (req, res) => {
+  try {
+    if (!(await requireOwnerOrAdmin(req, res, 'Смотреть планшеты'))) return;
+    return res.status(200).json({ success: true, devices: await enterpriseService.listCashDevices(req.params.id) });
+  } catch (error: any) {
+    console.error('Failed to list cash devices:', error);
+    return res.status(500).json({ error: 'Не удалось получить планшеты', message: 'Не удалось получить планшеты' });
+  }
+});
+
+router.delete('/:id/cash-devices/:deviceId', authenticateUser, async (req, res) => {
+  try {
+    if (!(await requireOwnerOrAdmin(req, res, 'Отвязать планшет'))) return;
+    const ok = await enterpriseService.revokeCashDevice(req.params.id, req.params.deviceId);
+    if (!ok) return res.status(404).json({ error: 'Not found', message: 'Планшет не найден' });
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error('Failed to revoke cash device:', error);
+    return res.status(500).json({ error: 'Не удалось отвязать планшет', message: 'Не удалось отвязать планшет' });
   }
 });
 

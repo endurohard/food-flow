@@ -276,6 +276,39 @@ async function requirePin(req: Request, res: Response): Promise<boolean> {
   return false;
 }
 
+const pinLoginSchema = Joi.object({
+  deviceToken: Joi.string().hex().length(64).required(),
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required()
+    .messages({ 'string.pattern.base': 'PIN — 4 цифры' }),
+});
+
+/**
+ * Вход кассира одним PIN с привязанного планшета — без логина и пароля.
+ * Отдаёт токены кассира и сразу открытую сессию кассы.
+ */
+router.post('/cash-register/pin-login', async (req: Request, res: Response) => {
+  try {
+    const { error, value } = pinLoginSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    }
+    const r = await authService.pinLogin(value.deviceToken, value.pin);
+    return res.status(200).json({
+      user: r.user,
+      accessToken: r.tokens.accessToken,
+      refreshToken: r.tokens.refreshToken,
+      registerSessionId: r.registerSessionId,
+      register: r.register,
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return res.status(error.statusCode).json({ error: error.code || 'Auth error', message: error.message });
+    }
+    console.error('Cash register pin-login error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 /** Проверяет PIN и открывает новую сессию кассы (прежние сессии этого кассира на этой кассе гасятся). */
 router.post('/cash-register/verify', authenticateUser, async (req: Request, res: Response) => {
   try {
