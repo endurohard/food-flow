@@ -338,7 +338,7 @@ export class EnterpriseService {
       const result = await client.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.phone,
                 eu.role, eu.is_active, u.is_active AS user_active,
-                u.pin_hash
+                u.pin_hash IS NOT NULL AS has_pin
          FROM enterprise_users eu
          JOIN users u ON u.id = eu.user_id
          WHERE eu.enterprise_id = $1 AND eu.role = 'cashier'
@@ -351,9 +351,9 @@ export class EnterpriseService {
         firstName: row.first_name,
         lastName: row.last_name,
         phone: row.phone,
-        registerCount: 1,
         isActive: row.is_active && row.user_active,
-        pinHash: row.pin_hash,
+        // Сам хеш PIN наружу не отдаём — только признак «задан»
+        hasPin: row.has_pin,
       }));
     } finally {
       client.release();

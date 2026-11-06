@@ -1,376 +1,494 @@
 /**
- * FoodFlow Cash Register mode (kiosk, e.g. iPad).
+ * FoodFlow — режим кассы для планшета.
  *
- * Flow:
- *   1. Вход по email/паролю (стандартный auth).
- *   2. Пин-ввод кассира -> активируется режим кассы (только продажи).
- *   3. Продажи через POST /api/pos/sales с заголовком X-Register-Session.
- *   4. Блокировка/разблокировка PIN: нажатие "Заблокировать кассу" и ввод PIN
- *      возвращают кассу в режим ожидания; ввод PIN снова включает продажи.
+ * Сценарий:
+ *   1. Вход кассира по email/паролю.
+ *   2. Выбор кассы точки; если смена закрыта — открыть её прямо здесь.
+ *   3. PIN кассира → сессия режима кассы (X-Register-Session).
+ *   4. Продажи через POST /api/pos/sales (атомарно: заказ + платёж + касса).
+ *   5. «Заблокировать» — касса ждёт PIN, продажи на сервере запрещены.
  *
- * URL: /cash-register.html?registerId=<uuid>&restaurantId=<uuid>
+ * Адрес: /cash-register.html (необязательно ?registerId=<uuid> — сразу эта касса).
+ * Модальных диалогов браузера нет намеренно: во встроенных браузерах и
+ * киоск-режимах планшетов alert/confirm заблокированы, кнопка выглядит мёртвой.
  */
-
 (function () {
   'use strict';
 
-  var AUTH = window.AUTH;
+  // const AUTH из /js/auth.js — глобальная лексическая переменная, в window её нет
+  var KIOSK_KEY = 'ff_kiosk';
 
-  var registerId = new URLSearchParams(window.location.search).get('registerId');
-  var restaurantId = new URLSearchParams(window.location.search).get('restaurantId');
-
-  if (!registerId || !restaurantId) {
-    document.body.innerHTML =
-      '<p style="padding:24px;font-family:sans-serif;color:#cf5b5b">' +
-      'Неправильный адрес зала. Откройте /cash-register.html?registerId=...&restaurantId=...</p>';
-    return;
-  }
-
-  // ---- helpers ----
   function $(id) { return document.getElementById(id); }
-
-  function show(el) { el.classList.add('active'); }
-  function hide(el) { el.classList.remove('active'); }
-  function hideAll() {
-    [loginScreen, pinScreen, tillScreen, lockedScreen].forEach(function (el) { hide(el); });
-  }
-
-  var loginScreen = $('login-screen');
-  var pinScreen = $('pin-screen');
-  var tillScreen = $('till-screen');
-  var lockedScreen = $('locked-screen');
-
-  var state = {
-    userId: null,
-    registerSessionId: null,
-    cart: [], // { menuItemId, quantity }
-    paymentMethod: 'cash',
-    menuLoaded: false,
-  };
-
-  // ---- screens ----
-  function showLogin() { hideAll(); show(loginScreen); }
-  function showPin() { hideAll(); show(pinScreen); }
-  function showTill() { hideAll(); show(tillScreen); }
-  function showLocked() { hideAll(); show(lockedScreen); }
-
-  // ---- login (email + password) ----
-  function doLogin(email, password) {
-    return AUTH.fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email, password: password }),
-    }).then(function (res) {
-      if (!res.ok) {
-        return res.json().then(function (body) {
-          var msg = body && body.message ? body.message : 'Ошибка входа';
-          return Promise.reject(new Error(msg));
-        });
-      }
-      return res.json().then(function (data) {
-        if (data.user) { localStorage.setItem('ff_user', JSON.stringify(data.user)); }
-        if (data.accessToken) { localStorage.setItem('ff_token', data.accessToken); }
-        if (data.refreshToken) { localStorage.setItem('ff_refresh_token', data.refreshToken); }
-        state.userId = data.user && data.user.id;
-        return data;
-      });
-    });
-  }
-
-  // ---- cash register session (PIN) ----
-  function doPinVerify(pin) {
-    return AUTH.fetch('/api/auth/cash-register/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pin, registerId: registerId }),
-    }).then(function (res) {
-      if (!res.ok) {
-        return res.json().then(function (body) {
-          var msg = body && body.message ? body.message : 'Неверный PIN';
-          return Promise.reject(new Error(msg));
-        });
-      }
-      return res.json().then(function (data) {
-        state.registerSessionId = data.registerSessionId;
-        return data;
-      });
-    });
-  }
-
-  // ---- lock / unlock PIN ----
-  function doLock(pin) {
-    return AUTH.fetch('/api/auth/cash-register/lock', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pin, registerId: registerId }),
-    }).then(function (res) {
-      if (!res.ok) {
-        return res.json().then(function (body) {
-          var msg = body && body.message ? body.message : 'Ошибка блокировки';
-          return Promise.reject(new Error(msg));
-        });
-      }
-      return res.json();
-    });
-  }
-
-  function doUnlock(pin) {
-    return AUTH.fetch('/api/auth/cash-register/unlock', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pin, registerId: registerId }),
-    }).then(function (res) {
-      if (!res.ok) {
-        return res.json().then(function (body) {
-          var msg = body && body.message ? body.message : 'Ошибка разблокировки';
-          return Promise.reject(new Error(msg));
-        });
-      }
-      return res.json().then(function (data) {
-        state.registerSessionId = data.registerSessionId;
-        return data;
-      });
-    });
-  }
-
-  // ---- menu ----
-  var menuCache = null;
-  function loadMenu() {
-    if (menuCache) { return Promise.resolve(menuCache); }
-    return AUTH.fetch('/api/restaurants/' + restaurantId + '/menu-items').then(function (res) {
-      if (!res.ok) { return Promise.reject(new Error('Не удалось загрузить меню')); }
-      return res.json().then(function (data) {
-        menuCache = (data && data.items) || [];
-        return menuCache;
-      });
-    });
-  }
-
-  function findMenuItem(id) {
-    if (!menuCache) { return null; }
-    return menuCache.filter(function (m) { return m.id === id; })[0] || null;
-  }
-
-  // ---- totals ----
-  function money(value) { return Math.round((value || 0) * 100) / 100; }
-
-  function calculateTotal() {
-    var sum = 0;
-    state.cart.forEach(function (item) {
-      var menuItem = findMenuItem(item.menuItemId);
-      if (menuItem) { sum += menuItem.price * item.quantity; }
-    });
-    return money(sum);
-  }
-
-  function getPaymentMethod() {
-    var radios = document.getElementsByName('payment');
-    for (var i = 0; i < radios.length; i += 1) {
-      if (radios[i].checked) { return radios[i].value; }
-    }
-    return 'cash';
-  }
-
-  document.querySelectorAll('#pay-methods input').forEach(function (radio) {
-    radio.addEventListener('change', function () {
-      if (radio.value === 'card') {
-        state.paymentMethod = 'card';
-      } else {
-        state.paymentMethod = 'cash';
-      }
-    });
-  });
-
-  // ---- render ----
-  function renderTill() {
-    loadMenu().then(function () {
-      // menu list
-      var list = $('menu-list');
-      list.innerHTML = '';
-      menuCache.forEach(function (menuItem) {
-        var el = document.createElement('div');
-        el.className = 'menu-item';
-        el.innerHTML =
-          '<div class="name">' + escapeHtml(menuItem.name) + '</div>' +
-          '<div class="price">' + formatMoney(menuItem.price) + ' ₽</div>' +
-          '<div class="qty-controls">' +
-            '<button class="qty" data-action="inc" data-id="' + menuItem.id + '">+</button>' +
-            '<span class="qty" style="width:28px;text-align:center;font-size:13px;color:var(--color-text-secondary)">0</span>' +
-            '<button class="remove" data-action="rm" data-id="' + menuItem.id + '">&times;</button>' +
-          '</div>';
-        el.querySelector('[data-action="inc"]').addEventListener('click', function () {
-          addToCart(menuItem);
-        });
-        el.querySelector('[data-action="rm"]').addEventListener('click', function () {
-          removeFromCart(menuItem);
-        });
-        list.appendChild(el);
-      });
-
-      // cart
-      var cartList = $('cart-list');
-      var empty = $('cart-empty');
-      if (state.cart.length === 0) {
-        cartList.innerHTML = '<p style="color:var(--color-text-secondary);font-size:14px">Продуктов нет</p>';
-      } else {
-        cartList.innerHTML = '';
-        state.cart.forEach(function (item) {
-          var menuItem = findMenuItem(item.menuItemId);
-          if (!menuItem) { return; }
-          var div = document.createElement('div');
-          div.className = 'cart-item';
-          div.innerHTML =
-            '<span class="name">' + escapeHtml(menuItem.name) + ' &times; ' + item.quantity + '</span>' +
-            '<span class="price">' + formatMoney(menuItem.price * item.quantity) + ' ₽</span>';
-          cartList.appendChild(div);
-        });
-      }
-
-      $('till-total-value').textContent = formatMoney(calculateTotal()) + ' ₽';
-    });
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-
-  function formatMoney(v) {
-    var n = Math.round((v || 0) * 100) / 100;
-    return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function money(v) {
+    var n = Math.round((Number(v) || 0) * 100) / 100;
+    return n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ₽';
   }
-
-  function addToCart(menuItem) {
-    var existing = state.cart.filter(function (i) { return i.menuItemId === menuItem.id; })[0];
-    if (existing) { existing.quantity += 1; } else { state.cart.push({ menuItemId: menuItem.id, quantity: 1 }); }
-    renderTill();
-  }
-
-  function removeFromCart(menuItem) {
-    state.cart = state.cart.filter(function (i) { return i.menuItemId !== menuItem.id; });
-    renderTill();
-  }
-
-  // ---- checkout ----
-  function generateUuid() {
-    if (window.crypto && crypto.randomUUID) { return crypto.randomUUID(); }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
       var r = Math.random() * 16 | 0;
       return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
   }
 
-  function doCheckout() {
-    if (state.cart.length === 0) {
-      alert('Сначала добавьте хотя бы один товар.');
+  var state = {
+    restaurant: null,      // { id, name }
+    register: null,        // строка cash_registers
+    sessionId: null,
+    categories: [],
+    items: [],
+    category: 'all',
+    cart: [],              // { item, qty }
+    method: 'cash',
+    pin: '',
+    pinMode: 'verify',     // verify | unlock
+    busy: false,
+  };
+
+  function saveKiosk() {
+    localStorage.setItem(KIOSK_KEY, JSON.stringify({
+      restaurantId: state.restaurant && state.restaurant.id,
+      registerId: state.register && state.register.id,
+      sessionId: state.sessionId,
+    }));
+  }
+  function loadKiosk() {
+    try { return JSON.parse(localStorage.getItem(KIOSK_KEY) || '{}'); } catch (e) { return {}; }
+  }
+
+  // ── экраны ──
+  var SCREENS = ['login-screen', 'setup-screen', 'pin-screen', 'till-screen'];
+  function show(id) {
+    SCREENS.forEach(function (s) { $(s).classList.toggle('active', s === id); });
+  }
+
+  // ── запросы ──
+  // Своя обёртка вместо AUTH.fetch: тот при 401 уводит на вход админки,
+  // а кассира надо вернуть на экран входа кассы.
+  async function api(url, options) {
+    options = options || {};
+    var headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+    var token = AUTH.getToken();
+    if (token) headers.Authorization = 'Bearer ' + token;
+    var res = await window.fetch(url, Object.assign({}, options, { headers: headers }));
+    // 401 от PIN-эндпоинтов — это «неверный PIN», а не протухший токен
+    if (res.status === 401 && token && url.indexOf('/api/auth/') !== 0) {
+      try {
+        headers.Authorization = 'Bearer ' + (await AUTH._refresh());
+        res = await window.fetch(url, Object.assign({}, options, { headers: headers }));
+      } catch (e) {
+        logout('Сессия истекла — войдите снова');
+        throw new Error('Сессия истекла');
+      }
+    }
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      var err = new Error(body.message || body.error || ('Ошибка ' + res.status));
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+
+  function logout(msg) {
+    localStorage.removeItem('ff_token');
+    localStorage.removeItem('ff_refresh_token');
+    localStorage.removeItem('ff_user');
+    localStorage.removeItem(KIOSK_KEY);
+    state.sessionId = null;
+    state.cart = [];
+    state.items = [];
+    $('login-password').value = '';
+    $('login-error').textContent = msg || '';
+    show('login-screen');
+  }
+
+  // ── 1. вход ──
+  $('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = $('btn-login');
+    $('login-error').textContent = '';
+    btn.disabled = true;
+    try {
+      var data = await api('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('login-email').value.trim(), password: $('login-password').value }),
+      });
+      var user = data.user || {};
+      localStorage.setItem('ff_token', data.accessToken || (data.tokens && data.tokens.accessToken));
+      localStorage.setItem('ff_refresh_token', data.refreshToken || (data.tokens && data.tokens.refreshToken));
+      localStorage.setItem('ff_user', JSON.stringify(Object.assign({}, user, {
+        enterpriseId: user.enterpriseId || user.enterprise_id || null,
+        enterpriseRole: user.enterpriseRole || user.enterprise_role || null,
+      })));
+      $('login-password').value = '';
+      await setup();
+    } catch (err) {
+      $('login-error').textContent = err.status === 401 ? 'Неверный логин или пароль' : err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── 2. точка и касса ──
+  async function setup() {
+    show('setup-screen');
+    $('setup-title').textContent = 'Выбор кассы';
+    $('setup-hint').textContent = 'Загрузка…';
+    $('setup-list').innerHTML = '';
+    $('open-shift').style.display = 'none';
+    $('setup-error').textContent = '';
+    try {
+      var r = await api('/api/restaurants');
+      var rests = r.restaurants || r.data || [];
+      if (!rests.length) {
+        $('setup-hint').textContent = 'У организации нет ни одной точки — заведите её в админке.';
+        return;
+      }
+      var saved = loadKiosk();
+      state.restaurant = rests.filter(function (x) { return x.id === saved.restaurantId; })[0] || rests[0];
+      await pickRegister();
+    } catch (err) {
+      $('setup-hint').textContent = '';
+      $('setup-error').textContent = 'Не удалось загрузить кассы: ' + err.message;
+    }
+  }
+
+  async function pickRegister() {
+    var d = await api('/api/finance/registers?restaurantId=' + encodeURIComponent(state.restaurant.id));
+    var regs = d.registers || [];
+    if (!regs.length) {
+      $('setup-hint').textContent = 'На точке «' + state.restaurant.name + '» нет кассы. Владелец заводит её в админке: Устройства → Кассы.';
       return;
     }
-    var paymentMethod = getPaymentMethod();
-    var saleRequest = {
-      saleId: generateUuid(),
-      restaurantId: restaurantId,
-      registerId: registerId,
-      orderType: 'pickup',
-      paymentMethod: paymentMethod,
-      items: state.cart.map(function (item) {
-        return { menuItemId: item.menuItemId, quantity: item.quantity };
-      }),
-    };
+    var wanted = new URLSearchParams(location.search).get('registerId') || loadKiosk().registerId;
+    var open = regs.filter(function (x) { return x.status === 'open'; });
+    // На точке может быть открыта только одна смена — её и берём
+    var reg = open[0] || regs.filter(function (x) { return x.id === wanted; })[0] || (regs.length === 1 ? regs[0] : null);
+    if (reg) return useRegister(reg);
 
-    var headers = {
-      'Content-Type': 'application/json',
-    };
-    if (state.registerSessionId) {
-      headers['X-Register-Session'] = state.registerSessionId;
+    $('setup-hint').textContent = state.restaurant.name + ' — выберите кассу:';
+    $('setup-list').innerHTML = regs.map(function (x) {
+      return '<button class="choice" data-id="' + esc(x.id) + '">' + esc(x.name) +
+        ' <span class="badge closed">смена закрыта</span></button>';
+    }).join('');
+    $('setup-list').querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        useRegister(regs.filter(function (x) { return x.id === b.dataset.id; })[0]);
+      });
+    });
+  }
+
+  function useRegister(reg) {
+    state.register = reg;
+    saveKiosk();
+    if (reg.status !== 'open') {
+      $('setup-title').textContent = reg.name;
+      $('setup-hint').textContent = 'Смена на этой кассе закрыта. Пересчитайте наличные и откройте смену.';
+      $('setup-list').innerHTML = '';
+      $('open-shift').style.display = '';
+      return;
     }
+    openPin('verify');
+  }
 
-    AUTH.fetch('/api/pos/sales', {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(saleRequest),
-    }).then(function (res) {
-      if (!res.ok) {
-        return res.json().then(function (body) {
-          var msg = body && body.message ? body.message : 'Ошибка оплаты';
-          return Promise.reject(new Error(msg));
-        });
+  $('btn-open-shift').addEventListener('click', async function () {
+    var btn = this;
+    var sum = parseFloat(String($('opening-balance').value).replace(',', '.'));
+    if (!(sum >= 0)) { $('setup-error').textContent = 'Укажите сумму (0, если касса пустая)'; return; }
+    btn.disabled = true;
+    $('setup-error').textContent = '';
+    try {
+      var d = await api('/api/finance/registers/' + state.register.id + '/open', {
+        method: 'POST',
+        body: JSON.stringify({ restaurantId: state.restaurant.id, openingBalance: sum }),
+      });
+      state.register = d.register;
+      saveKiosk();
+      openPin('verify');
+    } catch (err) {
+      $('setup-error').textContent = err.message === 'Register already open for this restaurant'
+        ? 'На точке уже открыта смена на другой кассе' : 'Смена не открыта: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── 3. PIN ──
+  function renderPin() {
+    var dots = '';
+    for (var i = 0; i < 6; i++) dots += '<span class="' + (i < state.pin.length ? 'filled' : '') + '"></span>';
+    $('pin-dots').innerHTML = dots;
+  }
+  (function buildKeypad() {
+    var keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'OK'];
+    $('keypad').innerHTML = keys.map(function (k) {
+      return '<button data-k="' + k + '"' + (k.length > 1 ? ' class="wide"' : '') + '>' + (k === 'C' ? 'Стереть' : k) + '</button>';
+    }).join('');
+    $('keypad').querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { pressKey(b.dataset.k); });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!$('pin-screen').classList.contains('active')) return;
+      if (/^[0-9]$/.test(e.key)) pressKey(e.key);
+      else if (e.key === 'Backspace') pressKey('C');
+      else if (e.key === 'Enter') pressKey('OK');
+    });
+  })();
+
+  function openPin(mode) {
+    state.pinMode = mode;
+    state.pin = '';
+    $('pin-error').textContent = '';
+    $('pin-title').textContent = mode === 'unlock' ? '🔒 Касса заблокирована' : 'Введите PIN кассира';
+    $('pin-hint').textContent = (state.register ? state.register.name + ' · ' : '') +
+      (mode === 'unlock' ? 'Чтобы продолжить продажи, введите PIN.' : 'PIN выдаёт владелец при заведении кассира.');
+    renderPin();
+    show('pin-screen');
+  }
+
+  async function pressKey(k) {
+    if (state.busy) return;
+    if (k === 'C') { state.pin = state.pin.slice(0, -1); renderPin(); return; }
+    if (k !== 'OK') {
+      if (state.pin.length < 6) state.pin += k;
+      renderPin();
+      if (state.pin.length < 6) return;
+    }
+    if (state.pin.length < 4) { $('pin-error').textContent = 'PIN — от 4 до 6 цифр'; return; }
+    state.busy = true;
+    try {
+      var d = await api('/api/auth/cash-register/' + state.pinMode, {
+        method: 'POST',
+        body: JSON.stringify({ pin: state.pin, registerId: state.register.id }),
+      });
+      state.sessionId = d.registerSessionId;
+      saveKiosk();
+      await openTill();
+    } catch (err) {
+      if (err.status === 401 && !(err.body && err.body.error === 'Invalid PIN')) {
+        logout('Сессия истекла — войдите снова');
+      } else {
+        $('pin-error').textContent = err.message;
       }
-      return res.json();
-    }).then(function (data) {
+    } finally {
+      state.pin = '';
+      renderPin();
+      state.busy = false;
+    }
+  }
+
+  // ── 4. продажи ──
+  function isStopped(it) {
+    if (it.is_available === false) return true;
+    if (!it.stopped_at) return false;
+    return !(it.stop_until && new Date(it.stop_until) < new Date());
+  }
+
+  async function openTill() {
+    show('till-screen');
+    var user = AUTH.getUser() || {};
+    $('till-register').textContent = state.register.name;
+    $('till-sub').textContent = state.restaurant.name + ' · ' +
+      ((user.first_name || '') + ' ' + (user.last_name || '')).trim();
+    $('till-error').textContent = '';
+    if (!state.items.length) {
+      try {
+        var base = '/api/restaurants/' + state.restaurant.id;
+        var res = await Promise.all([api(base + '/menu-categories'), api(base + '/menu-items')]);
+        state.categories = res[0].categories || res[0].data || [];
+        state.items = (res[1].items || res[1].data || []).filter(function (i) { return !isStopped(i); });
+      } catch (err) {
+        $('grid').innerHTML = '<p class="error">Меню не загрузилось: ' + esc(err.message) + '</p>';
+        return;
+      }
+    }
+    renderCats();
+    renderGrid();
+    renderCart();
+  }
+
+  function renderCats() {
+    var used = {};
+    state.items.forEach(function (i) { used[i.category_id] = true; });
+    var cats = [{ id: 'all', name: 'Все' }].concat(state.categories.filter(function (c) { return used[c.id]; }));
+    $('cats').innerHTML = cats.map(function (c) {
+      return '<button data-id="' + esc(c.id) + '" class="' + (state.category === c.id ? 'active' : '') + '">' + esc(c.name) + '</button>';
+    }).join('');
+    $('cats').querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () { state.category = b.dataset.id; renderCats(); renderGrid(); });
+    });
+  }
+
+  function qtyOf(id) {
+    var row = state.cart.filter(function (r) { return r.item.id === id; })[0];
+    return row ? row.qty : 0;
+  }
+
+  function renderGrid() {
+    var list = state.items.filter(function (i) { return state.category === 'all' || i.category_id === state.category; });
+    if (!list.length) { $('grid').innerHTML = '<p class="muted">В меню нет доступных позиций.</p>'; return; }
+    $('grid').innerHTML = list.map(function (i) {
+      var q = qtyOf(i.id);
+      return '<button class="tile" data-id="' + esc(i.id) + '">' + (q ? '<span class="qty-badge">' + q + '</span>' : '') +
+        '<span>' + esc(i.name) + '</span><span class="price">' + money(i.price) + '</span></button>';
+    }).join('');
+    $('grid').querySelectorAll('.tile').forEach(function (b) {
+      b.addEventListener('click', function () { changeQty(b.dataset.id, 1); });
+    });
+  }
+
+  function changeQty(id, delta) {
+    var row = state.cart.filter(function (r) { return r.item.id === id; })[0];
+    if (!row) {
+      var item = state.items.filter(function (i) { return i.id === id; })[0];
+      if (!item || delta < 0) return;
+      state.cart.push({ item: item, qty: 1 });
+    } else {
+      row.qty += delta;
+      if (row.qty <= 0) state.cart = state.cart.filter(function (r) { return r !== row; });
+    }
+    // Состав чека изменился — это уже другая продажа, нужен новый saleId
+    pendingSaleId = null;
+    $('till-ok').innerHTML = '';
+    renderGrid();
+    renderCart();
+  }
+
+  function cartTotal() {
+    return state.cart.reduce(function (s, r) { return s + Number(r.item.price) * r.qty; }, 0);
+  }
+
+  function renderCart() {
+    if (!state.cart.length) {
+      $('cart').innerHTML = '<p class="muted">Чек пуст — нажмите на позицию меню.</p>';
+    } else {
+      $('cart').innerHTML = state.cart.map(function (r) {
+        return '<div class="cart-row"><span class="n">' + esc(r.item.name) + '</span>' +
+          '<button data-id="' + esc(r.item.id) + '" data-d="-1">−</button><span>' + r.qty + '</span>' +
+          '<button data-id="' + esc(r.item.id) + '" data-d="1">+</button>' +
+          '<span class="sum">' + money(Number(r.item.price) * r.qty) + '</span></div>';
+      }).join('');
+      $('cart').querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { changeQty(b.dataset.id, Number(b.dataset.d)); });
+      });
+    }
+    $('total').textContent = money(cartTotal());
+    $('btn-checkout').disabled = !state.cart.length;
+  }
+
+  $('pay').querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.method = b.dataset.method;
+      pendingSaleId = null;
+      $('pay').querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x === b); });
+    });
+  });
+
+  // saleId живёт до успешной продажи: повтор после обрыва сети не пробьёт чек дважды
+  var pendingSaleId = null;
+
+  $('btn-checkout').addEventListener('click', async function () {
+    if (!state.cart.length || state.busy) return;
+    var btn = this;
+    state.busy = true;
+    btn.disabled = true;
+    $('till-error').textContent = '';
+    pendingSaleId = pendingSaleId || uuid();
+    try {
+      var d = await api('/api/pos/sales', {
+        method: 'POST',
+        headers: { 'X-Register-Session': state.sessionId || '' },
+        body: JSON.stringify({
+          saleId: pendingSaleId,
+          restaurantId: state.restaurant.id,
+          registerId: state.register.id,
+          orderType: 'pickup',
+          paymentMethod: state.method,
+          items: state.cart.map(function (r) { return { menuItemId: r.item.id, quantity: r.qty }; }),
+        }),
+      });
+      pendingSaleId = null;
       state.cart = [];
-      renderTill();
-      var msg = $('success-msg');
-      if (!msg) {
-        msg = document.createElement('div');
-        msg.id = 'success-msg';
-        msg.style.cssText = 'margin-top:12px;padding:12px;background:#e8f5e9;color:#1b5e20;text-align:center;font-size:15px;border-radius:8px;border:1px solid #a5d6a7';
-        $('cart-list').appendChild(msg);
+      renderGrid();
+      renderCart();
+      var sale = d.sale || {};
+      $('till-ok').innerHTML = '<div class="ok-msg">✅ Оплачено ' + money(sale.total) +
+        (sale.orderNumber ? ' · чек ' + esc(sale.orderNumber) : '') + '</div>';
+    } catch (err) {
+      if (err.status === 403 && /PIN|сесси/i.test(err.message)) {
+        openPin(/заблокир/i.test(err.message) ? 'unlock' : 'verify');
+        $('pin-error').textContent = err.message;
+      } else {
+        $('till-error').textContent = '❌ Не оплачено: ' + err.message;
       }
-      msg.textContent = 'Добавлено в чек. Номер продажи: ' + (data && data.sale ? data.sale.orderNumber : '—');
-      setTimeout(function () {
-        msg.textContent = 'Чек создан. Касса осталась в режиме продаж.';
-      }, 2000);
-    }).catch(function (err) {
-      alert('Ошибка: ' + err.message);
-      console.error(err);
-    });
-  }
-
-  // ---- lock / unlock ----
-  function doLock() {
-    var pin = $('pin-input').value.trim();
-    if (!pin) { $('pin-error').textContent = 'Введите PIN.'; return; }
-    $('pin-error').textContent = '';
-    doLock(pin).then(function () {
-      showLocked();
-    }).catch(function (err) {
-      $('pin-error').textContent = err.message;
-    });
-  }
-
-  function doUnlock() {
-    var pin = $('unlock-pin').value.trim();
-    if (!pin) { $('unlock-error').textContent = 'Введите PIN.'; return; }
-    $('unlock-error').textContent = '';
-    doUnlock(pin).then(function () {
-      showTill();
-      renderTill();
-    }).catch(function (err) {
-      $('unlock-error').textContent = err.message;
-    });
-  }
-
-  // ---- event bindings ----
-  $('btn-login').addEventListener('click', function () {
-    var email = $('login-email').value.trim();
-    var password = $('login-password').value;
-    if (!email || !password) { alert('Введите логин и пароль.'); return; }
-    doLogin(email, password).then(function () {
-      showPin();
-    }).catch(function (err) {
-      alert('Ошибка входа: ' + err.message);
-    });
+    } finally {
+      state.busy = false;
+      btn.disabled = !state.cart.length;
+    }
   });
 
-  $('btn-verify-pin').addEventListener('click', function () {
-    var pin = $('pin-input').value.trim();
-    if (!pin) { $('pin-error').textContent = 'Введите PIN.'; return; }
-    $('pin-error').textContent = '';
-    doPinVerify(pin).then(function () {
-      showTill();
-      renderTill();
-    }).catch(function (err) {
-      $('pin-error').textContent = err.message;
-    });
+  $('btn-lock').addEventListener('click', async function () {
+    try {
+      await api('/api/auth/cash-register/lock', {
+        method: 'POST',
+        body: JSON.stringify({ registerId: state.register.id }),
+      });
+    } catch (err) {
+      // Экран блокируем в любом случае: планшет не должен оставаться
+      // открытым из-за сбоя сети
+      console.warn('lock:', err.message);
+    }
+    openPin('unlock');
   });
 
-  $('btn-lock').addEventListener('click', function () { showPin(); });
+  // Закрытие смены — в два нажатия вместо confirm()
+  var closeArmed = null;
+  $('btn-close-shift').addEventListener('click', async function () {
+    var btn = this;
+    if (!closeArmed) {
+      btn.textContent = 'Точно закрыть смену?';
+      closeArmed = setTimeout(function () { btn.textContent = 'Закрыть смену'; closeArmed = null; }, 4000);
+      return;
+    }
+    clearTimeout(closeArmed);
+    closeArmed = null;
+    btn.textContent = 'Закрыть смену';
+    try {
+      await api('/api/finance/registers/' + state.register.id + '/close', { method: 'POST', body: '{}' });
+      await api('/api/auth/cash-register/lock', {
+        method: 'POST',
+        body: JSON.stringify({ registerId: state.register.id }),
+      }).catch(function () {});
+      state.sessionId = null;
+      state.cart = [];
+      saveKiosk();
+      await setup();
+    } catch (err) {
+      $('till-error').textContent = 'Смена не закрыта: ' + err.message;
+    }
+  });
 
-  $('btn-unlock').addEventListener('click', doUnlock);
+  document.querySelectorAll('[data-action="logout"]').forEach(function (b) {
+    b.addEventListener('click', function () { logout(''); });
+  });
 
-  $('btn-checkout').addEventListener('click', doCheckout);
-
-  // ---- init ----
-  showLogin();
+  // ── старт ──
+  // После перезагрузки планшета к продажам пускаем только через PIN
+  (async function init() {
+    if (!AUTH.isLoggedIn()) return show('login-screen');
+    var saved = loadKiosk();
+    await setup();
+    if (saved.sessionId && state.register && state.register.status === 'open' &&
+        state.register.id === saved.registerId) {
+      state.sessionId = saved.sessionId;
+      openPin('unlock');
+    }
+  })();
 })();

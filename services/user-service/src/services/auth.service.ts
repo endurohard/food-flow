@@ -306,55 +306,72 @@ export class AuthService {
 
   // ── Сессии режима кассы ──────────────────────────────────────────────
   // Одна сессия = вход кассира в режим кассы после ввода PIN.
-  // Статус 'active' — продажи разрешены, 'locked' — ожидание PIN, продажи откл.
+  // 'active' — продажи разрешены, 'locked' — ждёт PIN. Срок — рабочая смена:
+  // прежние 8 минут без продления обрывали продажи посреди смены.
+
+  static readonly CASH_SESSION_TTL_MS = 14 * 60 * 60 * 1000;
+
+  async registerBelongsToEnterprise(registerId: string, enterpriseId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      'SELECT 1 FROM cash_registers WHERE id = $1 AND enterprise_id = $2',
+      [registerId, enterpriseId]
+    );
+    return r.rows.length > 0;
+  }
 
   async createCashRegisterSession(userId: string, registerId: string): Promise<string> {
     const sessionId = crypto.randomUUID();
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 8 * 60 * 1000); // 8 минут на неактивность
-
-    await this.pool.query(
-      `INSERT INTO cash_register_sessions (id, user_id, register_id, status, expires_at)
-       VALUES ($1, $2, $3, 'active', $4)`,
-      [sessionId, userId, registerId, expiresAt]
-    );
+    const expiresAt = new Date(Date.now() + AuthService.CASH_SESSION_TTL_MS);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Старые сессии кассира на этой кассе гасим, чтобы «последняя» была однозначной
+      await client.query(
+        `UPDATE cash_register_sessions SET status = 'locked', locked_at = NOW(), expires_at = NOW()
+          WHERE user_id = $1 AND register_id = $2 AND expires_at > NOW()`,
+        [userId, registerId]
+      );
+      await client.query(
+        `INSERT INTO cash_register_sessions (id, user_id, register_id, status, expires_at)
+         VALUES ($1, $2, $3, 'active', $4)`,
+        [sessionId, userId, registerId, expiresAt]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
     return sessionId;
   }
 
-  async getCashRegisterSession(sessionId: string): Promise<any> {
-    const result = await this.pool.query(
-      `SELECT id, user_id, register_id, status, locked_at, expires_at, created_at
-       FROM cash_register_sessions WHERE id = $1`,
-      [sessionId]
-    );
-    return result.rows[0] || null;
-  }
-
+  /** Последняя сессия кассира на кассе (без ORDER BY бралась случайная из нескольких). */
   async getCashRegisterSessionByRegister(registerId: string, userId: string): Promise<any> {
     const result = await this.pool.query(
       `SELECT id, user_id, register_id, status, locked_at, expires_at, created_at
-       FROM cash_register_sessions
-       WHERE register_id = $1 AND user_id = $2`,
+         FROM cash_register_sessions
+        WHERE register_id = $1 AND user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1`,
       [registerId, userId]
     );
     return result.rows[0] || null;
   }
 
-  async setCashRegisterSessionStatus(sessionId: string, status: 'active' | 'locked', lockedAt?: Date): Promise<void> {
+  async setCashRegisterSessionStatus(sessionId: string, status: 'active' | 'locked'): Promise<void> {
     if (status === 'locked') {
       await this.pool.query(
-        `UPDATE cash_register_sessions
-         SET status = 'locked', locked_at = $1, expires_at = $2
-         WHERE id = $3`,
-        [lockedAt, lockedAt, sessionId]
+        `UPDATE cash_register_sessions SET status = 'locked', locked_at = NOW() WHERE id = $1`,
+        [sessionId]
       );
     } else {
-      const now = new Date();
+      // Разблокировка продлевает сессию на смену вперёд
       await this.pool.query(
         `UPDATE cash_register_sessions
-         SET status = 'active', locked_at = NULL, expires_at = $1
-         WHERE id = $2`,
-        [now, sessionId]
+            SET status = 'active', locked_at = NULL, expires_at = $1
+          WHERE id = $2`,
+        [new Date(Date.now() + AuthService.CASH_SESSION_TTL_MS), sessionId]
       );
     }
   }

@@ -1,40 +1,44 @@
 import { Request, Response, NextFunction } from 'express';
-import pkg from 'pg';
-const { Pool } = pkg;
+
+/** Достаточно метода query: так в тестах подставляется мок без настоящего pg. */
+export interface QueryablePool {
+  query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
+}
 
 /**
- * Проверяет, что запрос к продаже приходит от активной (не заблокированной) кассы.
+ * Пропускает продажу только от активной (не заблокированной) сессии режима кассы.
  *
- * Клиент отправляет токен сессии кассы в заголовке X-Register-Session.
- * Сервер проверяет запись cash_register_sessions:
- *   - id должна существовать,
- *   - status должна быть 'active' (иначе касса «заблокирована», 403),
- *   - для наличной оплаты регистр обязателен, поэтому register_id сессии
- *     должен совпадать с registerId в теле запроса.
+ * Клиент шлёт id сессии в заголовке X-Register-Session. Сессия обязана:
+ *   - принадлежать тому же пользователю, что и JWT (иначе id сессии,
+ *     подсмотренный на планшете, открывал бы продажи под чужим логином);
+ *   - быть в статусе 'active' и не истечь;
+ *   - относиться к той кассе, в которую идут деньги (registerId в теле).
+ *
+ * Роут /api/pos/sales зовёт только экран режима кассы: pos.html и Android-касса
+ * продают через /api/orders, поэтому обязательный заголовок их не ломает.
  */
-export function createCashRegisterSessionMiddleware(pool: InstanceType<typeof Pool>) {
+export function createCashRegisterSessionMiddleware(pool: QueryablePool) {
   return async (req: Request, res: Response, next: NextFunction): Promise<any> => {
-    const sessionId = req.headers['x-register-session'] as string;
-    if (!sessionId) {
+    const sessionId = req.headers['x-register-session'];
+    if (!sessionId || typeof sessionId !== 'string') {
       return res.status(403).json({
         error: 'Forbidden',
-        message: 'Для продажи требуется актуальная сессия кассы',
+        message: 'Для продажи требуется сессия кассы — войдите по PIN',
       });
     }
 
-    const client = await pool.connect();
     try {
-      const result = await client.query(
-        `SELECT status, register_id
-         FROM cash_register_sessions
-         WHERE id = $1 FOR UPDATE`,
+      const result = await pool.query(
+        `SELECT user_id, register_id, status, expires_at > NOW() AS alive
+           FROM cash_register_sessions
+          WHERE id = $1`,
         [sessionId]
       );
       const session = result.rows[0];
-      if (!session) {
+      if (!session || session.user_id !== req.userId || !session.alive) {
         return res.status(403).json({
           error: 'Forbidden',
-          message: 'Сессия кассы не найдена или истекла',
+          message: 'Сессия кассы не найдена или истекла — войдите по PIN заново',
         });
       }
       if (session.status !== 'active') {
@@ -43,18 +47,17 @@ export function createCashRegisterSessionMiddleware(pool: InstanceType<typeof Po
           message: 'Касса заблокирована — введите PIN для разблокировки',
         });
       }
-      // Регистр обязателен для наличных — проверяем совпадение.
-      if (req.body.paymentMethod === 'cash' && req.body.registerId !== session.register_id) {
+      // Карта без кассы допустима (registerId пуст), но если касса указана —
+      // только та, на которой открыта сессия
+      if (req.body?.registerId && req.body.registerId !== session.register_id) {
         return res.status(403).json({
           error: 'Forbidden',
-          message: 'Сессия кассы не соответствует регистру',
+          message: 'Сессия кассы открыта на другой кассе',
         });
       }
       next();
     } catch (error) {
       next(error);
-    } finally {
-      client.release();
     }
   };
 }

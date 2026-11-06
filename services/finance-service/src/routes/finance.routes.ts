@@ -25,7 +25,27 @@ router.get('/registers', authenticateUser, requireRole('admin', 'owner', 'manage
   } catch (error) { console.error('List registers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
-router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+// Касса заводится владельцем/управляющим; кассир только открывает и закрывает смену
+router.post('/registers', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+  try {
+    const schema = Joi.object({
+      restaurantId: Joi.string().uuid().required(),
+      name: Joi.string().trim().min(1).max(255).required()
+    });
+    const { error, value } = schema.validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message, message: error.details[0].message });
+    if (!req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const register = await financeService.createRegister({ ...value, enterpriseId: req.enterpriseId });
+    return res.status(201).json({ register });
+  } catch (error: any) {
+    if (error.message === 'Restaurant not found') return res.status(404).json({ error: error.message, message: 'Точка не найдена в вашей организации' });
+    console.error('Create register error:', error); return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Кассир открывает смену сам с планшета в режиме кассы — иначе наличные не принять,
+// пока не придёт управляющий
+router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner', 'manager', 'cashier'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       restaurantId: Joi.string().uuid().required(),
@@ -37,7 +57,7 @@ router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
 
-    const register = await financeService.openRegister(value.restaurantId, req.userId!, value.openingBalance, isSuper ? undefined : req.enterpriseId);
+    const register = await financeService.openRegister(req.params.id, value.restaurantId, req.userId!, value.openingBalance, isSuper ? undefined : req.enterpriseId);
     if (!register) return res.status(404).json({ error: 'Register not found or already open' });
     return res.json({ register });
   } catch (error: any) {
@@ -46,7 +66,7 @@ router.post('/registers/:id/open', authenticateUser, requireRole('admin', 'owner
   }
 });
 
-router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
+router.post('/registers/:id/close', authenticateUser, requireRole('admin', 'owner', 'manager', 'cashier'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       actualBalance: Joi.number().min(0).optional()

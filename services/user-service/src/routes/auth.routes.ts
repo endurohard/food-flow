@@ -3,6 +3,7 @@ import Joi from 'joi';
 import { AuthService, AuthError } from '../services/auth.service';
 import { UserService } from '../services/user.service';
 import { config } from '../config';
+import { authenticateUser } from '../middleware/enterprise.middleware';
 
 const router = Router();
 const authService = new AuthService(config.database.url);
@@ -234,73 +235,69 @@ router.post('/logout', async (req: Request, res: Response) => {
 
 // ── PIN-режим кассы ─────────────────────────────────────────────────────
 // После входа по email+паролю кассир вводит PIN, и тогда активируется
-// режим кассы (только продажи). То же PIN используется для блокировки и
-// разблокировки кассы.
+// режим кассы (только продажи). Тот же PIN снимает блокировку.
+// Все три вызова требуют JWT: без него req.userId пуст, и раньше каждый
+// ответ был 401 «Пользователь не идентифицирован».
 
 const cashRegisterPinSchema = Joi.object({
-  pin: Joi.string().min(4).max(100).required(),
+  pin: Joi.string().min(4).max(6).required(),
+  registerId: Joi.string().uuid().required(),
 });
 
-/** Верифицирует PIN и создаёт (или возобновляет) сессию кассы. */
-router.post('/cash-register/verify', async (req: Request, res: Response) => {
+const cashRegisterLockSchema = Joi.object({
+  registerId: Joi.string().uuid().required(),
+});
+
+/** Касса должна принадлежать организации из токена — иначе чужой registerId откроет сессию на чужой кассе. */
+async function checkRegister(req: Request, res: Response, registerId: string): Promise<boolean> {
+  if (!req.enterpriseId) {
+    res.status(403).json({ error: 'Forbidden', message: 'Пользователь не привязан к организации' });
+    return false;
+  }
+  const ok = await authService.registerBelongsToEnterprise(registerId, req.enterpriseId);
+  if (!ok) {
+    res.status(404).json({ error: 'Not found', message: 'Касса не найдена в вашей организации' });
+    return false;
+  }
+  return true;
+}
+
+/** Проверяет PIN и открывает новую сессию кассы (прежние сессии этого кассира на этой кассе гасятся). */
+router.post('/cash-register/verify', authenticateUser, async (req: Request, res: Response) => {
   try {
     const { error, value } = cashRegisterPinSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({
-        error: 'Validation error',
-        message: error.details[0].message,
-      });
+      return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
-    const userId = req.userId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Пользователь не идентифицирован' });
-    }
-    const ok = await userService.verifyCashRegisterPin(userId, value.pin);
+    if (!(await checkRegister(req, res, value.registerId))) return;
+    const ok = await userService.verifyCashRegisterPin(req.userId!, value.pin);
     if (!ok) {
       return res.status(401).json({ error: 'Invalid PIN', message: 'Неверный PIN кассира' });
     }
-    const registerId = req.body.registerId;
-    if (!registerId) {
-      return res.status(400).json({ error: 'Validation error', message: 'registerId обязателен' });
-    }
-    const sessionId = await authService.createCashRegisterSession(userId, registerId);
-    return res.status(200).json({ registerSessionId: sessionId, ok: true });
+    const sessionId = await authService.createCashRegisterSession(req.userId!, value.registerId);
+    return res.status(200).json({ ok: true, registerSessionId: sessionId });
   } catch (error) {
     console.error('Cash register verify error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-/** Блокирует кассу: запрещает продажи до разблокировки PIN. */
-router.post('/cash-register/lock', async (req: Request, res: Response) => {
+/**
+ * Блокирует кассу. PIN для блокировки не нужен: кассир отходит от планшета
+ * одним нажатием, а снять блокировку можно только PIN-ом.
+ */
+router.post('/cash-register/lock', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const { error, value } = cashRegisterPinSchema.validate(req.body);
+    const { error, value } = cashRegisterLockSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({
-        error: 'Validation error',
-        message: error.details[0].message,
-      });
+      return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
-    const userId = req.userId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Пользователь не идентифицирован' });
-    }
-    const registerId = req.body.registerId;
-    if (!registerId) {
-      return res.status(400).json({ error: 'Validation error', message: 'registerId обязателен' });
-    }
-    const ok = await userService.verifyCashRegisterPin(userId, value.pin);
-    if (!ok) {
-      return res.status(401).json({ error: 'Invalid PIN', message: 'Неверный PIN кассира' });
-    }
-    const session = await authService.getCashRegisterSessionByRegister(registerId, userId);
+    if (!(await checkRegister(req, res, value.registerId))) return;
+    const session = await authService.getCashRegisterSessionByRegister(value.registerId, req.userId!);
     if (!session) {
-      return res.status(404).json({ error: 'Session not found', message: 'Сессия кассы не найдена' });
+      return res.status(404).json({ error: 'Session not found', message: 'Сессия кассы не найдена — войдите по PIN' });
     }
-    if (session.status === 'locked') {
-      return res.status(409).json({ error: 'Already locked', message: 'Касса уже заблокирована' });
-    }
-    await authService.setCashRegisterSessionStatus(session.id, 'locked', new Date());
+    await authService.setCashRegisterSessionStatus(session.id, 'locked');
     return res.status(200).json({ ok: true, locked: true });
   } catch (error) {
     console.error('Cash register lock error:', error);
@@ -308,38 +305,24 @@ router.post('/cash-register/lock', async (req: Request, res: Response) => {
   }
 });
 
-/** Разблокирует кассу: возвращает кассе права на продажу. */
-router.post('/cash-register/unlock', async (req: Request, res: Response) => {
+/** Снимает блокировку PIN-ом и продлевает ту же сессию. */
+router.post('/cash-register/unlock', authenticateUser, async (req: Request, res: Response) => {
   try {
     const { error, value } = cashRegisterPinSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({
-        error: 'Validation error',
-        message: error.details[0].message,
-      });
+      return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
-    const userId = req.userId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Пользователь не идентифицирован' });
-    }
-    const registerId = req.body.registerId;
-    if (!registerId) {
-      return res.status(400).json({ error: 'Validation error', message: 'registerId обязателен' });
-    }
-    const ok = await userService.verifyCashRegisterPin(userId, value.pin);
+    if (!(await checkRegister(req, res, value.registerId))) return;
+    const ok = await userService.verifyCashRegisterPin(req.userId!, value.pin);
     if (!ok) {
       return res.status(401).json({ error: 'Invalid PIN', message: 'Неверный PIN кассира' });
     }
-    const session = await authService.getCashRegisterSessionByRegister(registerId, userId);
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found', message: 'Сессия кассы не найдена' });
-    }
-    if (session.status === 'active') {
-      return res.status(409).json({ error: 'Already active', message: 'Касса уже разблокирована' });
-    }
-    await authService.setCashRegisterSessionStatus(session.id, 'active');
-    const sessionId = await authService.createCashRegisterSession(userId, registerId);
-    return res.status(200).json({ registerSessionId: sessionId, ok: true });
+    const session = await authService.getCashRegisterSessionByRegister(value.registerId, req.userId!);
+    // Истёкшую или отсутствующую сессию не воскрешаем — открываем новую
+    const sessionId = session && new Date(session.expires_at) > new Date()
+      ? (await authService.setCashRegisterSessionStatus(session.id, 'active'), session.id)
+      : await authService.createCashRegisterSession(req.userId!, value.registerId);
+    return res.status(200).json({ ok: true, registerSessionId: sessionId });
   } catch (error) {
     console.error('Cash register unlock error:', error);
     return res.status(500).json({ error: 'Internal server error' });

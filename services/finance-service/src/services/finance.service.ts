@@ -20,8 +20,31 @@ export class FinanceService {
 
   // ========== КАССЫ ==========
 
-  async openRegister(restaurantId: string, userId: string, openingBalance: number, enterpriseId?: string): Promise<any> {
-    // Проверяем — нет ли уже открытой кассы в этом ресторане (в рамках предприятия)
+  /**
+   * Заводит кассу точки. Раньше касс на проде не было вовсе и создать их было
+   * негде — наличная продажа в режиме кассы упиралась в «нет открытой кассы».
+   */
+  async createRegister(data: { restaurantId: string; name: string; enterpriseId: string }): Promise<any> {
+    const rest = await this.pool.query(
+      'SELECT id FROM restaurants WHERE id = $1 AND enterprise_id = $2',
+      [data.restaurantId, data.enterpriseId]
+    );
+    if (!rest.rows[0]) throw new Error('Restaurant not found');
+    const result = await this.pool.query(
+      `INSERT INTO cash_registers (restaurant_id, enterprise_id, name, status)
+       VALUES ($1, $2, $3, 'closed')
+       RETURNING id, restaurant_id, enterprise_id, name, status, current_balance, created_at`,
+      [data.restaurantId, data.enterpriseId, data.name]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Открывает смену на конкретной кассе. Прежний UPDATE шёл по restaurant_id без
+   * id и открывал разом все закрытые кассы точки.
+   */
+  async openRegister(registerId: string, restaurantId: string, userId: string, openingBalance: number, enterpriseId?: string): Promise<any> {
+    // На точке одна открытая смена: так деньги не расходятся между кассами
     const existingConds = ['restaurant_id = $1', `status = 'open'`];
     const existingVals: any[] = [restaurantId];
     if (enterpriseId) { existingConds.push(`enterprise_id = $${existingVals.length + 1}`); existingVals.push(enterpriseId); }
@@ -32,8 +55,8 @@ export class FinanceService {
     if (existing.rows.length > 0) throw new Error('Register already open for this restaurant');
 
     // Открываем только кассу, принадлежащую предприятию (защита cross-tenant)
-    const updConds = ['restaurant_id = $3', `status = 'closed'`];
-    const updVals: any[] = [userId, openingBalance, restaurantId];
+    const updConds = ['id = $3', 'restaurant_id = $4', `status = 'closed'`];
+    const updVals: any[] = [userId, openingBalance, registerId, restaurantId];
     if (enterpriseId) { updConds.push(`enterprise_id = $${updVals.length + 1}`); updVals.push(enterpriseId); }
     const result = await this.pool.query(
       `UPDATE cash_registers

@@ -472,6 +472,12 @@
       <span>Принтеры</span>
     </a>
 
+    <div class="nav-section-label">Устройства</div>
+    <a href="/admin-panel/devices.html" class="nav-item">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="16" height="12" rx="2"/><path d="M2 9h16"/><path d="M6 13h3"/><path d="M6 17h2"/></svg>
+      <span>Устройства</span>
+    </a>
+
     <div class="nav-section-label">Анализ</div>
 
     <a href="/admin-panel/analytics.html" class="nav-item">
@@ -1014,17 +1020,20 @@ AUTH.requireAuth();
       const badgeCls = isOpen ? 'badge-success' : 'badge-danger';
       const badgeLabel = isOpen ? 'Открыта' : 'Закрыта';
       return `
-        <div class="register-card" id="regCard-${r.id}" onclick="selectRegister(${r.id}, '${r.name}')">
+        <div class="register-card" id="regCard-${r.id}" onclick="selectRegister('${r.id}', ${escAttr(JSON.stringify(r.name || ''))})">
           <div class="register-name">${r.name || 'Касса #' + r.id}</div>
           <div style="margin-bottom:8px;"><span class="badge ${badgeCls}">${badgeLabel}</span></div>
           <div class="register-balance">${formatMoney(r.current_balance)}</div>
           <div class="register-actions">
-            ${!isOpen ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openRegisterDialog(${r.id}, ${r.restaurant_id || ''})">Открыть кассу</button>` : ''}
-            ${isOpen  ? `<button class="btn btn-sm btn-danger"  onclick="event.stopPropagation(); closeRegisterAction(${r.id})">Закрыть кассу</button>` : ''}
+            ${!isOpen ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openRegisterDialog('${r.id}', '${r.restaurant_id || ''}')">Открыть кассу</button>` : ''}
+            ${isOpen  ? `<button class="btn btn-sm btn-danger"  onclick="event.stopPropagation(); closeRegisterAction('${r.id}')">Закрыть кассу</button>` : ''}
           </div>
         </div>`;
     }).join('');
   }
+
+  // Значение для onclick="...": JSON-строку надо экранировать под HTML-атрибут
+  function escAttr(v) { return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
 
   function selectRegister(id, name) {
     selectedRegisterId = id;

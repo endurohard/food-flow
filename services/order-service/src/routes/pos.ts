@@ -1,9 +1,10 @@
-import pkg from 'pg';
-const { Pool } = pkg;
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { authenticateUser, requireRole } from '../middleware/auth.middleware';
-import { createCashRegisterSessionMiddleware } from '../middleware/cash-register.middleware';
+import {
+  createCashRegisterSessionMiddleware,
+  QueryablePool,
+} from '../middleware/cash-register.middleware';
 import { PosSaleError, PosSaleService } from '../services/pos-sale.service';
 
 export const posSaleSchema = Joi.object({
@@ -39,7 +40,7 @@ export const posSaleSchema = Joi.object({
 /** Фабрика не создаёт соединения при импорте — тесты схемы остаются чистыми. */
 export function createPosRouter(
   posSaleService: PosSaleService,
-  pool: InstanceType<typeof Pool>
+  pool: QueryablePool
 ): Router {
   const router = Router();
   const cashRegisterMiddleware = createCashRegisterSessionMiddleware(pool);
