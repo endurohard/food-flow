@@ -11,6 +11,7 @@ import { setupMetrics } from './metrics';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import enterpriseRoutes from './routes/enterprise.routes';
+import { createTelegramRoutes, createInternalNotifyRoute } from './routes/telegram.routes';
 
 const app = express();
 const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
@@ -67,7 +68,11 @@ setupSwagger(app);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+const telegram = createTelegramRoutes();
+app.use('/api/enterprises/:id/integrations/telegram', telegram.router);
 app.use('/api/enterprises', enterpriseRoutes);
+// Только для сервисов внутри docker-сети: в Kong /internal не проброшен
+app.use(createInternalNotifyRoute(telegram.tg));
 
 // 404 handler
 app.use((req: Request, res: Response) => {

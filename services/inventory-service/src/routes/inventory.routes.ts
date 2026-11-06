@@ -3,9 +3,23 @@ import Joi from 'joi';
 import { InventoryService } from '../services/inventory.service';
 import { authenticateUser, authenticateInternal, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
+import { stockAlerts, checkStockLater } from '../services/stock-alerts.instance';
 
 const router = Router();
 const inventoryService = new InventoryService(config.database.url);
+
+// ========== «ПОРА ЗАКАЗАТЬ» ==========
+// Колокольчик в админке: позиции, у которых остаток на складе дошёл до минимума
+
+router.get('/stock-alerts', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
+  try {
+    if (!req.enterpriseId) return res.json({ alerts: [] });
+    return res.json({ alerts: await stockAlerts.listOpen(req.enterpriseId) });
+  } catch (error) {
+    console.error('List stock alerts error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // ========== INVENTORY ITEMS ==========
 
@@ -191,6 +205,7 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
       performedBy: req.userId,
       enterpriseId: req.enterpriseId
     });
+    checkStockLater(value.warehouseId, [value.inventoryItemId]);
     return res.status(201).json({ movement });
   } catch (error) {
     console.error('Create movement error:', error);
@@ -287,6 +302,7 @@ router.post('/deduct-by-order', authenticateInternal, requireRole('admin', 'owne
       value.performedBy || req.userId,
       enterpriseId
     );
+    checkStockLater(value.warehouseId, result.deducted.map((d) => d.inventoryItemId));
     return res.json(result);
   } catch (error: any) {
     if (error.message && (error.message.includes('Недостаточно') ||

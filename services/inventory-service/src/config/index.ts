@@ -25,5 +25,9 @@ export const config = {
     secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production'
   },
   financeServiceUrl: process.env.FINANCE_SERVICE_URL || 'http://finance-service:3012',
-  internalToken: process.env.INTERNAL_TOKEN || ''
+  internalToken: process.env.INTERNAL_TOKEN || '',
+  // Через user-service уходят уведомления в Telegram-бот организации
+  userServiceUrl: process.env.USER_SERVICE_URL || '',
+  // Как часто перепроверять остатки против минимума, мс (0 — не проверять)
+  stockAlertIntervalMs: parseInt(process.env.STOCK_ALERT_INTERVAL_MS || '300000', 10)
 };

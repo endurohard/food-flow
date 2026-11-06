@@ -3,6 +3,7 @@
 <head>
   <link rel="stylesheet" href="/css/tokens.css">
     <script src="js/auth.js"></script>
+    <script src="js/stock-alerts.js" defer></script>
   <style>
     /* ══ Sedap Layout Override ══ */
     *, *::before, *::after { box-sizing: border-box; }
@@ -1649,12 +1650,55 @@ AUTH.requireAuth();
                 </div>
             </div>
 
-            <div class="card">
+            <!-- Telegram-бот организации: уведомления владельцу и админам
+                 («пора заказать», когда остаток на складе дошёл до минимума) -->
+            <div class="card" id="tgCard">
                 <div class="card-header">
-                    <h2>Интеграции</h2>
+                    <h2>✈️ Telegram-бот</h2>
+                    <p style="margin: 8px 0 0 0; font-size: 14px; color: var(--color-text-secondary);">
+                        Уведомления владельцу и админам в Telegram. Сейчас приходит:
+                        «пора заказать», когда остаток позиции на складе дошёл до минимального.
+                    </p>
                 </div>
                 <div class="card-body">
-                    <p style="color: var(--color-text-secondary);">Настройка сторонних сервисов (в разработке)</p>
+                    <div id="tgLoading" style="color:var(--color-text-secondary);">Загрузка…</div>
+                    <div id="tgDisconnected" style="display:none;">
+                        <ol style="margin:0 0 16px 18px;padding:0;font-size:14px;line-height:1.7;color:var(--color-text-secondary);">
+                            <li>В Telegram откройте <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте <b>/newbot</b> и придумайте имя боту.</li>
+                            <li>BotFather пришлёт токен вида <code>1234567890:AAH…</code> — вставьте его сюда.</li>
+                            <li>Нажмите «Привязать мой Telegram» и в боте нажмите «Start».</li>
+                        </ol>
+                        <div class="form-group">
+                            <label for="tgToken">Токен бота</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <input type="password" class="form-control" id="tgToken" autocomplete="off" spellcheck="false"
+                                       placeholder="1234567890:AAH…" style="flex:1;min-width:260px;">
+                                <button type="button" class="btn btn-primary" id="tgSaveBtn" onclick="tgSave()">Подключить</button>
+                                <button type="button" class="btn btn-secondary" id="tgCancelBtn" onclick="tgLoad()" style="display:none;">Отмена</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tgConnected" style="display:none;">
+                        <p style="margin:0 0 12px 0;">Подключён бот <a id="tgBotLink" href="#" target="_blank" rel="noopener"></a></p>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
+                            <thead><tr style="text-align:left;color:var(--color-text-secondary);">
+                                <th style="padding:6px 8px;">Кому приходят уведомления</th><th style="padding:6px 8px;">Роль</th><th style="padding:6px 8px;">Telegram</th><th></th>
+                            </tr></thead>
+                            <tbody id="tgRecipients"></tbody>
+                        </table>
+                        <div id="tgLinkBox" style="display:none;padding:12px 14px;border-radius:10px;background:var(--color-info-light);margin-bottom:16px;font-size:14px;">
+                            Откройте ссылку на телефоне и нажмите «Start» в боте:<br>
+                            <a id="tgLinkUrl" href="#" target="_blank" rel="noopener" style="word-break:break-all;"></a>
+                            <div id="tgLinkWait" style="margin-top:6px;color:var(--color-text-secondary);">Жду нажатия «Start»…</div>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary" id="tgLinkBtn" onclick="tgLink()">Привязать мой Telegram</button>
+                            <button type="button" class="btn btn-secondary" onclick="tgTest()">Отправить проверку</button>
+                            <button type="button" class="btn btn-secondary" onclick="tgChangeBot()">Сменить бота</button>
+                            <button type="button" class="btn btn-secondary" id="tgRemoveBtn" onclick="tgRemove()">Отключить</button>
+                        </div>
+                    </div>
+                    <div id="tgError" style="display:none;margin-top:12px;color:var(--color-danger);font-size:14px;"></div>
                 </div>
             </div>
         </div>
@@ -2334,7 +2378,172 @@ AUTH.requireAuth();
         window.selectBusinessType = selectBusinessType;
         renderBusinessTypes();
 
+        // ── Telegram-бот организации ──
+        const tgEsc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const TG_ROLES = { owner: 'Владелец', admin: 'Админ' };
+        let tgPollTimer = null;
+        let tgRemoveArmed = false;
+
+        function tgUrl(suffix) {
+            return '/api/enterprises/' + currentEnterpriseId() + '/integrations/telegram' + (suffix || '');
+        }
+
+        function tgShowError(msg) {
+            const el = document.getElementById('tgError');
+            el.textContent = msg || '';
+            el.style.display = msg ? 'block' : 'none';
+        }
+
+        function tgRender(st) {
+            document.getElementById('tgLoading').style.display = 'none';
+            document.getElementById('tgDisconnected').style.display = st.connected ? 'none' : 'block';
+            document.getElementById('tgConnected').style.display = st.connected ? 'block' : 'none';
+            document.getElementById('tgCancelBtn').style.display = 'none';
+            if (!st.connected) return;
+            const a = document.getElementById('tgBotLink');
+            a.textContent = '@' + st.botUsername + (st.botName ? ' (' + st.botName + ')' : '');
+            a.href = 'https://t.me/' + st.botUsername;
+            document.getElementById('tgRecipients').innerHTML = (st.recipients || []).map((r) => `
+                <tr style="border-top:1px solid var(--admin-border);">
+                    <td style="padding:8px;">${tgEsc(r.name)}${r.isMe ? ' <span style="color:var(--color-text-secondary);">(вы)</span>' : ''}</td>
+                    <td style="padding:8px;">${tgEsc(TG_ROLES[r.role] || r.role)}</td>
+                    <td style="padding:8px;">${r.linked
+                        ? '✅ привязан' + (r.telegramUsername ? ' @' + tgEsc(r.telegramUsername) : '')
+                        : '<span style="color:var(--color-text-secondary);">не привязан — пусть нажмёт «Привязать мой Telegram» под своим входом</span>'}</td>
+                    <td style="padding:8px;text-align:right;">${r.linked
+                        ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px;" onclick="tgUnlink('${tgEsc(r.userId)}')">Отвязать</button>` : ''}</td>
+                </tr>`).join('');
+            const me = (st.recipients || []).find((r) => r.isMe);
+            document.getElementById('tgLinkBtn').textContent = me && me.linked ? 'Привязать заново' : 'Привязать мой Telegram';
+            return me;
+        }
+
+        async function tgLoad() {
+            tgShowError('');
+            if (!currentEnterpriseId()) {
+                document.getElementById('tgLoading').textContent = 'Предприятие не определено — войдите заново.';
+                return;
+            }
+            try {
+                const res = await AUTH.fetch(tgUrl());
+                if (res.status === 403) {
+                    document.getElementById('tgLoading').textContent = 'Telegram-бота настраивает владелец или админ организации.';
+                    return;
+                }
+                if (!res.ok) throw new Error(await apiError(res));
+                tgRender(await res.json());
+            } catch (e) {
+                document.getElementById('tgLoading').textContent = 'Не удалось загрузить: ' + e.message;
+            }
+        }
+
+        async function tgSave() {
+            const token = document.getElementById('tgToken').value.trim();
+            if (!token) { tgShowError('Вставьте токен, который прислал @BotFather'); return; }
+            const btn = document.getElementById('tgSaveBtn');
+            btn.disabled = true; btn.textContent = 'Проверяю…';
+            tgShowError('');
+            try {
+                const res = await AUTH.fetch(tgUrl(), { method: 'PUT', body: JSON.stringify({ token }) });
+                if (!res.ok) throw new Error(await apiError(res));
+                document.getElementById('tgToken').value = '';
+                showNotification('✅ Бот подключён. Теперь привяжите свой Telegram.');
+                await tgLoad();
+            } catch (e) {
+                tgShowError('Не подключено: ' + e.message);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Подключить';
+            }
+        }
+
+        function tgChangeBot() {
+            document.getElementById('tgConnected').style.display = 'none';
+            document.getElementById('tgDisconnected').style.display = 'block';
+            document.getElementById('tgCancelBtn').style.display = '';
+            document.getElementById('tgToken').focus();
+        }
+
+        async function tgRemove() {
+            // Подтверждение вторым нажатием вместо confirm()
+            const btn = document.getElementById('tgRemoveBtn');
+            if (!tgRemoveArmed) {
+                tgRemoveArmed = true;
+                btn.textContent = 'Точно отключить?';
+                setTimeout(() => { tgRemoveArmed = false; btn.textContent = 'Отключить'; }, 5000);
+                return;
+            }
+            tgRemoveArmed = false; btn.textContent = 'Отключить';
+            try {
+                const res = await AUTH.fetch(tgUrl(), { method: 'DELETE' });
+                if (!res.ok) throw new Error(await apiError(res));
+                showNotification('Бот отключён');
+                await tgLoad();
+            } catch (e) { tgShowError('Не отключено: ' + e.message); }
+        }
+
+        async function tgLink() {
+            tgShowError('');
+            try {
+                const res = await AUTH.fetch(tgUrl('/link'), { method: 'POST' });
+                if (!res.ok) throw new Error(await apiError(res));
+                const { url } = await res.json();
+                const a = document.getElementById('tgLinkUrl');
+                a.href = url; a.textContent = url;
+                document.getElementById('tgLinkBox').style.display = 'block';
+                document.getElementById('tgLinkWait').textContent = 'Жду нажатия «Start»…';
+                window.open(url, '_blank', 'noopener');
+                tgStartPolling();
+            } catch (e) { tgShowError('Ссылка не создана: ' + e.message); }
+        }
+
+        function tgStartPolling() {
+            clearInterval(tgPollTimer);
+            const started = Date.now();
+            tgPollTimer = setInterval(async () => {
+                if (Date.now() - started > 5 * 60 * 1000) {
+                    clearInterval(tgPollTimer);
+                    document.getElementById('tgLinkWait').textContent = 'Время ожидания вышло — нажмите «Привязать мой Telegram» ещё раз.';
+                    return;
+                }
+                try {
+                    const res = await AUTH.fetch(tgUrl('/poll'), { method: 'POST' });
+                    if (!res.ok) throw new Error(await apiError(res));
+                    const st = await res.json();
+                    const me = tgRender(st);
+                    if (st.linked > 0 && me && me.linked) {
+                        clearInterval(tgPollTimer);
+                        document.getElementById('tgLinkBox').style.display = 'none';
+                        showNotification('✅ Telegram привязан');
+                    }
+                } catch (e) {
+                    document.getElementById('tgLinkWait').textContent = 'Проверка не удалась: ' + e.message + '. Пробую ещё…';
+                }
+            }, 3000);
+        }
+
+        async function tgUnlink(userId) {
+            try {
+                const res = await AUTH.fetch(tgUrl('/recipients/' + encodeURIComponent(userId)), { method: 'DELETE' });
+                if (!res.ok) throw new Error(await apiError(res));
+                await tgLoad();
+            } catch (e) { tgShowError('Не отвязано: ' + e.message); }
+        }
+
+        async function tgTest() {
+            tgShowError('');
+            try {
+                const res = await AUTH.fetch(tgUrl('/test'), { method: 'POST' });
+                if (!res.ok) throw new Error(await apiError(res));
+                const r = await res.json();
+                showNotification(r.failed
+                    ? '⚠️ Отправлено ' + r.sent + ', не дошло ' + r.failed + ': ' + (r.errors || []).join('; ')
+                    : '✅ Проверка отправлена (' + r.sent + ')');
+            } catch (e) { tgShowError('Не отправлено: ' + e.message); }
+        }
+        Object.assign(window, { tgLoad, tgSave, tgChangeBot, tgRemove, tgLink, tgUnlink, tgTest });
+
         // Старт загрузки: все const/let выше уже объявлены
+        tgLoad();
         loadGeneralSettings();
         loadFeatureSettings();
         loadPBXSettings();

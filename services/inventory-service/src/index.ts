@@ -11,6 +11,7 @@ import supplierRoutes from './routes/supplier.routes';
 import techCardRoutes from './routes/techcard.routes';
 import productionRoutes from './routes/production.routes';
 import nomenclatureRoutes from './routes/nomenclature.routes';
+import { stockAlerts } from './services/stock-alerts.instance';
 
 const app = express();
 
@@ -70,8 +71,20 @@ const server = app.listen(PORT, () => {
   logger.info(`Inventory service listening on port ${PORT}`);
 });
 
+// Перепроверка остатков против минимума по всем складам: ловит приход по
+// накладной, производство, правку минимума и повторяет несостоявшуюся отправку
+let alertTimer: NodeJS.Timeout | undefined;
+if (config.stockAlertIntervalMs > 0 && process.env.NODE_ENV !== 'test') {
+  const tick = () => stockAlerts.sweep()
+    .then((r) => { if (r.opened || r.resolved || r.notified) logger.info(`stock alerts: ${JSON.stringify(r)}`); })
+    .catch((e) => logger.error(`stock alerts sweep failed: ${e.message || e}`));
+  setTimeout(tick, 15_000);
+  alertTimer = setInterval(tick, config.stockAlertIntervalMs);
+}
+
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  if (alertTimer) clearInterval(alertTimer);
   server.close(async () => {
     await healthPool.end().catch(() => {});
     process.exit(0);

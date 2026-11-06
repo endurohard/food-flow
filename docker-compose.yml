@@ -88,6 +88,11 @@ services:
       # получит чужой сертификат.
       EDGE_KONG_ADMIN_URL: ${EDGE_KONG_ADMIN_URL:-}
       TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-food-flow.ru}
+      # Telegram-боты организаций. С iTTEST api.telegram.org доступен только
+      # через прокси хоста (xray :1080, шлюз docker-сети). Пусто — напрямую.
+      TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-}
+      # Склад шлёт «пора заказать» через /internal/telegram-notify с этим токеном
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
     expose:
       - "3001"
     networks:
@@ -231,6 +236,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
       FINANCE_SERVICE_URL: http://finance-service:3012
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      # Уведомления «пора заказать» уходят в Telegram через user-service
+      USER_SERVICE_URL: http://user-service:3001
+      STOCK_ALERT_INTERVAL_MS: ${STOCK_ALERT_INTERVAL_MS:-300000}
     expose:
       - "3006"
     networks:
