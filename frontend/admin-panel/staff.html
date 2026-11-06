@@ -1503,6 +1503,12 @@ AUTH.requireAuth();
           <input type="password" class="form-input" id="staffPassword" minlength="8" autocomplete="new-password">
         </div>
 
+        <!-- PIN нужен только кассиру: им он входит в режим кассы на планшете -->
+        <div class="form-group" id="staffPinGroup" style="display:none">
+          <label class="form-label" id="staffPinLabel">PIN для режима кассы (4–6 цифр):</label>
+          <input type="password" class="form-input" id="staffPin" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" autocomplete="new-password">
+        </div>
+
         <div class="form-group">
           <label class="form-label">Ставка (₽/час, можно оставить пустым):</label>
           <input type="number" class="form-input" id="staffRate" step="0.01" min="0">
@@ -1862,6 +1868,7 @@ AUTH.requireAuth();
       document.getElementById('staffForm').reset();
       // При создании нужен аккаунт: email, пароль и ФИО обязательны
       setStaffAccountFieldsEnabled(true);
+      syncPinField();
       document.getElementById('staffModal').classList.add('active');
     }
 
@@ -1881,6 +1888,29 @@ AUTH.requireAuth();
       if (hint) hint.style.display = enabled ? 'none' : '';
     }
 
+    // Поле PIN видно только при должности «Кассир». При правке пустое поле
+    // означает «не менять»: затереть рабочий PIN обычным «Сохранить» нельзя.
+    function syncPinField() {
+      const isCashier = document.getElementById('staffRole').value === 'cashier';
+      const pin = document.getElementById('staffPin');
+      document.getElementById('staffPinGroup').style.display = isCashier ? '' : 'none';
+      pin.required = isCashier && !editingStaffId;
+      document.getElementById('staffPinLabel').textContent = editingStaffId
+        ? 'Новый PIN для режима кассы (пусто — не менять):'
+        : 'PIN для режима кассы (4–6 цифр):';
+      if (!isCashier) pin.value = '';
+    }
+    document.getElementById('staffRole').addEventListener('change', syncPinField);
+
+    async function saveCashierPin(userId, pin) {
+      const user = AUTH.getUser();
+      const res = await AUTH.fetch(`/api/enterprises/${user.enterpriseId}/cashiers/${encodeURIComponent(userId)}/pin`, {
+        method: 'PUT',
+        body: JSON.stringify({ pin })
+      });
+      if (!res.ok) throw new Error(await hrError(res));
+    }
+
     function editStaff(id) {
       const s = staff.find(st => String(st.id) === String(id));
       if (!s) return;
@@ -1896,6 +1926,8 @@ AUTH.requireAuth();
       const pwd = document.getElementById('staffPassword');
       if (pwd) pwd.value = '';
       setStaffAccountFieldsEnabled(false);
+      document.getElementById('staffPin').value = '';
+      syncPinField();
       document.getElementById('staffModal').classList.add('active');
     }
 
@@ -1914,6 +1946,15 @@ AUTH.requireAuth();
       }
       const position = document.getElementById('staffRole').value;
       const hireDate = document.getElementById('staffStartDate').value || null;
+      const pin = position === 'cashier' ? document.getElementById('staffPin').value.trim() : '';
+      if (pin && !/^[0-9]{4,6}$/.test(pin)) {
+        showNotification('❌ PIN — от 4 до 6 цифр');
+        return;
+      }
+      if (position === 'cashier' && !editingStaffId && !pin) {
+        showNotification('❌ Кассиру нужен PIN — без него он не войдёт в режим кассы');
+        return;
+      }
 
       try {
         if (editingStaffId) {
@@ -1925,7 +1966,11 @@ AUTH.requireAuth();
             body: JSON.stringify(body)
           });
           if (!res.ok) throw new Error(await hrError(res));
-          showNotification('✅ Сотрудник обновлён на сервере');
+          if (pin) {
+            try { await saveCashierPin(editingStaffId, pin); }
+            catch (e) { throw new Error('Должность сохранена, но PIN — нет: ' + e.message); }
+          }
+          showNotification(pin ? '✅ Сотрудник обновлён, PIN сохранён' : '✅ Сотрудник обновлён на сервере');
         } else {
           const user = AUTH.getUser();
           // enterprise_id берём из токена: хардкод увёл бы запись в чужую организацию
@@ -1964,7 +2009,11 @@ AUTH.requireAuth();
             throw new Error('Аккаунт создан, но кадровая карточка не сохранена: '
               + await hrError(profRes));
           }
-          showNotification('✅ Сотрудник создан на сервере');
+          if (pin) {
+            try { await saveCashierPin(userId, pin); }
+            catch (e) { throw new Error('Кассир создан, но PIN не сохранён — задайте его в «Устройствах»: ' + e.message); }
+          }
+          showNotification(pin ? '✅ Кассир создан, PIN сохранён' : '✅ Сотрудник создан на сервере');
         }
 
         closeModal();
