@@ -36,6 +36,9 @@
     });
   }
 
+  // PIN кассы — ровно 4 цифры, после четвёртой отправляется сам
+  var PIN_LEN = 4;
+
   var state = {
     restaurant: null,      // { id, name }
     register: null,        // строка cash_registers
@@ -121,6 +124,12 @@
         body: JSON.stringify({ email: $('login-email').value.trim(), password: $('login-password').value }),
       });
       var user = data.user || {};
+      // Режим кассы — только для учётки кассира: у владельца и прочих нет PIN,
+      // и дальше они упирались бы в «неверный PIN». Токены при этом не пишем —
+      // вход в админку в этом же браузере остаётся нетронутым.
+      if ((user.enterpriseRole || user.enterprise_role) !== 'cashier') {
+        throw new Error('Это не учётная запись кассира. Войдите логином кассира из раздела «Персонал» / «Устройства».');
+      }
       localStorage.setItem('ff_token', data.accessToken || (data.tokens && data.tokens.accessToken));
       localStorage.setItem('ff_refresh_token', data.refreshToken || (data.tokens && data.tokens.refreshToken));
       localStorage.setItem('ff_user', JSON.stringify(Object.assign({}, user, {
@@ -223,7 +232,7 @@
   // ── 3. PIN ──
   function renderPin() {
     var dots = '';
-    for (var i = 0; i < 6; i++) dots += '<span class="' + (i < state.pin.length ? 'filled' : '') + '"></span>';
+    for (var i = 0; i < PIN_LEN; i++) dots += '<span class="' + (i < state.pin.length ? 'filled' : '') + '"></span>';
     $('pin-dots').innerHTML = dots;
   }
   (function buildKeypad() {
@@ -247,8 +256,11 @@
     state.pin = '';
     $('pin-error').textContent = '';
     $('pin-title').textContent = mode === 'unlock' ? '🔒 Касса заблокирована' : 'Введите PIN кассира';
+    var u = AUTH.getUser() || {};
+    var who = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || u.email || '';
     $('pin-hint').textContent = (state.register ? state.register.name + ' · ' : '') +
-      (mode === 'unlock' ? 'Чтобы продолжить продажи, введите PIN.' : 'PIN выдаёт владелец при заведении кассира.');
+      (who ? 'кассир ' + who + ' · ' : '') +
+      (mode === 'unlock' ? 'чтобы продолжить продажи, введите PIN.' : 'PIN из 4 цифр.');
     renderPin();
     show('pin-screen');
   }
@@ -257,11 +269,11 @@
     if (state.busy) return;
     if (k === 'C') { state.pin = state.pin.slice(0, -1); renderPin(); return; }
     if (k !== 'OK') {
-      if (state.pin.length < 6) state.pin += k;
+      if (state.pin.length < PIN_LEN) state.pin += k;
       renderPin();
-      if (state.pin.length < 6) return;
+      if (state.pin.length < PIN_LEN) return;
     }
-    if (state.pin.length < 4) { $('pin-error').textContent = 'PIN — от 4 до 6 цифр'; return; }
+    if (state.pin.length < PIN_LEN) { $('pin-error').textContent = 'PIN — 4 цифры'; return; }
     state.busy = true;
     try {
       var d = await api('/api/auth/cash-register/' + state.pinMode, {
@@ -272,7 +284,9 @@
       saveKiosk();
       await openTill();
     } catch (err) {
-      if (err.status === 401 && !(err.body && err.body.error === 'Invalid PIN')) {
+      if (err.body && err.body.error === 'No PIN') {
+        logout(err.message);
+      } else if (err.status === 401 && !(err.body && err.body.error === 'Invalid PIN')) {
         logout('Сессия истекла — войдите снова');
       } else {
         $('pin-error').textContent = err.message;
@@ -483,6 +497,14 @@
   // После перезагрузки планшета к продажам пускаем только через PIN
   (async function init() {
     if (!AUTH.isLoggedIn()) return show('login-screen');
+    // Тот же браузер, что и админка: вход владельца не подхватываем, иначе касса
+    // проходит без логина кассира и отвечает «неверный PIN» на любой ввод
+    var cur = AUTH.getUser() || {};
+    if ((cur.enterpriseRole || cur.enterprise_role) !== 'cashier') {
+      $('login-error').textContent = 'Сейчас в браузере вход как ' + (cur.email || 'не кассир') +
+        '. Для режима кассы войдите логином кассира.';
+      return show('login-screen');
+    }
     var saved = loadKiosk();
     await setup();
     if (saved.sessionId && state.register && state.register.status === 'open' &&

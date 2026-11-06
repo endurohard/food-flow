@@ -166,6 +166,11 @@ export class UserService {
     }
   }
 
+  async hasCashRegisterPin(userId: string): Promise<boolean> {
+    const r = await this.pool.query('SELECT pin_hash IS NOT NULL AS has_pin FROM users WHERE id = $1', [userId]);
+    return !!(r.rows[0] && r.rows[0].has_pin);
+  }
+
   async verifyCashRegisterPin(userId: string, pin: string): Promise<boolean> {
     const result = await this.pool.query(
       `SELECT pin_hash FROM users WHERE id = $1`,

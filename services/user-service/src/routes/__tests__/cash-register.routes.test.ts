@@ -8,13 +8,16 @@ const REG = '33333333-3333-4333-8333-333333333333';
 const SID = '44444444-4444-4444-8444-444444444444';
 
 const queries: { sql: string; params: any[] }[] = [];
-const db: { registerOwner: string | null; session: any | null } = { registerOwner: ENT, session: null };
+const db: { registerOwner: string | null; session: any | null; hasPin: boolean } = { registerOwner: ENT, session: null, hasPin: true };
 
 /** Правила от частного к общему: ответ зависит от текста SQL и параметров. */
 function answer(sql: string, params: any[]) {
   queries.push({ sql, params });
   if (/FROM cash_registers WHERE id = \$1 AND enterprise_id = \$2/.test(sql)) {
     return { rows: params[0] === REG && params[1] === db.registerOwner ? [{ '?column?': 1 }] : [] };
+  }
+  if (/SELECT pin_hash IS NOT NULL AS has_pin FROM users WHERE id = \$1/.test(sql)) {
+    return { rows: params[0] === USER ? [{ has_pin: db.hasPin }] : [] };
   }
   if (/SELECT pin_hash FROM users WHERE id = \$1/.test(sql)) {
     return { rows: params[0] === USER ? [{ pin_hash: PIN_HASH }] : [] };
@@ -79,6 +82,7 @@ beforeEach(() => {
   actor = { userId: USER, userRole: 'customer', enterpriseId: ENT };
   db.registerOwner = ENT;
   db.session = null;
+  db.hasPin = true;
 });
 
 const sqlOf = (re: RegExp) => queries.filter((q) => re.test(q.sql));
@@ -117,6 +121,14 @@ describe('POST /cash-register/verify', () => {
     const upd = sqlOf(/UPDATE cash_register_sessions SET status = 'locked'/)[0];
     expect(upd.sql).toMatch(/user_id = \$1 AND register_id = \$2/);
     expect(upd.params).toEqual([USER, REG]);
+  });
+
+  it('пользователь без PIN (владелец) — 403 No PIN, а не «неверный PIN»', async () => {
+    db.hasPin = false;
+    const r = await invoke('/cash-register/verify', { pin: '1234', registerId: REG });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toBe('No PIN');
+    expect(r.body.message).toMatch(/логином кассира/);
   });
 
   it('без registerId — 400', async () => {

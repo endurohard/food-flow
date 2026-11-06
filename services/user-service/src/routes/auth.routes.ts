@@ -262,6 +262,20 @@ async function checkRegister(req: Request, res: Response, registerId: string): P
   return true;
 }
 
+/**
+ * На кассу вошли пользователем без PIN (обычно владелец — касса подхватила вход
+ * из админки в том же браузере). Говорим об этом прямо: «Неверный PIN» здесь
+ * вводит в заблуждение — верного PIN у такого пользователя нет вовсе.
+ */
+async function requirePin(req: Request, res: Response): Promise<boolean> {
+  if (await userService.hasCashRegisterPin(req.userId!)) return true;
+  res.status(403).json({
+    error: 'No PIN',
+    message: 'У этого пользователя нет PIN кассира — войдите на кассу логином кассира',
+  });
+  return false;
+}
+
 /** Проверяет PIN и открывает новую сессию кассы (прежние сессии этого кассира на этой кассе гасятся). */
 router.post('/cash-register/verify', authenticateUser, async (req: Request, res: Response) => {
   try {
@@ -270,6 +284,7 @@ router.post('/cash-register/verify', authenticateUser, async (req: Request, res:
       return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
     if (!(await checkRegister(req, res, value.registerId))) return;
+    if (!(await requirePin(req, res))) return;
     const ok = await userService.verifyCashRegisterPin(req.userId!, value.pin);
     if (!ok) {
       return res.status(401).json({ error: 'Invalid PIN', message: 'Неверный PIN кассира' });
@@ -313,6 +328,7 @@ router.post('/cash-register/unlock', authenticateUser, async (req: Request, res:
       return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
     if (!(await checkRegister(req, res, value.registerId))) return;
+    if (!(await requirePin(req, res))) return;
     const ok = await userService.verifyCashRegisterPin(req.userId!, value.pin);
     if (!ok) {
       return res.status(401).json({ error: 'Invalid PIN', message: 'Неверный PIN кассира' });

@@ -1505,8 +1505,8 @@ AUTH.requireAuth();
 
         <!-- PIN нужен только кассиру: им он входит в режим кассы на планшете -->
         <div class="form-group" id="staffPinGroup" style="display:none">
-          <label class="form-label" id="staffPinLabel">PIN для режима кассы (4–6 цифр):</label>
-          <input type="password" class="form-input" id="staffPin" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}" autocomplete="new-password">
+          <label class="form-label" id="staffPinLabel">PIN для режима кассы (4 цифры):</label>
+          <input type="password" class="form-input" id="staffPin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="new-password">
         </div>
 
         <div class="form-group">
@@ -1897,7 +1897,7 @@ AUTH.requireAuth();
       pin.required = isCashier && !editingStaffId;
       document.getElementById('staffPinLabel').textContent = editingStaffId
         ? 'Новый PIN для режима кассы (пусто — не менять):'
-        : 'PIN для режима кассы (4–6 цифр):';
+        : 'PIN для режима кассы (4 цифры):';
       if (!isCashier) pin.value = '';
     }
     document.getElementById('staffRole').addEventListener('change', syncPinField);
@@ -1947,8 +1947,8 @@ AUTH.requireAuth();
       const position = document.getElementById('staffRole').value;
       const hireDate = document.getElementById('staffStartDate').value || null;
       const pin = position === 'cashier' ? document.getElementById('staffPin').value.trim() : '';
-      if (pin && !/^[0-9]{4,6}$/.test(pin)) {
-        showNotification('❌ PIN — от 4 до 6 цифр');
+      if (pin && !/^[0-9]{4}$/.test(pin)) {
+        showNotification('❌ PIN — ровно 4 цифры');
         return;
       }
       if (position === 'cashier' && !editingStaffId && !pin) {

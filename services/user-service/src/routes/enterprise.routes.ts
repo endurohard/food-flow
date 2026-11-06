@@ -259,7 +259,9 @@ const createCashierSchema = Joi.object({
   password: Joi.string().min(6).max(128).required(),
   firstName: Joi.string().min(1).max(100).required(),
   lastName: Joi.string().max(100).allow('', null).optional(),
-  pin: Joi.string().min(4).max(100).required(),
+  // PIN кассы — ровно 4 цифры: на планшете его набирают на цифровой клавиатуре
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required()
+    .messages({ 'string.pattern.base': 'PIN — ровно 4 цифры' }),
 });
 
 router.post('/:id/cashiers', authenticateUser, async (req, res) => {
@@ -291,8 +293,8 @@ router.post('/:id/cashiers', authenticateUser, async (req, res) => {
 });
 
 const cashierPinSchema = Joi.object({
-  pin: Joi.string().pattern(/^[0-9]{4,6}$/).required()
-    .messages({ 'string.pattern.base': 'PIN — от 4 до 6 цифр' }),
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required()
+    .messages({ 'string.pattern.base': 'PIN — ровно 4 цифры' }),
 });
 
 router.put('/:id/cashiers/:userId/pin', authenticateUser, async (req, res) => {
