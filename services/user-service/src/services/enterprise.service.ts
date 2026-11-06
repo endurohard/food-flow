@@ -3,6 +3,7 @@ const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { config } from '../config';
+import { subdomainFromName, isReservedSubdomain } from './tenant-domain.service';
 
 export interface CreateOwnerInput {
   email: string;
@@ -170,6 +171,14 @@ export class EnterpriseService {
         throw Object.assign(new Error('Пользователь с таким email уже существует'), { statusCode: 409 });
       }
 
+      // Поддомен у каждой организации: не задан — берём из названия, занятый —
+      // с номером («kofeynya-104-2»). Без него адрес <sub>.food-flow.ru не появится.
+      let subdomain = enterpriseData.subdomain ? enterpriseData.subdomain.toLowerCase() : '';
+      if (subdomain && isReservedSubdomain(subdomain)) {
+        throw Object.assign(new Error(`Поддомен «${subdomain}» служебный — выберите другой`), { statusCode: 400 });
+      }
+      if (!subdomain) subdomain = await this.uniqueSubdomain(client, subdomainFromName(enterpriseData.name) || 'org');
+
       const entResult = await client.query(
         `INSERT INTO enterprises (
           name, legal_name, tax_id, phone, email, website,
@@ -188,7 +197,7 @@ export class EnterpriseService {
           enterpriseData.timezone || 'Europe/Moscow',
           enterpriseData.language || 'ru',
           enterpriseData.business_type || 'restaurant',
-          enterpriseData.subdomain ? enterpriseData.subdomain.toLowerCase() : null
+          subdomain
         ]
       );
       const enterprise = entResult.rows[0];
@@ -338,6 +347,17 @@ export class EnterpriseService {
     } finally {
       client.release();
     }
+  }
+
+  /** Первый свободный вариант: base, base-2, base-3… */
+  private async uniqueSubdomain(q: { query: (sql: string, p?: any[]) => Promise<any> }, base: string): Promise<string> {
+    for (let i = 1; i <= 50; i++) {
+      const suffix = i === 1 ? '' : `-${i}`;
+      const candidate = base.slice(0, 63 - suffix.length).replace(/-+$/g, '') + suffix;
+      const r = await q.query('SELECT 1 FROM enterprises WHERE subdomain = $1', [candidate]);
+      if (!r.rows.length) return candidate;
+    }
+    return `${base.slice(0, 50)}-${crypto.randomBytes(3).toString('hex')}`;
   }
 
   /**
@@ -527,6 +547,9 @@ export class EnterpriseService {
       const value = key === 'subdomain' && typeof rawValue === 'string'
         ? (rawValue.trim().toLowerCase() || null)
         : rawValue;
+      if (key === 'subdomain' && typeof value === 'string' && isReservedSubdomain(value)) {
+        throw Object.assign(new Error(`Поддомен «${value}» служебный — выберите другой`), { statusCode: 400 });
+      }
       if (value !== undefined && ALLOWED_COLUMNS.includes(key)) {
         fields.push(`${key} = $${paramCount}`);
         values.push(value);

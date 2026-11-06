@@ -14,6 +14,7 @@ import {
 } from '../middleware/enterprise.middleware';
 import { config } from '../config';
 import { encryptSecret, maskSecret } from '../utils/secrets';
+import { ensureSubdomainCertificate } from '../services/tenant-domain.service';
 
 // Адрес ВАТС выдаётся в карточке портала и ОБЯЗАН содержать порт: клиентская
 // библиотека дописывает :10150, если порта нет, и подключение уходит в пустоту.
@@ -125,11 +126,15 @@ router.post('/', authenticateUser, requireSuperAdmin, async (req, res) => {
     }
     const { owner, ...enterpriseData } = value;
     const result = await enterpriseService.createEnterpriseWithOwner(enterpriseData, owner);
+    // Сертификат на <sub>.food-flow.ru — сразу, чтобы первый же заход был по https
+    const certificate = await ensureSubdomainCertificate(result.enterprise.subdomain);
+    if (certificate.status === 'failed') console.error('Subdomain certificate failed:', certificate);
 
     return res.status(201).json({
       success: true,
       enterprise: result.enterprise,
-      owner: result.owner
+      owner: result.owner,
+      certificate
     });
   } catch (error: any) {
     if (error.code === '23505') {
@@ -424,9 +429,11 @@ router.patch('/:id', authenticateUser, requireSuperAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Validation error', message: vErr.details[0].message });
     }
     const enterprise = await enterpriseService.updateEnterprise(req.params.id, value);
-    return res.json({ success: true, enterprise });
+    const certificate = value.subdomain ? await ensureSubdomainCertificate(enterprise.subdomain) : undefined;
+    return res.json({ success: true, enterprise, certificate });
   } catch (error: any) {
     if (error.message === 'Enterprise not found') return res.status(404).json({ error: error.message });
+    if (error.statusCode === 400) return res.status(400).json({ error: 'Validation error', message: error.message });
     // 23505 — уникальный индекс по subdomain: адрес уже занят другой организацией
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Conflict', message: 'Такой поддомен уже занят' });
@@ -640,10 +647,13 @@ router.put(
       const { id } = req.params;
 
       const enterprise = await enterpriseService.updateEnterprise(id, req.body);
+      const certificate = req.body && req.body.subdomain
+        ? await ensureSubdomainCertificate(enterprise.subdomain) : undefined;
 
       return res.json({
         success: true,
-        enterprise
+        enterprise,
+        certificate
       });
     } catch (error: any) {
       console.error('Failed to update enterprise:', error);

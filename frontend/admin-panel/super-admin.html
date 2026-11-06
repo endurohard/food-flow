@@ -98,7 +98,7 @@
           </div>
         </div>
         <label>Поддомен <span style="color:var(--color-text-secondary);font-weight:400;">— адрес вида <b id="subPreview">jezva</b>.food-flow.ru</span></label>
-        <input id="orgSubdomain" placeholder="jezva — строчные латиница, цифры, дефис" pattern="[a-z0-9-]+">
+        <input id="orgSubdomain" placeholder="пусто — возьмём из названия; строчные латиница, цифры, дефис" pattern="[a-z0-9-]+">
 
         <h2 style="margin:22px 0 4px; font-size:14px;">Владелец организации</h2>
         <div class="grid2">
@@ -431,7 +431,14 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || ('HTTP ' + res.status));
-        showAlert('✅ Организация «' + esc(name) + '» создана. Доступ владельца:<div class="creds">' +
+        const sub = data.enterprise && data.enterprise.subdomain;
+        const cert = data.certificate || {};
+        const addr = sub ? 'https://' + sub + '.food-flow.ru' : '';
+        const certLine = !sub ? '' : cert.status === 'issued'
+          ? '<br>Адрес: <a href="' + esc(addr) + '" target="_blank" rel="noopener">' + esc(addr) + '</a> — сертификат выпущен'
+          : '<br>Адрес: ' + esc(addr) + ' — ⚠️ сертификат не выпущен сразу (' + esc(cert.message || cert.status || '—') +
+            '), выпустится при первом заходе';
+        showAlert('✅ Организация «' + esc(name) + '» создана.' + certLine + '<br>Доступ владельца:<div class="creds">' +
           esc(email) + ' / ' + esc(password) + '</div>', true);
         ['orgName','orgTax','ownFirst','ownLast','ownEmail','ownPass'].forEach(id => document.getElementById(id).value = '');
         loadOrgs();

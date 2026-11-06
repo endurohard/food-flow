@@ -82,6 +82,12 @@ services:
       # роут настроек ВАТС отдаёт 503, а не сохраняет пароль открытым.
       # Терять и менять нельзя: сохранённые пароли станут нечитаемыми.
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY required}
+      # Admin API фронтового Kong (infobot): при создании организации сразу
+      # заказывается сертификат на <поддомен>.food-flow.ru. Пусто — сертификат
+      # выпустится сам при первом заходе (плагин acme), но первый заход
+      # получит чужой сертификат.
+      EDGE_KONG_ADMIN_URL: ${EDGE_KONG_ADMIN_URL:-}
+      TENANT_BASE_DOMAIN: ${TENANT_BASE_DOMAIN:-food-flow.ru}
     expose:
       - "3001"
     networks:
