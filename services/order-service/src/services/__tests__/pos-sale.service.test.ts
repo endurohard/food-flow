@@ -150,6 +150,22 @@ describe('PosSaleService — атомарная продажа', () => {
     expect(afterCommit).toHaveBeenCalledWith(expect.objectContaining({ id: IDS.order }));
   });
 
+  it('пишет payment_status из enum payment_status, а не «paid»', async () => {
+    // На проде продажа падала 500: invalid input value for enum payment_status: "paid"
+    const PAYMENT_STATUS = ['pending', 'processing', 'completed', 'failed', 'refunded'];
+    const client = makeClient();
+    const { service } = makeService(client);
+    await service.create(request, IDS.enterprise, IDS.user);
+    const ins = client.queries.find((q: any) => /INSERT INTO orders/.test(q.sql))!.sql;
+    const cols = /INSERT INTO orders\s*\(([^)]*)\)/.exec(ins)![1].split(',').map((c: string) => c.trim());
+    // Между VALUES и RETURNING; NOW() без запятых, так что split по запятой безопасен
+    const valsRaw = ins.slice(ins.indexOf('VALUES') + 6, ins.indexOf('RETURNING')).trim();
+    const vals = valsRaw.slice(1, -1).split(',').map((v: string) => v.trim());
+    expect(vals).toHaveLength(cols.length);
+    const v = vals[cols.indexOf('payment_status')];
+    expect(PAYMENT_STATUS).toContain(v.replace(/'/g, ''));
+  });
+
   it('повтор с тем же saleId возвращает сохранённый результат без новых записей', async () => {
     const response = {
       orderId: IDS.order,

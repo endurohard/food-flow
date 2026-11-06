@@ -241,7 +241,7 @@ export class PosSaleService {
             payment_status, payment_method, order_type, waiter_id, enterprise_id,
             discount_amount, applied_discounts, confirmed_at, closed_at)
          VALUES ($1, $2, 'completed', $3, 0, 0, $4,
-                 'paid', $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                 'completed', $5, $6, $7, $8, $9, $10, NOW(), NOW())
          RETURNING *`,
         [
           number,
