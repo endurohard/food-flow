@@ -35,6 +35,7 @@ function makeClient(
     existing?: any;
     itemAvailable?: boolean;
     modifierAvailable?: boolean;
+    checkOpen?: boolean;
   } = {}
 ) {
   const queries: Array<{ sql: string; params: any[] }> = [];
@@ -52,6 +53,10 @@ function makeClient(
           rows: options.existing ? [options.existing] : [],
           rowCount: options.existing ? 1 : 0,
         };
+      }
+      if (/UPDATE pos_open_checks/.test(sql)) {
+        const ok = options.checkOpen !== false;
+        return { rows: ok ? [{ id: 'check-1' }] : [], rowCount: ok ? 1 : 0 };
       }
       if (/FROM restaurants/.test(sql)) {
         return { rows: [{ id: IDS.restaurant, name: 'Точка' }], rowCount: 1 };
@@ -164,6 +169,38 @@ describe('PosSaleService — атомарная продажа', () => {
     expect(vals).toHaveLength(cols.length);
     const v = vals[cols.indexOf('payment_status')];
     expect(PAYMENT_STATUS).toContain(v.replace(/'/g, ''));
+  });
+
+  it('оплата отложенного чека закрывает его в той же транзакции', async () => {
+    const client = makeClient();
+    const { service } = makeService(client);
+    await service.create({ ...request, openCheckId: 'check-1' }, IDS.enterprise, IDS.user);
+    const i = client.queries.findIndex((q: any) => /UPDATE pos_open_checks/.test(q.sql));
+    const upd = client.queries[i];
+    expect(upd.sql).toMatch(/enterprise_id = \$4 AND restaurant_id = \$5 AND status = 'open'/);
+    expect(upd.params).toEqual([IDS.sale, IDS.user, 'check-1', IDS.enterprise, IDS.restaurant]);
+    const begin = client.queries.findIndex((q: any) => q.sql === 'BEGIN');
+    const order = client.queries.findIndex((q: any) => /INSERT INTO orders/.test(q.sql));
+    expect(begin).toBeLessThan(i);
+    expect(i).toBeLessThan(order);
+    expect(client.queries.at(-1)?.sql).toBe('COMMIT');
+  });
+
+  it('уже оплаченный/чужой чек — 409 и откат, заказ не создаётся', async () => {
+    const client = makeClient({ checkOpen: false });
+    const { service } = makeService(client);
+    await expect(
+      service.create({ ...request, openCheckId: 'check-1' }, IDS.enterprise, IDS.user)
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(client.queries.some((q: any) => /INSERT INTO orders/.test(q.sql))).toBe(false);
+    expect(client.queries.at(-1)?.sql).toBe('ROLLBACK');
+  });
+
+  it('продажа без чека не трогает pos_open_checks', async () => {
+    const client = makeClient();
+    const { service } = makeService(client);
+    await service.create(request, IDS.enterprise, IDS.user);
+    expect(client.queries.some((q: any) => /pos_open_checks/.test(q.sql))).toBe(false);
   });
 
   it('повтор с тем же saleId возвращает сохранённый результат без новых записей', async () => {

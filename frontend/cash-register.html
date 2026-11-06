@@ -124,6 +124,18 @@
     .pay button { flex: 1; padding: 14px; font-size: 16px; background: #fff; border: 1px solid var(--admin-panel-border, #d6d9de); color: inherit; }
     .pay button.active { background: var(--color-primary, #1f8f5f); color: #fff; border-color: var(--color-primary, #1f8f5f); }
 
+    .hold-row { display: flex; gap: 8px; margin-top: 10px; }
+    .hold-row input { flex: 1; padding: 10px; font-size: 15px; }
+    .checks-panel { position: absolute; inset: 58px 0 0 0; background: var(--admin-content-bg, #f6f7f9); z-index: 5; display: flex; flex-direction: column; padding: 14px; overflow-y: auto; }
+    .checks-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .checks-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .check-card { background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+    .check-card .t { font-weight: 700; font-size: 16px; }
+    .check-card .m { color: var(--color-text-secondary, #6b7280); font-size: 13px; }
+    .check-card .acts { display: flex; gap: 8px; margin-top: 6px; }
+    .check-card .acts button { flex: 1; padding: 10px; font-size: 15px; }
+    #till-screen { position: relative; }
+
     @media (max-width: 760px) {
       .till-main { flex-direction: column; }
       .cart-col { width: 100%; max-height: 45%; border-left: none; border-top: 1px solid var(--admin-panel-border, #e3e5e8); }
@@ -176,8 +188,18 @@
   <div id="till-screen" class="screen">
     <div class="till-header">
       <div class="title"><span id="till-register">Касса</span><small id="till-sub"></small></div>
+      <button class="btn-secondary" id="btn-checks">🧾 Отложенные <span id="checks-count" class="badge open">0</span></button>
       <button class="btn-secondary" id="btn-lock">🔒 Заблокировать / сменить кассира</button>
       <button class="btn-danger" id="btn-close-shift">Закрыть смену</button>
+    </div>
+    <!-- Отложенные чеки -->
+    <div id="checks-panel" class="checks-panel" style="display:none">
+      <div class="checks-head">
+        <h2 style="margin:0">Отложенные чеки</h2>
+        <button class="btn-secondary" id="btn-checks-close">Закрыть</button>
+      </div>
+      <div id="checks-list" class="checks-list"></div>
+      <p class="error" id="checks-error"></p>
     </div>
     <div class="till-main">
       <div class="menu-col">
@@ -191,6 +213,11 @@
           <div class="pay" id="pay">
             <button data-method="cash" class="active">Наличные</button>
             <button data-method="card">Картой</button>
+          </div>
+          <div id="check-current" class="muted" style="margin:10px 0 0;display:none"></div>
+          <div class="hold-row">
+            <input id="check-label" type="text" maxlength="100" placeholder="Подпись: столик, имя…">
+            <button class="btn-secondary" id="btn-hold">Отложить</button>
           </div>
           <button class="btn-primary" id="btn-checkout">Оплатить</button>
           <p class="error" id="till-error"></p>

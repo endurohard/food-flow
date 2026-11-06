@@ -14,6 +14,8 @@ export interface PosSaleRequest {
   registerId?: string | null;
   orderType: PosOrderType;
   paymentMethod: PosPaymentMethod;
+  /** Отложенный чек, который закрывается этой продажей */
+  openCheckId?: string | null;
   items: Array<{
     menuItemId: string;
     quantity: number;
@@ -146,6 +148,21 @@ export class PosSaleService {
       );
       if (!restaurantResult.rows[0]) {
         throw new PosSaleError('Ресторан не найден в текущем предприятии', 403);
+      }
+
+      // Отложенный чек закрывается в этой же транзакции: упадёт продажа —
+      // чек останется открытым; два планшета не оплатят его дважды
+      if (data.openCheckId) {
+        const check = await client.query(
+          `UPDATE pos_open_checks
+              SET status = 'paid', sale_id = $1, closed_at = NOW(), updated_by = $2, updated_at = NOW()
+            WHERE id = $3 AND enterprise_id = $4 AND restaurant_id = $5 AND status = 'open'
+            RETURNING id`,
+          [data.saleId, cashierId, data.openCheckId, enterpriseId, data.restaurantId]
+        );
+        if (!check.rows[0]) {
+          throw new PosSaleError('Чек уже оплачен, удалён или относится к другой точке', 409);
+        }
       }
 
       const itemIds = [...new Set(data.items.map((item) => item.menuItemId))];

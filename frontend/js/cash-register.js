@@ -51,6 +51,9 @@
     method: 'cash',
     pin: '',
     busy: false,
+    openCheckId: null,     // отложенный чек, открытый сейчас в корзине
+    openCheckLabel: '',
+    checks: [],
   };
 
   function loadDevice() {
@@ -103,6 +106,8 @@
   function lockScreen(msg) {
     dropCashierAuth();
     state.cart = [];
+    setOpenCheck(null);
+    $('checks-panel').style.display = 'none';
     openPin();
     if (msg) $('pin-error').textContent = msg;
   }
@@ -310,7 +315,139 @@
     renderCats();
     renderGrid();
     renderCart();
+    loadChecks();
   }
+
+  // ── отложенные чеки ──
+  // Запросы к чекам идут с той же сессией кассы, что и продажа
+  function posApi(url, options) {
+    options = options || {};
+    options.headers = Object.assign({ 'X-Register-Session': state.sessionId || '' }, options.headers || {});
+    return api(url, options);
+  }
+
+  function setOpenCheck(check) {
+    state.openCheckId = check ? check.id : null;
+    state.openCheckLabel = check ? check.label : '';
+    $('check-label').value = check ? check.label : '';
+    var cur = $('check-current');
+    cur.style.display = check ? '' : 'none';
+    cur.textContent = check ? 'Открыт отложенный чек: ' + check.label : '';
+  }
+
+  function findItem(id) { return state.items.filter(function (i) { return i.id === id; })[0]; }
+
+  function checkSum(c) {
+    return (c.items || []).reduce(function (s, r) {
+      var it = findItem(r.menuItemId);
+      return s + (it ? Number(it.price) * r.quantity : 0);
+    }, 0);
+  }
+
+  async function loadChecks() {
+    try {
+      var d = await posApi('/api/pos/checks?restaurantId=' + encodeURIComponent(state.restaurant.id));
+      state.checks = d.checks || [];
+    } catch (err) {
+      state.checks = [];
+      $('checks-error').textContent = 'Отложенные чеки не загрузились: ' + err.message;
+    }
+    $('checks-count').textContent = String(state.checks.length);
+    if ($('checks-panel').style.display !== 'none') renderChecks();
+  }
+
+  function renderChecks() {
+    $('checks-error').textContent = '';
+    if (!state.checks.length) {
+      $('checks-list').innerHTML = '<p class="muted">Отложенных чеков нет.</p>';
+      return;
+    }
+    $('checks-list').innerHTML = state.checks.map(function (c) {
+      var n = (c.items || []).reduce(function (s, r) { return s + r.quantity; }, 0);
+      var t = new Date(c.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      return '<div class="check-card"><div class="t">' + esc(c.label) + '</div>' +
+        '<div class="m">' + n + ' поз. · ' + money(checkSum(c)) + ' · с ' + t + (c.created_by_name ? ' · ' + esc(c.created_by_name) : '') + '</div>' +
+        '<div class="acts"><button class="btn-secondary" data-open="' + esc(c.id) + '">Открыть</button>' +
+        '<button class="btn-danger" data-del="' + esc(c.id) + '">Удалить</button></div></div>';
+    }).join('');
+    $('checks-list').querySelectorAll('[data-open]').forEach(function (b) {
+      b.addEventListener('click', function () { openCheck(b.dataset.open); });
+    });
+    $('checks-list').querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        // Два нажатия вместо confirm()
+        if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Точно удалить?'; return; }
+        try {
+          await posApi('/api/pos/checks/' + encodeURIComponent(b.dataset.del), { method: 'DELETE' });
+          if (state.openCheckId === b.dataset.del) { state.cart = []; setOpenCheck(null); renderGrid(); renderCart(); }
+          await loadChecks();
+        } catch (err) { $('checks-error').textContent = 'Не удалён: ' + err.message; }
+      });
+    });
+  }
+
+  function openCheck(id) {
+    var c = state.checks.filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    if (state.cart.length && state.openCheckId !== id) {
+      $('checks-error').textContent = 'В корзине другой чек — сначала отложите или оплатите его.';
+      return;
+    }
+    var missing = 0;
+    state.cart = [];
+    (c.items || []).forEach(function (r) {
+      var it = findItem(r.menuItemId);
+      if (it) state.cart.push({ item: it, qty: r.quantity }); else missing++;
+    });
+    setOpenCheck(c);
+    pendingSaleId = null;
+    $('checks-panel').style.display = 'none';
+    renderGrid();
+    renderCart();
+    $('till-ok').innerHTML = missing
+      ? '<p class="error">' + missing + ' поз. из чека сейчас недоступны (стоп-лист) и не попали в корзину</p>' : '';
+  }
+
+  $('btn-checks').addEventListener('click', function () {
+    $('checks-panel').style.display = '';
+    renderChecks();
+    loadChecks();
+  });
+  $('btn-checks-close').addEventListener('click', function () { $('checks-panel').style.display = 'none'; });
+
+  $('btn-hold').addEventListener('click', async function () {
+    if (!state.cart.length || state.busy) { $('till-error').textContent = 'Чек пуст — нечего откладывать'; return; }
+    var btn = this;
+    state.busy = true;
+    btn.disabled = true;
+    $('till-error').textContent = '';
+    var body = {
+      label: $('check-label').value.trim(),
+      items: state.cart.map(function (r) { return { menuItemId: r.item.id, quantity: r.qty }; }),
+    };
+    try {
+      var d;
+      if (state.openCheckId) {
+        d = await posApi('/api/pos/checks/' + encodeURIComponent(state.openCheckId), { method: 'PUT', body: JSON.stringify(body) });
+      } else {
+        body.restaurantId = state.restaurant.id;
+        d = await posApi('/api/pos/checks', { method: 'POST', body: JSON.stringify(body) });
+      }
+      state.cart = [];
+      setOpenCheck(null);
+      pendingSaleId = null;
+      renderGrid();
+      renderCart();
+      $('till-ok').innerHTML = '<div class="ok-msg">🧾 Чек «' + esc(d.check.label) + '» отложен</div>';
+      await loadChecks();
+    } catch (err) {
+      if (err.status === 403 && /PIN|сесси/i.test(err.message)) lockScreen(err.message);
+      else $('till-error').textContent = '❌ Не отложен: ' + err.message;
+    } finally {
+      state.busy = false;
+      btn.disabled = false;
+    }
+  });
 
   function renderCats() {
     var used = {};
@@ -409,13 +546,17 @@
           registerId: state.register.id,
           orderType: 'pickup',
           paymentMethod: state.method,
+          openCheckId: state.openCheckId,
           items: state.cart.map(function (r) { return { menuItemId: r.item.id, quantity: r.qty }; }),
         }),
       });
       pendingSaleId = null;
       state.cart = [];
+      var paidCheck = state.openCheckId;
+      setOpenCheck(null);
       renderGrid();
       renderCart();
+      if (paidCheck) loadChecks();
       var sale = d.sale || {};
       $('till-ok').innerHTML = '<div class="ok-msg">✅ Оплачено ' + money(sale.total) +
         (sale.orderNumber ? ' · чек ' + esc(sale.orderNumber) : '') + '</div>';
@@ -424,6 +565,13 @@
         lockScreen(err.message);
       } else {
         $('till-error').textContent = '❌ Не оплачено: ' + err.message;
+        // Чек оплатили на другом планшете или удалили — корзину оставляем,
+        // но отвязываем её от закрытого чека, чтобы можно было пробить заново
+        if (err.status === 409 && state.openCheckId && /Чек/.test(err.message)) {
+          setOpenCheck(null);
+          pendingSaleId = null;
+          loadChecks();
+        }
       }
     } finally {
       state.busy = false;
