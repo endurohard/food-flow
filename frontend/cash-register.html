@@ -149,8 +149,8 @@
       <h1>Привязка планшета к кассе</h1>
       <p class="muted">Один раз: войдите владельцем или админом и выберите кассу. Дальше кассиры входят на этом планшете только PIN-ом.</p>
       <form id="activate-form" autocomplete="off">
-        <label class="label" for="act-email">Логин владельца (email)</label>
-        <input id="act-email" type="email" autocomplete="username" required>
+        <label class="label" for="act-email">Логин владельца (email или логин на адресе организации)</label>
+        <input id="act-email" type="text" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" required>
         <label class="label" for="act-password">Пароль</label>
         <input id="act-password" type="password" autocomplete="current-password" required>
         <button class="btn-primary" type="submit" id="btn-activate">Войти</button>

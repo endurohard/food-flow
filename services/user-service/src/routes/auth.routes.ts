@@ -20,8 +20,14 @@ const registerSchema = Joi.object({
 });
 
 const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().required()
+  // На адресе организации (coffee104.food-flow.ru) можно ввести короткий логин —
+  // часть email до «@»; host говорит, в какой организации его искать
+  email: Joi.alternatives(
+    Joi.string().email(),
+    Joi.string().pattern(/^[a-zA-Z0-9._-]{2,64}$/)
+  ).required().messages({ 'alternatives.match': 'Введите email или логин' }),
+  password: Joi.string().required(),
+  host: Joi.string().max(253).optional()
 });
 
 const refreshSchema = Joi.object({

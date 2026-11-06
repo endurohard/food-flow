@@ -421,8 +421,9 @@
 
             <form id="authForm" onsubmit="handleSubmit(event)">
                 <div class="form-group">
-                    <label class="form-label" for="email">Email</label>
-                    <input type="email" class="form-input" id="email" placeholder="admin@example.com" required autocomplete="email">
+                    <label class="form-label" for="email" id="emailLabel">Email</label>
+                    <!-- type=text: на адресе организации вводят короткий логин без «@» -->
+                    <input type="text" inputmode="email" autocapitalize="none" spellcheck="false" class="form-input" id="email" placeholder="admin@example.com" required autocomplete="username">
                 </div>
 
                 <div class="form-group">
@@ -473,6 +474,9 @@
                 badge.textContent = org.name;
                 badge.hidden = false;
                 document.getElementById('brandTagline').innerHTML = 'Вход в<br>' + org.name;
+                // На адресе организации достаточно логина без «@…»: kassir1 вместо kassir1@mail.ru
+                document.getElementById('emailLabel').textContent = 'Логин или email';
+                document.getElementById('email').placeholder = 'например, ' + (org.subdomain || 'kassir1');
                 localStorage.setItem('ff_host_enterprise', JSON.stringify(org));
             } catch (e) { /* поддомен не привязан — обычный экран входа */ }
         })();
@@ -555,7 +559,8 @@
             const res = await fetch(AUTH.API_BASE + '/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                // host — чтобы короткий логин искался в организации этого поддомена
+                body: JSON.stringify({ email: email.trim(), password, host: window.location.hostname })
             });
 
             const data = await res.json();

@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { config } from '../config';
+import { TENANT_BASE_DOMAIN } from './tenant-domain.service';
 
 export interface RegisterInput {
   email: string;
@@ -18,6 +19,8 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+  /** Адрес, с которого входят: на поддомене организации разрешён короткий логин */
+  host?: string;
 }
 
 export interface AuthTokens {
@@ -111,7 +114,38 @@ export class AuthService {
     }
   }
 
+  /**
+   * Короткий логин («kassir1» вместо «kassir1@mail.ru») ищется только среди
+   * сотрудников организации, на чьём поддомене открыт вход: так «ivan» в
+   * одной кофейне не путается с «ivan» в другой.
+   */
+  private async resolveLogin(login: string, host?: string): Promise<string> {
+    if (login.includes('@')) return login;
+    const h = (host || '').toLowerCase().split(':')[0];
+    const suffix = '.' + TENANT_BASE_DOMAIN;
+    const sub = h.endsWith(suffix) ? h.slice(0, -suffix.length) : '';
+    // Вне адреса организации короткий логин — это учётка платформы вида
+    // <логин>@food-flow.ru (так заводятся владельцы: coffee104@food-flow.ru)
+    if (!sub || sub.includes('.') || sub === 'www') return `${login}@${TENANT_BASE_DOMAIN}`;
+    const r = await this.pool.query(
+      `SELECT u.email
+         FROM enterprises e
+         JOIN enterprise_users eu ON eu.enterprise_id = e.id
+         JOIN users u ON u.id = eu.user_id
+        WHERE e.subdomain = $1 AND e.is_active = true
+          AND lower(split_part(u.email, '@', 1)) = lower($2)`,
+      [sub, login]
+    );
+    if (r.rows.length > 1) {
+      throw new AuthError('В организации несколько сотрудников с таким логином — введите email полностью', 409);
+    }
+    // Нет такого — тот же ответ, что на неверный пароль: не подсказываем, кто есть в базе
+    if (!r.rows.length) throw new AuthError('Invalid email or password', 401);
+    return r.rows[0].email;
+  }
+
   async login(data: LoginInput): Promise<{ user: any; tokens: AuthTokens }> {
+    data = { ...data, email: await this.resolveLogin(data.email, data.host) };
     // Find user by email
     const result = await this.pool.query(
       `SELECT id, email, password_hash, first_name, last_name, phone, role, is_active, enterprise_id

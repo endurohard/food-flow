@@ -124,7 +124,7 @@
     try {
       var data = await api('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: $('act-email').value.trim(), password: $('act-password').value }),
+        body: JSON.stringify({ email: $('act-email').value.trim(), password: $('act-password').value, host: location.hostname }),
       }, null);
       var u = data.user || {};
       var erole = u.enterpriseRole || u.enterprise_role;
