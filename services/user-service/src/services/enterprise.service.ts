@@ -2,7 +2,6 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
 import { config } from '../config';
-import { UserService } from './user.service';
 
 export interface CreateOwnerInput {
   email: string;
@@ -81,11 +80,9 @@ export interface UpdateEnterpriseInput {
 
 export class EnterpriseService {
   private pool: InstanceType<typeof Pool>;
-  private userService: UserService;
 
   constructor(connectionString: string) {
     this.pool = new Pool({ connectionString });
-    this.userService = new UserService(connectionString);
   }
 
   /**
@@ -305,11 +302,15 @@ export class EnterpriseService {
       }
 
       const passwordHash = await bcrypt.hash(data.password, config.bcrypt.saltRounds);
+      // PIN пишется этой же вставкой: отдельное соединение UserService не видит
+      // ещё не закоммиченного пользователя, отвечало «Кассир не найден» и
+      // откатывало создание — кассира нельзя было завести вовсе
+      const pinHash = await bcrypt.hash(data.pin, config.bcrypt.saltRounds);
       const userResult = await client.query(
-        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin)
-         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false)
+        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin, pin_hash)
+         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false, $7)
          RETURNING id, email, first_name, last_name, phone`,
-        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId]
+        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId, pinHash]
       );
       const user = userResult.rows[0];
 
@@ -317,9 +318,6 @@ export class EnterpriseService {
         `INSERT INTO enterprise_users (enterprise_id, user_id, role) VALUES ($1, $2, 'cashier')`,
         [enterpriseId, user.id]
       );
-
-      // PIN режима кассы — храним хеш отдельно от password_hash
-      await this.userService.setCashRegisterPin(user.id, data.pin);
 
       await client.query('COMMIT');
       return { ...user, enterpriseRole: 'cashier' };
