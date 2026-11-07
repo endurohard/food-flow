@@ -22,17 +22,27 @@
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS enterprise_id UUID
   REFERENCES enterprises(id) ON DELETE CASCADE;
 
--- Унаследованные строки (если есть) привязываем к предприятию своей точки
-UPDATE promotions p
-   SET enterprise_id = r.enterprise_id
-  FROM restaurants r
- WHERE p.restaurant_id = r.id
-   AND p.enterprise_id IS NULL;
-
--- restaurant_id больше не обязателен: акция принадлежит предприятию.
--- Колонку не удаляем — она может пригодиться для акции на одну точку,
--- но NOT NULL снимаем, иначе вставка из кода (без точки) падает.
-ALTER TABLE promotions ALTER COLUMN restaurant_id DROP NOT NULL;
+-- Старые колонки (restaurant_id, start_date, end_date, usage_count) есть
+-- только там, где таблицу создала 017. На чистой базе promotions создаёт 013
+-- уже в новом виде — там их нет, и прямые обращения роняли миграцию
+-- («column p.restaurant_id does not exist», CI Migrations). Поэтому всё,
+-- что касается старых колонок, — только если колонка существует.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'promotions' AND column_name = 'restaurant_id') THEN
+    -- Унаследованные строки (если есть) привязываем к предприятию своей точки
+    UPDATE promotions p
+       SET enterprise_id = r.enterprise_id
+      FROM restaurants r
+     WHERE p.restaurant_id = r.id
+       AND p.enterprise_id IS NULL;
+    -- restaurant_id больше не обязателен: акция принадлежит предприятию.
+    -- Колонку не удаляем — она может пригодиться для акции на одну точку,
+    -- но NOT NULL снимаем, иначе вставка из кода (без точки) падает.
+    ALTER TABLE promotions ALTER COLUMN restaurant_id DROP NOT NULL;
+  END IF;
+END $$;
 
 -- Отбор по предприятию идёт на каждом открытии экрана лояльности
 CREATE INDEX IF NOT EXISTS idx_promotions_enterprise ON promotions(enterprise_id);
@@ -46,17 +56,32 @@ ALTER TABLE promotions ADD COLUMN IF NOT EXISTS conditions JSONB NOT NULL DEFAUL
 -- заполняет) падает на NOT NULL, а не на отсутствии колонки — и это выглядит
 -- как другая ошибка.
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;
-ALTER TABLE promotions ALTER COLUMN start_date DROP NOT NULL;
-ALTER TABLE promotions ALTER COLUMN end_date DROP NOT NULL;
-
-UPDATE promotions SET valid_from = start_date WHERE valid_from IS NULL AND start_date IS NOT NULL;
-UPDATE promotions SET valid_until = end_date  WHERE valid_until IS NULL AND end_date  IS NOT NULL;
+ALTER TABLE promotions ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'promotions' AND column_name = 'start_date') THEN
+    ALTER TABLE promotions ALTER COLUMN start_date DROP NOT NULL;
+    UPDATE promotions SET valid_from = start_date WHERE valid_from IS NULL AND start_date IS NOT NULL;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'promotions' AND column_name = 'end_date') THEN
+    ALTER TABLE promotions ALTER COLUMN end_date DROP NOT NULL;
+    UPDATE promotions SET valid_until = end_date WHERE valid_until IS NULL AND end_date IS NOT NULL;
+  END IF;
+END $$;
 
 -- used_count: код увеличивает его при применении промокода, в таблице было
 -- usage_count. Переносим значение и оставляем одно имя — два счётчика
 -- разошлись бы, и лимит использований перестал бы срабатывать.
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS used_count INTEGER NOT NULL DEFAULT 0;
-UPDATE promotions SET used_count = COALESCE(usage_count, 0) WHERE used_count = 0;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name = 'promotions' AND column_name = 'usage_count') THEN
+    UPDATE promotions SET used_count = COALESCE(usage_count, 0) WHERE used_count = 0;
+  END IF;
+END $$;
 
 -- ─── 3. Ограничения целостности ─────────────────────────────────────
 -- Промокод уникален внутри предприятия, а не глобально: две организации
