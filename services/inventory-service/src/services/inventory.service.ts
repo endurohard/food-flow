@@ -239,19 +239,33 @@ export class InventoryService {
     try {
       await client.query('BEGIN');
 
+      const isInflow = ['receipt', 'return', 'adjustment_plus'].includes(data.movementType);
+      // Ручной расход (списание, корректировка «минус», перемещение, продажа)
+      // снимает и партии — по FIFO, как продажа по техкарте. Раньше уменьшался
+      // только остаток, партии оставались полными, и следующая продажа
+      // считала себестоимость по товару, которого на складе уже нет.
+      let costPrice = data.costPrice;
+      if (!isInflow) {
+        const qty = Math.abs(data.quantity);
+        const fifo = await this.consumeBatchesFIFO(client, data.warehouseId, data.inventoryItemId, qty);
+        if (costPrice === undefined && qty > 0) {
+          costPrice = (fifo.cost + fifo.uncovered * (await this.lastCost(client, data.inventoryItemId))) / qty;
+        }
+      }
+
       // Insert movement
       const movResult = await client.query(
         `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id,
           movement_type, quantity, cost_price, reference_type, reference_id, performed_by, notes)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
         [data.enterpriseId || null, data.warehouseId, data.inventoryItemId,
-         data.movementType, data.quantity, data.costPrice || null,
+         data.movementType, data.quantity, costPrice ?? null,
          data.referenceType || null, data.referenceId || null,
          data.performedBy || null, data.notes || null]
       );
 
       // Update stock level
-      const quantityDelta = ['receipt', 'return', 'adjustment_plus'].includes(data.movementType)
+      const quantityDelta = isInflow
         ? Math.abs(data.quantity)
         : -Math.abs(data.quantity);
 
@@ -263,14 +277,18 @@ export class InventoryService {
         [data.warehouseId, data.inventoryItemId, quantityDelta]
       );
 
-      // Create batch record for receipts (FIFO tracking)
-      if (data.movementType === 'receipt') {
+      // Партия на любой приход: и поставка, и возврат, и корректировка «плюс».
+      // Иначе остаток растёт, а партий под него нет — FIFO потом не сходится.
+      if (isInflow) {
+        if (data.movementType !== 'receipt' && costPrice === undefined) {
+          costPrice = await this.lastCost(client, data.inventoryItemId);
+        }
         await client.query(
           `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [data.inventoryItemId, data.warehouseId, data.enterpriseId || null,
            data.batchNumber || null, Math.abs(data.quantity),
-           data.costPrice || null, data.expiryDate || null,
+           costPrice || null, data.expiryDate || null,
            data.supplierId || null, data.invoiceId || null]
         );
       }
@@ -336,7 +354,11 @@ export class InventoryService {
     warehouseId: string,
     performedBy?: string,
     enterpriseId?: string
-  ): Promise<{ deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }>; skipped: string[] }> {
+  ): Promise<{
+    deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }>;
+    skipped: string[];
+    shortages: Array<{ inventoryItemId: string; name: string; needed: number; stockAfter: number }>;
+  }> {
     // stock_movements.enterprise_id — NOT NULL, поэтому пустой тенант даёт
     // не внятный отказ, а падение на ограничении уже внутри транзакции.
     // Проверяем заранее: при internal-вызове тенант обязан прийти в теле.
@@ -368,7 +390,7 @@ export class InventoryService {
       );
       if (already.rowCount && already.rowCount > 0) {
         await client.query('COMMIT');
-        return { deducted: [], skipped: ['already_deducted'] };
+        return { deducted: [], skipped: ['already_deducted'], shortages: [] };
       }
 
       // Get order items with their menu_item_ids.
@@ -385,6 +407,7 @@ export class InventoryService {
 
       const deducted: Array<{ inventoryItemId: string; quantity: number; cost: number }> = [];
       const skipped: string[] = [];
+      const shortages: Array<{ inventoryItemId: string; name: string; needed: number; stockAfter: number }> = [];
 
       for (const orderItem of orderItems.rows) {
         // Метод списания и позиция выпуска действующей на дату заказа карты.
@@ -440,41 +463,40 @@ export class InventoryService {
           isOptional: boolean,
           note: string
         ): Promise<void> => {
-          // FIFO-списание: даёт фактическую себестоимость партии.
-          // Для своих полуфабрикатов это цена выпуска из production_runs.
-          let cost = 0;
-          try {
-            const fifo = await this.deductFIFO(warehouseId, inventoryItemId, totalQty, client);
-            cost = fifo.batches.reduce(
-              (sum: number, b: any) => sum + parseFloat(b.deducted) * (parseFloat(b.costPrice) || 0),
-              0
+          // Необязательный ингредиент при нехватке просто пропускаем —
+          // блюдо готовят без него. Проверяем ДО списания партий.
+          if (isOptional) {
+            const st = await client.query(
+              `SELECT quantity FROM inventory_stock WHERE warehouse_id = $1 AND inventory_item_id = $2 FOR UPDATE`,
+              [warehouseId, inventoryItemId]
             );
-          } catch (fifoError: any) {
-            // Необязательный ингредиент можно пропустить, обязательный — нет
-            if (isOptional) {
-              skipped.push(`${itemName}: ${fifoError.message}`);
+            if (!st.rows[0] || parseFloat(st.rows[0].quantity) < totalQty) {
+              skipped.push(`${itemName}: недостаточно на складе, необязательный — пропущен`);
               return;
             }
-            throw new Error(
-              `Недостаточно «${itemName}» для списания по техкарте ` +
-              `(нужно ${totalQty.toFixed(3)}): ${fifoError.message}`
-            );
           }
 
-          // Deduct from stock ATOMICALLY: fail if not enough or row missing.
-          // Guarantees stock can never go negative even under concurrent orders.
-          const deduct = await client.query(
-            `UPDATE inventory_stock
-             SET quantity = quantity - $1, updated_at = NOW()
-             WHERE warehouse_id = $2 AND inventory_item_id = $3 AND quantity >= $1
+          // FIFO по партиям даёт фактическую себестоимость. Нехватка больше НЕ
+          // отменяет списание: раньше один недостающий ингредиент откатывал
+          // списание всего чека, продажа при этом проходила, и товар молча
+          // оставался «на складе». Теперь недостающее уходит в минус и
+          // всплывает предупреждением (stock_alerts): продали то, чего по учёту
+          // нет, — это надо увидеть, а не потерять в логе.
+          const fifo = await this.consumeBatchesFIFO(client, warehouseId, inventoryItemId, totalQty);
+          const cost = fifo.cost + fifo.uncovered * (await this.lastCost(client, inventoryItemId));
+
+          const after = await client.query(
+            `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity)
+             VALUES ($2, $3, -$1::numeric)
+             ON CONFLICT (warehouse_id, inventory_item_id)
+             DO UPDATE SET quantity = inventory_stock.quantity - $1::numeric, updated_at = NOW()
              RETURNING quantity`,
             [totalQty, warehouseId, inventoryItemId]
           );
-          if (deduct.rowCount === 0) {
-            throw new Error(
-              `Insufficient stock for inventory_item ${inventoryItemId} ` +
-              `in warehouse ${warehouseId} (need ${totalQty})`
-            );
+          const left = parseFloat(after.rows[0]?.quantity);
+          if (left < 0) {
+            shortages.push({ inventoryItemId, name: itemName, needed: totalQty, stockAfter: left });
+            note += ` — НЕХВАТКА: на складе ${left.toFixed(3)}`;
           }
 
           // Record movement
@@ -635,7 +657,7 @@ export class InventoryService {
       }
 
       await client.query('COMMIT');
-      return { deducted, skipped };
+      return { deducted, skipped, shortages };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -707,6 +729,44 @@ export class InventoryService {
       values
     );
     return result.rows;
+  }
+
+  /**
+   * Снимает количество с партий по FIFO и НЕ падает при нехватке: возвращает,
+   * сколько списано с партий, их стоимость и сколько не покрыто партиями
+   * (остаток без партий — старые записи, ручные корректировки, уход в минус).
+   */
+  async consumeBatchesFIFO(conn: any, warehouseId: string, inventoryItemId: string, quantity: number):
+      Promise<{ consumed: number; cost: number; uncovered: number }> {
+    const batches = await conn.query(
+      `SELECT id, quantity, cost_price FROM inventory_batches
+        WHERE warehouse_id = $1 AND inventory_item_id = $2 AND is_depleted = false
+        ORDER BY received_at ASC
+        FOR UPDATE`,
+      [warehouseId, inventoryItemId]
+    );
+    let remaining = quantity;
+    let cost = 0;
+    for (const b of batches.rows) {
+      if (remaining <= 1e-9) break;
+      const available = parseFloat(b.quantity);
+      const take = Math.min(available, remaining);
+      if (take >= available - 1e-9) {
+        await conn.query('UPDATE inventory_batches SET quantity = 0, is_depleted = true WHERE id = $1', [b.id]);
+      } else {
+        await conn.query('UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2', [take, b.id]);
+      }
+      cost += take * (parseFloat(b.cost_price) || 0);
+      remaining -= take;
+    }
+    const uncovered = Math.max(0, remaining);
+    return { consumed: quantity - uncovered, cost, uncovered };
+  }
+
+  /** Последняя известная цена позиции — для части, не покрытой партиями. */
+  private async lastCost(conn: any, inventoryItemId: string): Promise<number> {
+    const r = await conn.query('SELECT cost_price FROM inventory_items WHERE id = $1', [inventoryItemId]);
+    return parseFloat(r.rows[0]?.cost_price) || 0;
   }
 
   async deductFIFO(

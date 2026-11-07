@@ -61,13 +61,15 @@
           <a href="/admin-panel/inventory.html" style="display:block;padding:10px 14px;border-top:1px solid var(--admin-border,#eee);color:inherit;text-decoration:none;">
             <div style="font-weight:600;">${esc(a.name)}</div>
             <div style="font-size:13px;color:var(--color-text-secondary,#666);">
-              осталось <b style="color:var(--color-danger,#e53e3e);">${num(a.quantity != null ? a.quantity : a.alert_quantity)} ${esc(a.unit || '')}</b>
-              · минимум ${num(a.min_stock)} · ${esc(a.warehouse)}
+              ${Number(a.quantity) < 0
+                ? `<b style="color:var(--color-danger,#e53e3e);">продано больше, чем есть: ${num(a.quantity)} ${esc(a.unit || '')}</b> · ${esc(a.warehouse)}`
+                : `осталось <b style="color:var(--color-danger,#e53e3e);">${num(a.quantity != null ? a.quantity : a.alert_quantity)} ${esc(a.unit || '')}</b>
+              · минимум ${num(a.min_stock)} · ${esc(a.warehouse)}`}
             </div>
           </a>`).join('')
       : '<div style="padding:16px 14px;color:var(--color-text-secondary,#666);">Всё в норме: ни одна позиция не дошла до минимального остатка.</div>';
     panel.innerHTML = `
-      <div style="padding:12px 14px;font-weight:700;">Пора заказать</div>
+      <div style="padding:12px 14px;font-weight:700;">Склад: пора заказать</div>
       <div style="max-height:360px;overflow:auto;">${list}</div>
       <div style="padding:10px 14px;border-top:1px solid var(--admin-border,#eee);font-size:12px;color:var(--color-text-secondary,#666);">
         Минимум задаётся в карточке позиции склада. Уведомления в Telegram —

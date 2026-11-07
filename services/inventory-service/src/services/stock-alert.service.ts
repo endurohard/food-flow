@@ -42,8 +42,19 @@ export class StockAlertService {
          FROM inventory_stock s JOIN inventory_items i ON i.id = s.inventory_item_id
         WHERE a.resolved_at IS NULL
           AND s.warehouse_id = a.warehouse_id AND s.inventory_item_id = a.inventory_item_id
+          AND s.quantity >= 0
           AND (COALESCE(i.min_stock, 0) <= 0 OR s.quantity > i.min_stock OR i.is_active = false)${where}
         RETURNING a.id`,
+      params
+    );
+
+    // «Заканчивается» перешло в минус — это новое, более серьёзное событие:
+    // переотправляем один раз (дальше a.quantity уже отрицательный)
+    await this.pool.query(
+      `UPDATE stock_alerts a SET quantity = s.quantity, telegram_sent_at = NULL, telegram_attempts = 0, telegram_error = NULL
+         FROM inventory_stock s
+        WHERE a.resolved_at IS NULL AND a.quantity >= 0 AND s.quantity < 0
+          AND s.warehouse_id = a.warehouse_id AND s.inventory_item_id = a.inventory_item_id${where}`,
       params
     );
 
@@ -53,7 +64,8 @@ export class StockAlertService {
          FROM inventory_stock s
          JOIN inventory_items i ON i.id = s.inventory_item_id
          JOIN warehouses w ON w.id = s.warehouse_id
-        WHERE i.min_stock > 0 AND s.quantity <= i.min_stock
+        -- Минус — продали больше, чем есть по учёту: предупреждаем и без минимума
+        WHERE ((i.min_stock > 0 AND s.quantity <= i.min_stock) OR s.quantity < 0)
           AND COALESCE(i.is_active, true) AND COALESCE(w.is_active, true)
           AND w.enterprise_id IS NOT NULL${where}
        ON CONFLICT (warehouse_id, inventory_item_id) WHERE resolved_at IS NULL DO NOTHING
@@ -88,10 +100,18 @@ export class StockAlertService {
     }
     let sentGroups = 0;
     for (const [entId, rows] of byEnt) {
-      const lines = rows.map((r) =>
-        `• ${r.name} — осталось ${fmt(r.quantity)} ${r.unit || ''} (минимум ${fmt(r.min_stock)}), ${r.warehouse}`.replace(/ +\(/, ' (')
-      );
-      const text = `⚠️ Пора заказать — на складе заканчивается:\n\n${lines.join('\n')}`;
+      const low = rows.filter((r) => Number(r.quantity) >= 0);
+      const minus = rows.filter((r) => Number(r.quantity) < 0);
+      const parts: string[] = [];
+      if (minus.length) {
+        parts.push('❗ Продано больше, чем есть на складе — проверьте приход или проведите инвентаризацию:\n\n'
+          + minus.map((r) => `• ${r.name} — на складе ${fmt(r.quantity)} ${r.unit || ''}, ${r.warehouse}`.replace(/ +,/, ',')).join('\n'));
+      }
+      if (low.length) {
+        parts.push('⚠️ Пора заказать — на складе заканчивается:\n\n'
+          + low.map((r) => `• ${r.name} — осталось ${fmt(r.quantity)} ${r.unit || ''} (минимум ${fmt(r.min_stock)}), ${r.warehouse}`.replace(/ +\(/, ' (')).join('\n'));
+      }
+      const text = parts.join('\n\n');
       const ids = rows.map((r) => r.id);
       try {
         const res = await this.notifier(entId, text, '/admin-panel/inventory.html');

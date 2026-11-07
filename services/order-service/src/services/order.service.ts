@@ -523,7 +523,10 @@ export class OrderService {
       const result: any = await response.json();
       logger.info(
         `Order ${order.order_number}: списано позиций ${result.deducted?.length ?? 0}` +
-        (result.skipped?.length ? `, пропущено: ${result.skipped.join('; ')}` : '')
+        (result.skipped?.length ? `, пропущено: ${result.skipped.join('; ')}` : '') +
+        (result.shortages?.length
+          ? `, НЕХВАТКА (ушло в минус): ${result.shortages.map((s: any) => `${s.name} ${s.stockAfter}`).join('; ')}`
+          : '')
       );
     } catch (err) {
       logger.error(

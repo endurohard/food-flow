@@ -31,6 +31,22 @@ describe('StockAlertService.sweep', () => {
     expect(ins.params).toEqual(['w1', ['i1']]);
   });
 
+  it('минус открывает предупреждение и без заданного минимума', async () => {
+    const pool = fakePool();
+    await new StockAlertService(pool).sweep({ warehouseId: 'w1' });
+    const ins = pool.queries.find((q) => /INSERT INTO stock_alerts/.test(q.sql))!;
+    expect(ins.sql).toMatch(/OR s\.quantity < 0\)/);
+    const upd = pool.queries.find((q) => /UPDATE stock_alerts a SET resolved_at/.test(q.sql))!;
+    expect(upd.sql).toMatch(/s\.quantity >= 0/);
+  });
+
+  it('«заканчивается» перешло в минус — переотправляем один раз', async () => {
+    const pool = fakePool();
+    await new StockAlertService(pool).sweep({ warehouseId: 'w1' });
+    const re = pool.queries.find((q) => /telegram_sent_at = NULL/.test(q.sql))!;
+    expect(re.sql).toMatch(/a\.quantity >= 0 AND s\.quantity < 0/);
+  });
+
   it('закрывает предупреждение, когда остаток пополнили выше минимума', async () => {
     const pool = fakePool();
     await new StockAlertService(pool).sweep({ warehouseId: 'w1' });
@@ -60,6 +76,17 @@ describe('StockAlertService.sendPending', () => {
     const u = updates(pool);
     expect(u[0].sql).toMatch(/telegram_sent_at = NOW\(\)/);
     expect(u[0].params[0]).toEqual(['a1', 'a2']);
+  });
+
+  it('минус в сообщении — отдельным блоком «продано больше, чем есть»', async () => {
+    const pool = fakePool([{ ...alert('a1'), quantity: '-0.030' }, alert('a2', 'e1', 'Молоко')]);
+    const notifier = jest.fn().mockResolvedValue({ sent: 1, failed: 0 });
+    await new StockAlertService(pool, notifier).sendPending();
+    const text = notifier.mock.calls[0][1];
+    expect(text).toContain('Продано больше, чем есть на складе');
+    expect(text).toContain('• Зерно — на складе -0.03 кг, Основной склад');
+    expect(text).toContain('Пора заказать');
+    expect(text).toContain('Молоко');
   });
 
   it('нет бота — больше не пытаемся, причина записана', async () => {

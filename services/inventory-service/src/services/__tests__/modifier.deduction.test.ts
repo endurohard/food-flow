@@ -50,6 +50,9 @@ function makeService(client: any) {
   (svc as any).deductFIFO = jest.fn(async (_w: string, _i: string, qty: number) => ({
     batches: [{ deducted: String(qty), costPrice: '100' }]
   }));
+  (svc as any).consumeBatchesFIFO = jest.fn(async (_c: any, _w: string, _i: string, qty: number) => ({
+    consumed: qty, cost: qty * 100, uncovered: 0
+  }));
   return svc;
 }
 
@@ -289,8 +292,9 @@ describe('Списание модификаторов со склада', () => 
     expect(client.queries.some((q: any) => /COMMIT/.test(q.sql))).toBe(true);
   });
 
-  it('нехватка остатка на модификатор отменяет всю транзакцию', async () => {
-    // Иначе часть продуктов списана, часть нет — склад разъезжается.
+  it('нехватка на модификатор не отменяет списание: уходит в минус и возвращается как нехватка', async () => {
+    // Раньше нехватка откатывала списание ВСЕГО чека, а продажа проходила —
+    // товар оставался «на складе» молча. Теперь — минус и предупреждение.
     const client = makeClient([
       [/FROM order_items oi/, ORDER],
       [/FROM tech_card_ingredients tci\s+INNER JOIN inventory_items ii ON tci/, NO_TECHCARD],
@@ -305,12 +309,21 @@ describe('Списание модификаторов со склада', () => 
         rowCount: 1
       }],
       [/SELECT name FROM inventory_items/, { rows: [{ name: 'Сироп' }], rowCount: 1 }],
-      [/UPDATE inventory_stock/, { rows: [], rowCount: 0 }]
+      [/INSERT INTO inventory_stock/, { rows: [{ quantity: '-0.010' }], rowCount: 1 }]
     ]);
     const svc = makeService(client);
 
-    await expect(svc.deductByTechCards('ord-1', 'wh-1', 'user-1', 'ent-1')).rejects.toThrow();
-    expect(client.queries.some((q: any) => /ROLLBACK/.test(q.sql))).toBe(true);
+    const r = await svc.deductByTechCards('ord-1', 'wh-1', 'user-1', 'ent-1');
+    expect(client.queries.some((q: any) => /ROLLBACK/.test(q.sql))).toBe(false);
+    expect(client.queries.some((q: any) => /COMMIT/.test(q.sql))).toBe(true);
+    expect(r.shortages).toEqual([{ inventoryItemId: 'inv-syrup', name: 'Сироп', needed: 0.03, stockAfter: -0.01 }]);
+    const m = movements(client);
+    expect(m).toHaveLength(1);
+    expect(m[0].qty).toBeCloseTo(0.03);
+    expect(m[0].note).toContain('НЕХВАТКА');
+    // Остаток уменьшается безусловно — без «quantity >= $1», который и давал отказ
+    const stockSql = client.queries.find((q: any) => /INSERT INTO inventory_stock/.test(q.sql)).sql;
+    expect(stockSql).not.toMatch(/quantity >= \$1/);
   });
 
   it('повторное списание того же заказа ничего не делает', async () => {
