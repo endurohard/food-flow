@@ -156,7 +156,7 @@ export class MenuService {
         data.sku || null,
         data.costPrice || null,
         data.taxRate || 0,
-        data.unit || 'piece',
+        data.unit || 'шт',
         data.weightGrams || null,
         enterpriseId || null,
         data.icon || null,

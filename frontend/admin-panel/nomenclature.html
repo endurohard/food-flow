@@ -1448,7 +1448,7 @@ AUTH.requireAuth();
         </label>
         <label style="display:block" id="itemUnitWrap">
           <span style="font-size:12px;color:var(--color-text-secondary)">Единица измерения</span>
-          <input type="text" id="itemUnit" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
+          <select id="itemUnit" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit;background:var(--admin-card-bg,#fff)"></select>
         </label>
       </div>
       <div id="itemFormError" style="display:none;margin-top:10px;color:#e53935;font-size:13px"></div>
@@ -1606,7 +1606,7 @@ AUTH.requireAuth();
       + '<td>' + esc(it.name) + '</td>'
       + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
       + '<td><span class="nm-type">' + esc(TYPE_LABEL[it.item_type] || it.item_type) + '</span></td>'
-      + '<td>' + esc(it.unit || '—') + '</td>'
+      + '<td>' + esc(UNIT_ALIASES[it.unit] || it.unit || '—') + '</td>'
       + '<td>' + esc(it.category || '—') + '</td>'
       + '<td>' + esc(it.accounting_category || '—') + '</td>'
       + '<td>' + esc(it.tax_category || '—') + '</td>'
@@ -1802,6 +1802,12 @@ AUTH.requireAuth();
 
   // ───────── позиции ─────────
 
+  const UNITS = ['шт', 'кг', 'г', 'л', 'мл', 'порц', 'упак'];
+  const UNIT_LABEL = { 'шт': 'шт — штуки', 'кг': 'кг — килограммы', 'г': 'г — граммы', 'л': 'л — литры',
+                       'мл': 'мл — миллилитры', 'порц': 'порц — порции', 'упак': 'упак — упаковки' };
+  // Старые записи блюд хранили единицу по-английски (до миграции 053)
+  const UNIT_ALIASES = { piece: 'шт', pcs: 'шт', portion: 'порц', kg: 'кг', g: 'г', l: 'л', ml: 'мл' };
+
   function findItem(id, source) {
     let found = null;
     function walk(node) {
@@ -1824,7 +1830,12 @@ AUTH.requireAuth();
     document.getElementById('itemAccounting').value = it.accounting_category || '';
     document.getElementById('itemTax').value = it.tax_category || '';
     document.getElementById('itemProduct').value = it.product_category || '';
-    document.getElementById('itemUnit').value = it.unit || '';
+    // Список — как в ограничениях базы: свободный ввод давал ошибку на «штук»/«kg»
+    const unit = UNIT_ALIASES[it.unit] || it.unit || 'шт';
+    const units = UNITS.indexOf(unit) >= 0 ? UNITS : UNITS.concat([unit]);
+    document.getElementById('itemUnit').innerHTML = units.map(function (u) {
+      return '<option value="' + esc(u) + '"' + (u === unit ? ' selected' : '') + '>' + esc(UNIT_LABEL[u] || u) + '</option>';
+    }).join('');
     // Блюда и товары продаются, товары и заготовки хранятся — наборы типов
     // у двух таблиц разные, подсовывать чужой тип нельзя.
     const types = source === 'menu' ? ['dish', 'good'] : ['good', 'prepared'];
@@ -1832,8 +1843,6 @@ AUTH.requireAuth();
       return '<option value="' + t + '"' + (t === it.item_type ? ' selected' : '') + '>' + TYPE_LABEL[t] + '</option>';
     }).join('');
     document.getElementById('itemGroup').innerHTML = groupOptions(it.nomenclature_group_id, null);
-    // Единицу измерения у блюда этот экран не правит — она живёт в карточке меню.
-    document.getElementById('itemUnitWrap').style.display = source === 'inventory' ? 'block' : 'none';
     document.getElementById('itemFormError').style.display = 'none';
     document.getElementById('itemForm').style.display = 'block';
     document.getElementById('itemName').focus();
@@ -1858,10 +1867,8 @@ AUTH.requireAuth();
       taxCategory: document.getElementById('itemTax').value.trim() || null,
       productCategory: document.getElementById('itemProduct').value.trim() || null
     };
-    if (editingItem.source === 'inventory') {
-      const unit = document.getElementById('itemUnit').value.trim();
-      if (unit) body.unit = unit;
-    }
+    const unit = document.getElementById('itemUnit').value;
+    if (UNITS.indexOf(unit) >= 0) body.unit = unit;
     try {
       const res = await AUTH.fetch(
         '/api/nomenclature/items/' + editingItem.source + '/' + editingItem.id,
@@ -1961,7 +1968,7 @@ AUTH.requireAuth();
       ['Название', esc(it.name)],
       ['Артикул', esc(it.sku || '—')],
       ['Тип', esc(TYPE_LABEL[it.item_type] || it.item_type)],
-      ['Единица измерения', esc(it.unit || '—')],
+      ['Единица измерения', esc(UNIT_ALIASES[it.unit] || it.unit || '—')],
       ['Категория', esc(it.category || '—')],
       ['Бухгалтерская категория', esc(it.accounting_category || '—')],
       ['Налоговая категория', esc(it.tax_category || '—')],

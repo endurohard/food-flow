@@ -278,10 +278,17 @@ describe('NomenclatureService — адресация источника', () => 
     expect(calls[0].sql).not.toMatch(/prep_station_id/);
   });
 
-  it('единица измерения не правится у блюда через этот сервис', async () => {
+  it('единица измерения правится и у блюда (раньше её нельзя было поменять нигде)', async () => {
     const { pool, calls } = makePool();
-    await svc(pool).updateItem('i1', 'menu', { unit: 'кг', name: 'X' }, EID);
-    expect(calls[0].sql).not.toMatch(/unit =/);
+    await svc(pool).updateItem('i1', 'menu', { unit: 'порц', name: 'X' }, EID);
+    expect(calls[0].sql).toMatch(/UPDATE menu_items SET .*unit = \$\d/);
+    expect(calls[0].params).toContain('порц');
+  });
+
+  it('единица измерения позиции склада сохраняется', async () => {
+    const { pool, calls } = makePool();
+    await svc(pool).updateItem('i1', 'inventory', { unit: 'л' }, EID);
+    expect(calls[0].sql).toMatch(/UPDATE inventory_items SET unit = \$1/);
   });
 
   it('пустой набор полей не порождает запрос', async () => {

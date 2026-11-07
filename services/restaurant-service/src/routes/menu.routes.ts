@@ -42,7 +42,7 @@ const menuItemSchema = Joi.object({
   sku: Joi.string().max(50).optional(),
   costPrice: Joi.number().min(0).optional(),
   taxRate: Joi.number().min(0).max(100).optional(),
-  unit: Joi.string().max(20).optional(),
+  unit: Joi.string().valid('кг', 'г', 'л', 'мл', 'шт', 'упак', 'порц').optional(),
   weightGrams: Joi.number().integer().min(0).optional()
 });
 

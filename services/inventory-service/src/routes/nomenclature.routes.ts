@@ -4,6 +4,9 @@ import { NomenclatureService, NomenclatureSource } from '../services/nomenclatur
 import { authenticateUser } from '../middleware/auth.middleware';
 import { config } from '../config';
 
+/** Единицы измерения — как в CHECK-ограничениях inventory_items_unit_ru и menu_items_unit_ru (053). */
+export const UNITS = ['кг', 'г', 'л', 'мл', 'шт', 'упак', 'порц'];
+
 const router = Router();
 const service = new NomenclatureService(config.database.url);
 
@@ -162,7 +165,9 @@ router.put('/items/:source/:id', authenticateUser, async (req: Request, res: Res
       productCategory: Joi.string().max(100).allow(null, '').optional(),
       prepStationId: Joi.string().uuid().allow(null).optional(),
       cashOrder: Joi.number().integer().min(0).optional(),
-      unit: Joi.string().max(20).optional()
+      // Тот же список, что в ограничениях inventory_items_unit_ru / menu_items_unit_ru:
+      // иначе неверная единица доходила до базы и возвращалась как 500
+      unit: Joi.string().valid(...UNITS).optional()
     }).min(1);
 
     const { error: vErr, value } = schema.validate(req.body);

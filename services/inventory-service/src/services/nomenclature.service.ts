@@ -216,7 +216,7 @@ export class NomenclatureService {
       productCategory: 'product_category'
     };
     const map = source === 'menu'
-      ? { ...common, prepStationId: 'prep_station_id', cashOrder: 'cash_order' }
+      ? { ...common, prepStationId: 'prep_station_id', cashOrder: 'cash_order', unit: 'unit' }
       : { ...common, unit: 'unit' };
 
     const fields: string[] = [];
