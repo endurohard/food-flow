@@ -1,6 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
+import { encryptSecret } from '../utils/secrets';
 import crypto from 'crypto';
 import { config } from '../config';
 
@@ -157,9 +158,9 @@ export class UserService {
   async setCashRegisterPin(userId: string, pin: string): Promise<void> {
     const passwordHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
     const result = await this.pool.query(
-      `UPDATE users SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+      `UPDATE users SET pin_hash = $1, pin_encrypted = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $2 RETURNING id`,
-      [passwordHash, userId]
+      [passwordHash, userId, encryptSecret(pin)]
     );
     if (result.rows.length === 0) {
       throw Object.assign(new Error('Кассир не найден'), { statusCode: 404 });

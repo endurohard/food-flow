@@ -372,7 +372,9 @@ const ownPinSchema = Joi.object({
 router.get('/:id/my-approval-pin', authenticateUser, async (req, res) => {
   try {
     if (!(await requireOwnerOrAdmin(req, res, 'PIN подтверждения задаёт'))) return;
-    return res.json({ hasPin: await enterpriseService.hasOwnApprovalPin(req.userId!) });
+    const hasPin = await enterpriseService.hasOwnApprovalPin(req.userId!);
+    // Свой PIN показываем только его владельцу — чужие PIN админов не видны никому
+    return res.json({ hasPin, pin: hasPin ? await enterpriseService.getOwnApprovalPin(req.userId!) : null });
   } catch (err) {
     console.error('Get own approval pin failed:', err);
     return res.status(500).json({ error: 'Internal server error' });

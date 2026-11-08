@@ -1,5 +1,7 @@
 /** Создание кассира: всё одной транзакцией, PIN хешем в той же вставке. */
 import bcrypt from 'bcryptjs';
+import { decryptSecret } from '../../utils/secrets';
+process.env.ENCRYPTION_KEY = 'b'.repeat(64);
 
 const ENT = '22222222-2222-4222-8222-222222222222';
 const outside: string[] = [];
@@ -60,6 +62,14 @@ it('кассир создаётся одной транзакцией вмест
   expect(eu.sql).toMatch(/'cashier'/);
   expect(eu.params).toEqual([ENT, 'u-new']);
 
+  // Копия PIN для показа в кабинете — зашифрована, открытым текстом не лежит
+  const insU = inside.find((q) => /INSERT INTO users/.test(q.sql))!;
+  expect(insU.sql).toMatch(/pin_encrypted/);
+  const enc = insU.params[7];
+  expect(enc).toMatch(/^enc:v1:/);
+  expect(enc).not.toContain('4321');
+  expect(decryptSecret(enc)).toBe('4321');
+
   // Кадровая карточка — иначе кассира не видно в «Персонале»
   const sp = inside.find((q) => /INSERT INTO staff_profiles/.test(q.sql))!;
   expect(sp).toBeDefined();
@@ -79,5 +89,6 @@ describe('PIN кассиру из «Персонала»', () => {
     expect(sql).toMatch(/eu\.enterprise_id = \$3/);
     expect(sql).toMatch(/eu\.role = 'cashier'/);
     expect(sql).toMatch(/u\.id = \$2/);
+    expect(sql).toMatch(/pin_encrypted = \$4/);
   });
 });

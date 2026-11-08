@@ -1,6 +1,7 @@
 import pkg from 'pg';
 const { Pool } = pkg;
 import bcrypt from 'bcryptjs';
+import { encryptSecret, decryptSecret } from '../utils/secrets';
 import crypto from 'crypto';
 import { config } from '../config';
 import { subdomainFromName, isReservedSubdomain } from './tenant-domain.service';
@@ -320,10 +321,10 @@ export class EnterpriseService {
       }
       const pinHash = await bcrypt.hash(data.pin, config.bcrypt.saltRounds);
       const userResult = await client.query(
-        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin, pin_hash)
-         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false, $7)
+        `INSERT INTO users (email, password_hash, first_name, last_name, phone, role, enterprise_id, is_enterprise_admin, pin_hash, pin_encrypted)
+         VALUES ($1, $2, $3, $4, $5, 'customer', $6, false, $7, $8)
          RETURNING id, email, first_name, last_name, phone`,
-        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId, pinHash]
+        [email, passwordHash, data.firstName, data.lastName || '', data.phone || null, enterpriseId, pinHash, encryptSecret(data.pin)]
       );
       const user = userResult.rows[0];
 
@@ -433,11 +434,11 @@ export class EnterpriseService {
     }
     const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
     const r = await this.pool.query(
-      `UPDATE users u SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+      `UPDATE users u SET pin_hash = $1, pin_encrypted = $4, updated_at = CURRENT_TIMESTAMP
          FROM enterprise_users eu
         WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role IN ('owner', 'admin')
         RETURNING u.id`,
-      [pinHash, userId, enterpriseId]
+      [pinHash, userId, enterpriseId, encryptSecret(pin)]
     );
     return r.rows.length > 0;
   }
@@ -447,17 +448,29 @@ export class EnterpriseService {
     return !!r.rows[0]?.has;
   }
 
+  /** Свой PIN подтверждения открытым текстом — только для показа хозяину PIN. */
+  async getOwnApprovalPin(userId: string): Promise<string | null> {
+    const r = await this.pool.query('SELECT pin_encrypted FROM users WHERE id = $1', [userId]);
+    return this.revealPin(r.rows[0]?.pin_encrypted);
+  }
+
+  /** null — PIN не задан или задан до появления копии (миграция 055). */
+  private revealPin(enc: string | null | undefined): string | null {
+    if (!enc) return null;
+    try { return decryptSecret(enc); } catch { return null; }
+  }
+
   async setCashierPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
     if (await this.pinTaken(this.pool, enterpriseId, pin, userId)) {
       throw Object.assign(new Error('Этот PIN уже занят в организации — выберите другой'), { statusCode: 409 });
     }
     const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
     const r = await this.pool.query(
-      `UPDATE users u SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+      `UPDATE users u SET pin_hash = $1, pin_encrypted = $4, updated_at = CURRENT_TIMESTAMP
          FROM enterprise_users eu
         WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role = 'cashier'
         RETURNING u.id`,
-      [pinHash, userId, enterpriseId]
+      [pinHash, userId, enterpriseId, encryptSecret(pin)]
     );
     return r.rows.length > 0;
   }
@@ -469,7 +482,7 @@ export class EnterpriseService {
       const result = await client.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.phone,
                 eu.role, eu.is_active, u.is_active AS user_active,
-                u.pin_hash IS NOT NULL AS has_pin
+                u.pin_hash IS NOT NULL AS has_pin, u.pin_encrypted
          FROM enterprise_users eu
          JOIN users u ON u.id = eu.user_id
          WHERE eu.enterprise_id = $1 AND eu.role = 'cashier'
@@ -483,8 +496,10 @@ export class EnterpriseService {
         lastName: row.last_name,
         phone: row.phone,
         isActive: row.is_active && row.user_active,
-        // Сам хеш PIN наружу не отдаём — только признак «задан»
+        // Хеш наружу не отдаём. PIN — расшифрованная копия: список кассиров
+        // видят только владелец и админ организации (проверка в роуте)
         hasPin: row.has_pin,
+        pin: row.has_pin ? this.revealPin(row.pin_encrypted) : null,
       }));
     } finally {
       client.release();
