@@ -43,11 +43,14 @@ const FEATURE_PAGES = {
   'calls.html': 'telephony'
 };
 
+const OPT_IN_PAGES = ['tables.html', 'hall-designer.html'];
+
 function isVisible(page, { role, businessType, features = {} }) {
   if (SUPER_ADMIN_PAGES.includes(page) && role !== 'super_admin') return false;
   if (FEATURE_PAGES[page] && features[FEATURE_PAGES[page]] === false) return false;
   const allowed = MODULE_ACCESS[page];
   if (!allowed || !businessType) return true;
+  if (OPT_IN_PAGES.includes(page) && features[FEATURE_PAGES[page]] === true) return true;
   return allowed.includes(businessType);
 }
 
@@ -123,9 +126,18 @@ describe('переключатели «Функционал» прячут ра�
     }
   });
 
-  it('флаг не включает то, что закрыто типом заведения', () => {
-    // tables:true у кофейни не возвращает столы
-    expect(isVisible('tables.html', { role: 'restaurant_owner', businessType: 'coffee_shop', features: coffee104 })).toBe(false);
+  it('включённые «Столы» открывают столы и зал кофейне (кофейня со столиками)', () => {
+    expect(isVisible('tables.html', { role: 'restaurant_owner', businessType: 'coffee_shop', features: coffee104 })).toBe(true);
+    expect(isVisible('hall-designer.html', { role: 'restaurant_owner', businessType: 'coffee_shop', features: coffee104 })).toBe(true);
+  });
+
+  it('без явного tables:true кофейня столов не видит', () => {
+    expect(isVisible('tables.html', { role: 'restaurant_owner', businessType: 'coffee_shop', features: { inventory: true } })).toBe(false);
+  });
+
+  it('прочие ограничения типа флагом не снимаются', () => {
+    // опт закрыт кофейне, и включённый флаг другого раздела этого не меняет
+    expect(isVisible('wholesale.html', { role: 'restaurant_owner', businessType: 'coffee_shop', features: coffee104 })).toBe(false);
   });
 
   it('отсутствующий ключ раздел не прячет (старые организации без полного набора)', () => {
@@ -172,6 +184,15 @@ describe('правила в тесте не разошлись с auth.js', () =
     const body = /AUTH\.applyBusinessType\s*=\s*function[\s\S]*?\n};/.exec(src)[0];
     expect(body).toMatch(/features\[FEATURE_PAGES\[page\]\]\s*===\s*false/);
     expect(body).toMatch(/if \(!featureOff &&/);
+  });
+
+  it('OPT_IN_PAGES совпадает с исходником и применяется в applyBusinessType', () => {
+    const m = /const OPT_IN_PAGES\s*=\s*\[([^\]]*)\]/.exec(src);
+    expect(m).not.toBeNull();
+    expect(m[1].split(',').map((x) => x.trim().replace(/['"]/g, '')).filter(Boolean).sort()).toEqual([...OPT_IN_PAGES].sort());
+    const body = /AUTH\.applyBusinessType\s*=\s*function[\s\S]*?\n};/.exec(src)[0];
+    expect(body).toMatch(/OPT_IN_PAGES\.includes\(page\) && features\[FEATURE_PAGES\[page\]\] === true/);
+    expect(body).toMatch(/allowed\.includes\(type\) \|\| featureOptIn/);
   });
 
   it('hydrateEnterprise обновляет кэш, а не выходит при заполненном', () => {

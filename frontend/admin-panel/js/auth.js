@@ -275,6 +275,11 @@ const FEATURE_PAGES = {
   'calls.html':         'telephony'
 };
 
+// Разделы, которые переключатель «Функционал» может открыть сверх типа
+// заведения (features[key] === true). Только столы и зал: остальные
+// ограничения типа (опт у кофейни, касса у производства) — не опция.
+const OPT_IN_PAGES = ['tables.html', 'hall-designer.html'];
+
 // Есть ли у заведения доставка: от этого зависят колонки «На доставке» /
 // «Доставлено» в «Заказах» и плитки панели. Кофейня, кафе и производство
 // работают у стойки или в зале — статусы доставки у них пустые и только
@@ -305,8 +310,11 @@ AUTH.applyBusinessType = function () {
     }
     const allowed = MODULE_ACCESS[page];
     const featureOff = FEATURE_PAGES[page] && features[FEATURE_PAGES[page]] === false;
+    // Явно включённый переключатель открывает раздел сверх типа заведения:
+    // кофейне со столиками нужны «Столы», хотя по умолчанию у кофейни их нет
+    const featureOptIn = OPT_IN_PAGES.includes(page) && features[FEATURE_PAGES[page]] === true;
     // Скрываем с !important — страничные стили задают display на .nav-item с !important
-    if (!featureOff && (!allowed || !type || allowed.includes(type))) {
+    if (!featureOff && (!allowed || !type || allowed.includes(type) || featureOptIn)) {
       // Снимаем только своё скрытие: пункт мог спрятать ролевой фильтр страницы
       if (a.dataset.btHidden) {
         a.style.removeProperty('display');
