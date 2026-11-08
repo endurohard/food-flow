@@ -1096,7 +1096,6 @@ AUTH.requireAuth();
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 2H3a1 1 0 00-1 1v11a1 1 0 001 1h2v3l4-3h8a1 1 0 001-1V3a1 1 0 00-1-1z"/>
           </svg>
-          <span class="notif-count blue">3</span>
         </button>
         <button class="notif-btn red" title="Предупреждения">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -1108,7 +1107,6 @@ AUTH.requireAuth();
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="2" width="16" height="16" rx="2"/><path d="M6 10l3 3 5-5"/>
           </svg>
-          <span class="notif-count yellow">7</span>
         </button>
       </div>
 
@@ -1239,6 +1237,16 @@ AUTH.requireAuth();
     .dev-steps { margin: 0 0 12px 18px; padding: 0; font-size: 14px; line-height: 1.7; }
     .dev-url-row { display: flex; gap: 10px; }
     .dev-url-row input { flex: 1; }
+    /* Поля форм: своих стилей у страницы не было — поля были крошечными
+       браузерными квадратиками (как на складе — тот же вид) */
+    .dev-page .form-group { margin: 0; }
+    .dev-page .form-label { display: block; color: var(--color-text-secondary); font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+    .dev-page .form-input, .dev-page select.form-input {
+      width: 100%; padding: 10px 14px; background: var(--admin-card-bg, #fff);
+      border: 1px solid var(--admin-border, #d6d9de); border-radius: 8px;
+      color: var(--color-text-primary); font-size: 14px; font-family: inherit; box-sizing: border-box;
+    }
+    .dev-page .form-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light, rgba(31,143,95,.15)); }
     .dev-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: end; margin-top: 14px; }
     .dev-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .dev-table th, .dev-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--admin-panel-border, #eef0f2); }
