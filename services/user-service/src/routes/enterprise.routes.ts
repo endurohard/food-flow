@@ -364,6 +364,36 @@ async function requireOwnerOrAdmin(req: any, res: any, action: string): Promise<
   return true;
 }
 
+// ── PIN администратора: подтверждает возвраты и правку чеков на кассе ──
+const ownPinSchema = Joi.object({
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required().messages({ 'string.pattern.base': 'PIN — ровно 4 цифры' }),
+});
+
+router.get('/:id/my-approval-pin', authenticateUser, async (req, res) => {
+  try {
+    if (!(await requireOwnerOrAdmin(req, res, 'PIN подтверждения задаёт'))) return;
+    return res.json({ hasPin: await enterpriseService.hasOwnApprovalPin(req.userId!) });
+  } catch (err) {
+    console.error('Get own approval pin failed:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/:id/my-approval-pin', authenticateUser, async (req, res) => {
+  try {
+    const { error, value } = ownPinSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (!(await requireOwnerOrAdmin(req, res, 'PIN подтверждения задаёт'))) return;
+    const ok = await enterpriseService.setOwnApprovalPin(req.params.id, req.userId!, value.pin);
+    if (!ok) return res.status(403).json({ error: 'Forbidden', message: 'PIN подтверждения задаёт владелец или админ организации' });
+    return res.json({ success: true });
+  } catch (err: any) {
+    if (err.statusCode === 409) return res.status(409).json({ error: 'Conflict', message: err.message });
+    console.error('Set own approval pin failed:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const bindDeviceSchema = Joi.object({
   registerId: Joi.string().uuid().required(),
   name: Joi.string().trim().max(100).allow('').optional(),

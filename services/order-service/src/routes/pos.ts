@@ -7,6 +7,7 @@ import {
 } from '../middleware/cash-register.middleware';
 import { PosSaleError, PosSaleService } from '../services/pos-sale.service';
 import { OpenCheckService } from '../services/open-check.service';
+import { PosRefundError, PosRefundService } from '../services/pos-refund.service';
 
 const checkItemsSchema = Joi.array()
   .items(
@@ -62,9 +63,27 @@ export const posSaleSchema = Joi.object({
 });
 
 /** Фабрика не создаёт соединения при импорте — тесты схемы остаются чистыми. */
+export const refundSchema = Joi.object({
+  refundId: Joi.string().uuid().required(),
+  approvalToken: Joi.string().max(2000).required(),
+  reason: Joi.string().trim().max(500).allow('').optional(),
+  items: Joi.array().items(Joi.object({
+    orderItemId: Joi.string().uuid().required(),
+    quantity: Joi.number().integer().min(1).max(999).required(),
+  })).min(1).max(200).unique('orderItemId').required(),
+});
+
+export const paymentChangeSchema = Joi.object({
+  refundId: Joi.string().uuid().required(),
+  approvalToken: Joi.string().max(2000).required(),
+  reason: Joi.string().trim().max(500).allow('').optional(),
+  paymentMethod: Joi.string().valid('cash', 'card').required(),
+});
+
 export function createPosRouter(
   posSaleService: PosSaleService,
-  pool: QueryablePool
+  pool: QueryablePool,
+  refunds?: PosRefundService
 ): Router {
   const router = Router();
   const cashRegisterMiddleware = createCashRegisterSessionMiddleware(pool);
@@ -174,6 +193,61 @@ export function createPosRouter(
       return res.status(500).json({ error: 'Internal server error' });
     }
   });
+
+  // ── Чеки смены: просмотр, возврат, смена оплаты ─────────────────────
+  // Возврат и смену оплаты подтверждает PIN владельца/админа (допуск из
+  // POST /api/auth/cash-register/approve). Кассир один деньги не вернёт.
+  if (refunds) {
+    const refundErr = (res: Response, err: any, what: string) => {
+      if (err instanceof PosRefundError) return res.status(err.statusCode).json({ error: 'Rejected', message: err.message });
+      console.error(what, err);
+      return res.status(500).json({ error: 'Internal server error' });
+    };
+
+    router.get('/receipts', ...guard, async (req: Request, res: Response) => {
+      if (!tenant(req, res)) return;
+      const q = Joi.object({
+        restaurantId: Joi.string().uuid().required(),
+        date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        search: Joi.string().max(40).allow('').optional(),
+      }).validate(req.query);
+      if (q.error) return res.status(400).json({ error: 'Validation error', message: q.error.details[0].message });
+      try {
+        const receipts = await refunds.list(req.enterpriseId!, q.value.restaurantId, q.value.date, q.value.search || undefined);
+        return res.json({ receipts });
+      } catch (err) { return refundErr(res, err, 'List receipts error:'); }
+    });
+
+    const withApproval = (action: 'refund' | 'payment_change', req: Request) =>
+      refunds.verifyApproval(req.body.approvalToken, {
+        enterpriseId: req.enterpriseId!, cashierId: req.userId!,
+        sessionId: (req as any).registerSession?.id, action,
+      });
+
+    router.post('/receipts/:id/refund', ...guard, async (req: Request, res: Response) => {
+      if (!tenant(req, res)) return;
+      const { error, value } = refundSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+      try {
+        const approval = withApproval('refund', req);
+        const r = await refunds.refund({ enterpriseId: req.enterpriseId!, cashierId: req.userId!, orderId: req.params.id,
+          refundId: value.refundId, approval, items: value.items, reason: value.reason });
+        return res.status(r.replayed ? 200 : 201).json({ refund: r });
+      } catch (err) { return refundErr(res, err, 'Refund error:'); }
+    });
+
+    router.post('/receipts/:id/payment-method', ...guard, async (req: Request, res: Response) => {
+      if (!tenant(req, res)) return;
+      const { error, value } = paymentChangeSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+      try {
+        const approval = withApproval('payment_change', req);
+        const r = await refunds.changePayment({ enterpriseId: req.enterpriseId!, cashierId: req.userId!, orderId: req.params.id,
+          refundId: value.refundId, approval, paymentMethod: value.paymentMethod, reason: value.reason });
+        return res.status(r.replayed ? 200 : 201).json({ change: r });
+      } catch (err) { return refundErr(res, err, 'Payment change error:'); }
+    });
+  }
 
   return router;
 }

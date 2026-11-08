@@ -55,6 +55,8 @@ export function createCashRegisterSessionMiddleware(pool: QueryablePool) {
           message: 'Сессия кассы открыта на другой кассе',
         });
       }
+      // Возврату нужна касса и id сессии — допуск админа выдан на эту смену
+      (req as any).registerSession = { id: sessionId, registerId: session.register_id };
       next();
     } catch (error) {
       next(error);

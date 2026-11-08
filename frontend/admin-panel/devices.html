@@ -1149,6 +1149,21 @@ AUTH.requireAuth();
       <p class="dev-muted">Смену кассир открывает прямо на планшете. «🔒 Заблокировать / сменить кассира» закрывает продажи до следующего PIN. После 5 неверных PIN подряд планшет блокируется на 5 минут.</p>
     </section>
 
+    <!-- PIN подтверждения: возвраты и правка чеков на кассе -->
+    <section class="dev-card" id="approvalPinCard">
+      <h2>Мой PIN подтверждения</h2>
+      <p class="dev-muted" style="margin:0 0 10px">Возврат и смену способа оплаты на кассе кассир один не проведёт — нужен PIN владельца или админа. Каждый задаёт свой PIN здесь, под своим входом. PIN не должен совпадать с PIN-ами кассиров.</p>
+      <div id="approvalPinState" class="dev-muted" style="margin:0 0 10px">Загрузка…</div>
+      <form id="approvalPinForm" class="dev-form" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0">
+          <label class="form-label" for="ap-pin">Новый PIN (4 цифры)</label>
+          <input class="form-input" type="password" id="ap-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required style="max-width:160px">
+        </div>
+        <button type="submit" class="btn btn-primary">Сохранить PIN</button>
+      </form>
+      <p class="dev-err" id="approvalPinError"></p>
+    </section>
+
     <!-- Привязанные планшеты -->
     <section class="dev-card">
       <h2>Привязанные планшеты</h2>
@@ -1410,8 +1425,38 @@ AUTH.requireAuth();
       }
     });
 
+    async function loadApprovalPin() {
+      try {
+        var d = await call('/api/enterprises/' + enterpriseId + '/my-approval-pin');
+        $('approvalPinState').innerHTML = d.hasPin
+          ? '✅ PIN задан — им вы подтверждаете возвраты на кассе. Можно сменить.'
+          : '⚠️ PIN не задан — возвраты на кассе подтверждать некому.';
+      } catch (e) {
+        // Кассир/менеджер: блок не для них
+        $('approvalPinCard').style.display = 'none';
+      }
+    }
+
+    $('approvalPinForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      $('approvalPinError').textContent = '';
+      var pin = $('ap-pin').value.trim();
+      if (!/^[0-9]{4}$/.test(pin)) { $('approvalPinError').textContent = 'PIN — ровно 4 цифры'; return; }
+      try {
+        await call('/api/enterprises/' + enterpriseId + '/my-approval-pin', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pin })
+        });
+        $('ap-pin').value = '';
+        toast('✅ PIN подтверждения сохранён');
+        loadApprovalPin();
+      } catch (err) {
+        $('approvalPinError').textContent = '❌ Не сохранено: ' + err.message;
+      }
+    });
+
     (async function init() {
       if (!enterpriseId) { showDataError('Аккаунт не привязан к организации — раздел недоступен.'); return; }
+      loadApprovalPin();
       try { await loadRestaurants(); } catch (e) { showDataError('Не удалось загрузить точки: ' + e.message); }
       loadRegisters();
       loadDevices();

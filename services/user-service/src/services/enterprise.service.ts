@@ -316,7 +316,7 @@ export class EnterpriseService {
       // ещё не закоммиченного пользователя, отвечало «Кассир не найден» и
       // откатывало создание — кассира нельзя было завести вовсе
       if (await this.pinTaken(client, enterpriseId, data.pin)) {
-        throw Object.assign(new Error('Этот PIN уже у другого кассира — выберите другой'), { statusCode: 409 });
+        throw Object.assign(new Error('Этот PIN уже занят в организации — выберите другой'), { statusCode: 409 });
       }
       const pinHash = await bcrypt.hash(data.pin, config.bcrypt.saltRounds);
       const userResult = await client.query(
@@ -366,8 +366,10 @@ export class EnterpriseService {
    */
   private async pinTaken(q: { query: (sql: string, p?: any[]) => Promise<any> }, enterpriseId: string, pin: string, exceptUserId?: string): Promise<boolean> {
     const r = await q.query(
+      // PIN-ы кассиров и администраторов не должны совпадать: иначе кассир
+      // своим PIN-ом подтвердил бы себе же возврат как «администратор»
       `SELECT u.id, u.pin_hash FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
-        WHERE eu.enterprise_id = $1 AND eu.role = 'cashier' AND u.pin_hash IS NOT NULL`,
+        WHERE eu.enterprise_id = $1 AND eu.role IN ('cashier', 'owner', 'admin') AND u.pin_hash IS NOT NULL`,
       [enterpriseId]
     );
     for (const row of r.rows) {
@@ -421,9 +423,33 @@ export class EnterpriseService {
    * PIN кассиру, заведённому через «Персонал»: там PIN не задаётся, и без него
    * кассир не войдёт в режим кассы. Только кассир этой же организации.
    */
+  /**
+   * Свой PIN владельца/админа — им он подтверждает возвраты и правку чеков
+   * на кассе. Задаёт только сам себе: чужой PIN админа никто не назначает.
+   */
+  async setOwnApprovalPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
+    if (await this.pinTaken(this.pool, enterpriseId, pin, userId)) {
+      throw Object.assign(new Error('Этот PIN уже занят в организации — выберите другой'), { statusCode: 409 });
+    }
+    const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
+    const r = await this.pool.query(
+      `UPDATE users u SET pin_hash = $1, updated_at = CURRENT_TIMESTAMP
+         FROM enterprise_users eu
+        WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role IN ('owner', 'admin')
+        RETURNING u.id`,
+      [pinHash, userId, enterpriseId]
+    );
+    return r.rows.length > 0;
+  }
+
+  async hasOwnApprovalPin(userId: string): Promise<boolean> {
+    const r = await this.pool.query('SELECT pin_hash IS NOT NULL AS has FROM users WHERE id = $1', [userId]);
+    return !!r.rows[0]?.has;
+  }
+
   async setCashierPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
     if (await this.pinTaken(this.pool, enterpriseId, pin, userId)) {
-      throw Object.assign(new Error('Этот PIN уже у другого кассира — выберите другой'), { statusCode: 409 });
+      throw Object.assign(new Error('Этот PIN уже занят в организации — выберите другой'), { statusCode: 409 });
     }
     const pinHash = await bcrypt.hash(pin, config.bcrypt.saltRounds);
     const r = await this.pool.query(

@@ -108,6 +108,8 @@
     state.cart = [];
     setOpenCheck(null);
     $('checks-panel').style.display = 'none';
+    $('receipts-panel').style.display = 'none';
+    rc.pending = null;
     openPin();
     if (msg) $('pin-error').textContent = msg;
   }
@@ -409,6 +411,7 @@
   }
 
   $('btn-checks').addEventListener('click', function () {
+    $('receipts-panel').style.display = 'none';
     $('checks-panel').style.display = '';
     renderChecks();
     loadChecks();
@@ -616,6 +619,228 @@
     } catch (err) {
       $('till-error').textContent = 'Смена не закрыта: ' + err.message;
     }
+  });
+
+  // ── чеки смены: просмотр, возврат, смена оплаты ──
+  // Возврат и смену оплаты подтверждает PIN владельца или админа: кассир
+  // вводит действие, админ подходит и набирает свой PIN прямо здесь.
+  var rc = { list: [], current: null, sel: {}, pending: null, pin: '', reason: '' };
+
+  function payTag(m) { return m === 'card' ? '<span class="tag card">Карта</span>' : '<span class="tag cash">Наличные</span>'; }
+  function refundTag(r) {
+    var ref = Number(r.refunded_amount) || 0;
+    if (r.status === 'cancelled') return ' <span class="tag ref">Возврат</span>';
+    return ref > 0 ? ' <span class="tag part">Возврат ' + money(ref) + '</span>' : '';
+  }
+  function hhmm(t) { return new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+  function shortNo(n) { return String(n || '').replace(/^POS-\d{8}-/, '№ '); }
+
+  async function loadReceipts() {
+    $('rc-error').textContent = '';
+    var q = '?restaurantId=' + encodeURIComponent(state.restaurant.id);
+    if ($('rc-date').value) q += '&date=' + $('rc-date').value;
+    var s = $('rc-search').value.trim();
+    if (s) q += '&search=' + encodeURIComponent(s);
+    try {
+      rc.list = (await posApi('/api/pos/receipts' + q)).receipts || [];
+    } catch (err) {
+      if (err.status === 403 && /PIN|сесси/i.test(err.message)) return lockScreen(err.message);
+      rc.list = [];
+      $('rc-error').textContent = 'Чеки не загрузились: ' + err.message;
+    }
+    var today = new Date().toISOString().slice(0, 10);
+    $('rc-title').textContent = (!$('rc-date').value || $('rc-date').value === today) ? 'Чеки за сегодня'
+      : 'Чеки за ' + new Date($('rc-date').value).toLocaleDateString('ru-RU');
+    renderReceipts();
+    if (rc.current) {
+      var fresh = rc.list.filter(function (r) { return r.id === rc.current.id; })[0];
+      if (fresh) { rc.current = fresh; renderReceipt(); }
+    }
+  }
+
+  function renderReceipts() {
+    if (!rc.list.length) { $('rc-list').innerHTML = '<p class="muted">Чеков нет.</p>'; return; }
+    var sum = rc.list.reduce(function (s, r) { return s + Number(r.total) - Number(r.refunded_amount || 0); }, 0);
+    $('rc-list').innerHTML = '<p class="muted" style="margin:0 0 4px">' + rc.list.length + ' чек(ов) · выручка за вычетом возвратов ' + money(sum) + '</p>' +
+      rc.list.map(function (r) {
+        var names = (r.items || []).map(function (i) { return i.name + (i.quantity > 1 ? ' ×' + i.quantity : ''); }).join(', ');
+        return '<button class="rc-row" data-id="' + esc(r.id) + '"><span class="no">' + esc(shortNo(r.order_number)) + '</span>' +
+          '<span class="tm">' + hhmm(r.created_at) + '</span><span class="it">' + esc(names) + '</span>' +
+          payTag(r.payment_method) + refundTag(r) + '<span class="sm">' + money(r.total) + '</span></button>';
+      }).join('');
+    $('rc-list').querySelectorAll('.rc-row').forEach(function (b) {
+      b.addEventListener('click', function () { openReceipt(b.dataset.id); });
+    });
+  }
+
+  function openReceipt(id) {
+    rc.current = rc.list.filter(function (r) { return r.id === id; })[0];
+    rc.sel = {};
+    rc.pending = null;
+    $('rc-ok').innerHTML = '';
+    $('rc-error').textContent = '';
+    $('rc-list-view').style.display = 'none';
+    $('rc-detail-view').style.display = '';
+    renderReceipt();
+  }
+
+  function selectedRefund() {
+    var r = rc.current, sum = 0, items = [];
+    var ratio = Number(r.subtotal) > 0 ? Number(r.total) / Number(r.subtotal) : 1;
+    (r.items || []).forEach(function (i) {
+      var q = rc.sel[i.id] || 0;
+      if (q > 0) { items.push({ orderItemId: i.id, quantity: q }); sum += Number(i.subtotal) * q / i.quantity * ratio; }
+    });
+    return { items: items, sum: Math.round(sum * 100) / 100 };
+  }
+
+  function renderReceipt() {
+    var r = rc.current;
+    if (!r) return;
+    var cancelled = r.status === 'cancelled';
+    var refunded = Number(r.refunded_amount) || 0;
+    var lines = (r.items || []).map(function (i) {
+      var left = i.quantity - (i.refundedQuantity || 0);
+      var q = rc.sel[i.id] || 0;
+      return '<div class="rc-line"><span class="n">' + esc(i.name) + ' × ' + i.quantity +
+        '<small>' + money(i.subtotal) + (i.refundedQuantity ? ' · возвращено ' + i.refundedQuantity + ' шт.' : '') + '</small></span>' +
+        (left > 0 && !cancelled && !rc.pending
+          ? '<span class="stp"><button data-id="' + esc(i.id) + '" data-d="-1">−</button><span>' + q + '</span>' +
+            '<button data-id="' + esc(i.id) + '" data-d="1">+</button></span>'
+          : '<span class="muted" style="margin:0">' + (left > 0 ? '' : 'возвращено') + '</span>') + '</div>';
+    }).join('');
+    var sel = selectedRefund();
+    var hist = (r.history || []).map(function (h) {
+      return '<div>' + new Date(h.createdAt).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) + ' · ' +
+        (h.kind === 'refund' ? 'возврат ' + money(h.amount) : 'оплата изменена на «' + (h.newPaymentMethod === 'card' ? 'карта' : 'наличные') + '»') +
+        (h.approvedBy ? ' · подтвердил ' + esc(h.approvedBy) : '') + (h.reason ? ' · ' + esc(h.reason) : '') + '</div>';
+    }).join('');
+    var other = r.payment_method === 'card' ? 'cash' : 'card';
+    var html = '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">' +
+      '<div><h2 style="margin:0">' + esc(r.order_number) + '</h2><div class="muted" style="margin:4px 0 0">' +
+      new Date(r.created_at).toLocaleString('ru-RU') + (r.cashier ? ' · кассир ' + esc(r.cashier) : '') + '</div></div>' +
+      '<div style="text-align:right"><div style="font-size:22px;font-weight:700">' + money(r.total) + '</div>' + payTag(r.payment_method) + refundTag(r) + '</div></div>' +
+      (Number(r.discount_amount) > 0 ? '<div class="muted" style="margin:6px 0 0">Скидка ' + money(r.discount_amount) + '</div>' : '') +
+      '<div style="margin-top:10px">' + lines + '</div>' +
+      (hist ? '<div class="rc-hist"><b>История</b>' + hist + '</div>' : '');
+    if (!cancelled && !rc.pending) {
+      html += '<label class="label" for="rc-reason">Причина (необязательно)</label>' +
+        '<input id="rc-reason" type="text" maxlength="200" placeholder="Например: гость передумал" value="' + esc(rc.reason) + '">' +
+        '<div class="rc-actions">' +
+        '<button class="btn-danger" id="btn-rc-refund-sel"' + (sel.items.length ? '' : ' disabled') + '>Вернуть выбранное' + (sel.items.length ? ' · ' + money(sel.sum) : '') + '</button>' +
+        '<button class="btn-danger" id="btn-rc-refund-all">Вернуть весь чек · ' + money(Number(r.total) - refunded) + '</button>' +
+        (refunded > 0 ? '' : '<button class="btn-secondary" id="btn-rc-pay">Сменить оплату на «' + (other === 'card' ? 'Картой' : 'Наличные') + '»</button>') +
+        '</div>';
+    }
+    if (rc.pending) {
+      var dots = '';
+      for (var k = 0; k < PIN_LEN; k++) dots += '<span class="' + (k < rc.pin.length ? 'filled' : '') + '"></span>';
+      html += '<div class="approve-box"><h3>Подтверждение администратора</h3><p class="muted" style="margin:0">' + esc(rc.pending.title) +
+        '. Владелец или админ вводит свой PIN.</p><div class="pin-dots">' + dots + '</div><div class="keypad" id="rc-keypad">' +
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'X'].map(function (key) {
+          return '<button data-k="' + key + '"' + (key.length > 0 && isNaN(key) ? ' class="wide"' : '') + '>' +
+            (key === 'C' ? 'Стереть' : key === 'X' ? 'Отмена' : key) + '</button>';
+        }).join('') + '</div><p class="error" id="rc-pin-error"></p></div>';
+    }
+    $('rc-detail').innerHTML = html;
+    $('rc-detail').querySelectorAll('.stp button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var it = (r.items || []).filter(function (x) { return x.id === b.dataset.id; })[0];
+        var left = it.quantity - (it.refundedQuantity || 0);
+        rc.reason = ($('rc-reason') || {}).value || rc.reason;
+        rc.sel[it.id] = Math.max(0, Math.min(left, (rc.sel[it.id] || 0) + Number(b.dataset.d)));
+        renderReceipt();
+      });
+    });
+    var pick = function (id, fn) { var el = $(id); if (el) el.addEventListener('click', fn); };
+    pick('btn-rc-refund-sel', function () { startAction('refund', selectedRefund().items, 'Возврат ' + money(selectedRefund().sum)); });
+    pick('btn-rc-refund-all', function () {
+      var all = (r.items || []).map(function (i) { return { orderItemId: i.id, quantity: i.quantity - (i.refundedQuantity || 0) }; })
+        .filter(function (x) { return x.quantity > 0; });
+      startAction('refund', all, 'Возврат всего чека ' + money(Number(r.total) - refunded));
+    });
+    pick('btn-rc-pay', function () { startAction('payment_change', other, 'Смена оплаты на «' + (other === 'card' ? 'карта' : 'наличные') + '»'); });
+    if ($('rc-keypad')) {
+      $('rc-keypad').querySelectorAll('button').forEach(function (b) {
+        b.addEventListener('click', function () { approveKey(b.dataset.k); });
+      });
+    }
+  }
+
+  function startAction(kind, payload, title) {
+    rc.reason = (($('rc-reason') || {}).value || '').trim();
+    // refundId создаётся один раз на действие: повтор после обрыва сети не вернёт деньги дважды
+    rc.pending = { kind: kind, payload: payload, title: title, refundId: uuid() };
+    rc.pin = '';
+    $('rc-ok').innerHTML = '';
+    $('rc-error').textContent = '';
+    renderReceipt();
+  }
+
+  async function approveKey(k) {
+    if (!rc.pending || state.busy) return;
+    if (k === 'X') { rc.pending = null; rc.pin = ''; renderReceipt(); return; }
+    if (k === 'C') { rc.pin = rc.pin.slice(0, -1); renderReceipt(); return; }
+    if (rc.pin.length < PIN_LEN) rc.pin += k;
+    renderReceipt();
+    if (rc.pin.length < PIN_LEN) return;
+    state.busy = true;
+    var p = rc.pending;
+    try {
+      var ap = await posApi('/api/auth/cash-register/approve', {
+        method: 'POST',
+        body: JSON.stringify({ registerId: state.register.id, pin: rc.pin, action: p.kind }),
+      });
+      var url = '/api/pos/receipts/' + encodeURIComponent(rc.current.id) + (p.kind === 'refund' ? '/refund' : '/payment-method');
+      var body = { refundId: p.refundId, approvalToken: ap.approvalToken, reason: rc.reason || undefined };
+      if (p.kind === 'refund') body.items = p.payload; else body.paymentMethod = p.payload;
+      var d = await posApi(url, { method: 'POST', body: JSON.stringify(body) });
+      var res = d.refund || d.change || {};
+      rc.pending = null;
+      rc.sel = {};
+      rc.reason = '';
+      $('rc-ok').innerHTML = '<div class="ok-msg">' + (p.kind === 'refund'
+        ? '↩️ Возврат ' + money(res.amount) + ' оформлен (подтвердил ' + esc(ap.approverName) + ').' +
+          (res.paymentMethod === 'cash' ? ' Выдайте наличные из кассы.' : ' Верните деньги на карту через терминал.')
+        : '✅ Оплата изменена на «' + (res.paymentMethod === 'card' ? 'карта' : 'наличные') + '» (подтвердил ' + esc(ap.approverName) + ')') + '</div>';
+      await loadReceipts();
+    } catch (err) {
+      rc.pin = '';
+      renderReceipt();
+      var el = $('rc-pin-error');
+      if (err.status === 403 && /разблокируйте|PIN кассира|сесси/i.test(err.message)) return lockScreen(err.message);
+      if (el && (err.status === 401 || err.status === 429 || err.code === 'NO_ADMIN_PIN')) { el.textContent = err.message; }
+      else { rc.pending = null; renderReceipt(); $('rc-error').textContent = '❌ ' + err.message; }
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  $('btn-receipts').addEventListener('click', function () {
+    $('checks-panel').style.display = 'none';
+    $('receipts-panel').style.display = '';
+    $('rc-list-view').style.display = '';
+    $('rc-detail-view').style.display = 'none';
+    rc.current = null;
+    rc.pending = null;
+    $('rc-ok').innerHTML = '';
+    $('rc-list').innerHTML = '<p class="muted">Загрузка…</p>';
+    loadReceipts();
+  });
+  $('btn-receipts-close').addEventListener('click', function () { rc.pending = null; $('receipts-panel').style.display = 'none'; });
+  $('btn-rc-back').addEventListener('click', function () {
+    rc.current = null; rc.pending = null; $('rc-ok').innerHTML = '';
+    $('rc-detail-view').style.display = 'none'; $('rc-list-view').style.display = ''; renderReceipts();
+  });
+  $('btn-rc-refresh').addEventListener('click', loadReceipts);
+  $('rc-date').addEventListener('change', loadReceipts);
+  var rcSearchTimer = null;
+  $('rc-search').addEventListener('input', function () { clearTimeout(rcSearchTimer); rcSearchTimer = setTimeout(loadReceipts, 400); });
+  document.addEventListener('keydown', function (e) {
+    if (!rc.pending || $('receipts-panel').style.display === 'none') return;
+    if (/^[0-9]$/.test(e.key)) approveKey(e.key);
+    else if (e.key === 'Backspace') approveKey('C');
+    else if (e.key === 'Escape') approveKey('X');
   });
 
   // ── старт ──

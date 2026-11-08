@@ -11,6 +11,7 @@ import tablesRouter from './routes/tables';
 import discountsRouter from './routes/discounts';
 import { createPosRouter } from './routes/pos';
 import { PosSaleService } from './services/pos-sale.service';
+import { PosRefundService } from './services/pos-refund.service';
 
 const app = express();
 const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
@@ -20,6 +21,21 @@ const posSaleService = new PosSaleService(
   orderService.outbox,
   order => orderService.deductStockForOrder(order)
 );
+// Возврат чека: товар обратно на склад — тот же склад и та же себестоимость
+const posRefundService = new PosRefundService(posPool, config.jwt.secret, async (r) => {
+  try {
+    const res = await fetch(`${config.inventoryServiceUrl}/api/inventory/return-by-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Token': config.internalToken },
+      body: JSON.stringify(r)
+    });
+    const body: any = await res.json().catch(() => ({}));
+    if (!res.ok) logger.error(`Возврат ${r.refundId}: склад не принял (${res.status}) ${JSON.stringify(body)}`);
+    else logger.info(`Возврат ${r.refundId}: на склад вернулось позиций ${body.returned?.length ?? 0}`);
+  } catch (e) {
+    logger.error(`Возврат ${r.refundId}: ошибка вызова склада: ${(e as Error).message}`);
+  }
+});
 
 app.use(helmet());
 app.use(cors());
@@ -54,7 +70,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 app.use('/api/orders', ordersRouter);
-app.use('/api/pos', createPosRouter(posSaleService, posPool));
+app.use('/api/pos', createPosRouter(posSaleService, posPool, posRefundService));
 app.use('/api/tables', tablesRouter);
 app.use('/api/discounts', discountsRouter);
 

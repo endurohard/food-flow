@@ -1418,15 +1418,27 @@ AUTH.requireAuth();
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Тип</label>
-            <select class="form-select" id="movementType" required>
-              <option value="in">Приход</option>
-              <option value="out">Расход</option>
-              <option value="adjustment">Корректировка</option>
+            <!-- Значения — ровно те, что принимает сервер. Раньше здесь были
+                 in/out/adjustment, и любая запись отклонялась. -->
+            <select class="form-select" id="movementType" required onchange="syncMovementForm()">
+              <option value="receipt">Приход</option>
+              <option value="write_off">Списание (брак, порча)</option>
+              <option value="adjustment_plus">Корректировка +</option>
+              <option value="adjustment_minus">Корректировка −</option>
+              <option value="transfer">Перемещение на другой склад</option>
             </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;" id="movementPriceWrap">
+            <label class="form-label">Цена за единицу, ₽</label>
+            <input type="number" class="form-input" id="movementPrice" step="0.01" min="0" placeholder="для себестоимости">
+          </div>
+          <div class="form-group" style="margin-bottom:0;display:none;" id="movementTargetWrap">
+            <label class="form-label">На склад</label>
+            <select class="form-select" id="movementTarget"></select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Количество</label>
-            <input type="number" class="form-input" id="movementQty" step="0.01" min="0.01" required>
+            <input type="number" class="form-input" id="movementQty" step="0.001" min="0.001" required>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Примечание</label>
@@ -2407,6 +2419,8 @@ AUTH.requireAuth();
       const movementType = document.getElementById('movementType').value;
       const quantity = parseFloat(document.getElementById('movementQty').value);
       const notes = document.getElementById('movementNotes').value;
+      const priceRaw = document.getElementById('movementPrice').value;
+      const target = document.getElementById('movementTarget').value;
       const resultEl = document.getElementById('movementResult');
 
       if (!warehouseId || !itemId) {
@@ -2414,20 +2428,31 @@ AUTH.requireAuth();
         resultEl.textContent = 'Выберите склад и товар';
         return;
       }
+      if (movementType === 'transfer' && (!target || target === warehouseId)) {
+        resultEl.style.color = 'var(--color-danger)';
+        resultEl.textContent = 'Выберите другой склад, куда перемещаете';
+        return;
+      }
 
       try {
-        const res = await AUTH.fetch('/api/inventory/movements', {
+        const isTransfer = movementType === 'transfer';
+        const body = isTransfer
+          ? { fromWarehouseId: warehouseId, toWarehouseId: target, inventoryItemId: itemId, quantity, notes }
+          : { warehouseId, inventoryItemId: itemId, movementType, quantity, notes: notes || undefined };
+        if (!isTransfer && movementType === 'receipt' && priceRaw !== '') body.costPrice = parseFloat(priceRaw);
+        const res = await AUTH.fetch(isTransfer ? '/api/inventory/transfers' : '/api/inventory/movements', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ warehouseId, inventoryItemId: itemId, movementType, quantity, notes })
+          body: JSON.stringify(body)
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || 'HTTP ' + res.status);
+          throw new Error(err.message || err.error || 'HTTP ' + res.status);
         }
         resultEl.style.color = 'var(--color-success)';
-        resultEl.textContent = 'Движение записано';
+        resultEl.textContent = isTransfer ? 'Перемещено' : 'Движение записано';
         document.getElementById('movementForm').reset();
+        syncMovementForm();
         await reloadInventoryFromAPI();
       } catch (e) {
         resultEl.style.color = 'var(--color-danger)';
@@ -2440,10 +2465,22 @@ AUTH.requireAuth();
     function loadWarehouses() {
       const sel = document.getElementById('movementWarehouse');
       if (!sel) return;
-      sel.innerHTML = warehouses.length
-        ? warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
-        : '<option value="">Складов нет — движение записать некуда</option>';
+      const opts = warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('');
+      sel.innerHTML = warehouses.length ? opts : '<option value="">Складов нет — движение записать некуда</option>';
+      const tgt = document.getElementById('movementTarget');
+      if (tgt) tgt.innerHTML = warehouses.length > 1 ? opts : '<option value="">Нужен второй склад</option>';
+      syncMovementForm();
     }
+
+    // Цена нужна только приходу, склад-получатель — только перемещению
+    function syncMovementForm() {
+      const type = (document.getElementById('movementType') || {}).value;
+      const price = document.getElementById('movementPriceWrap');
+      const tgt = document.getElementById('movementTargetWrap');
+      if (price) price.style.display = type === 'receipt' ? '' : 'none';
+      if (tgt) tgt.style.display = type === 'transfer' ? '' : 'none';
+    }
+    window.syncMovementForm = syncMovementForm;
 
     function updateMovementItemOptions() {
       const sel = document.getElementById('movementItem');

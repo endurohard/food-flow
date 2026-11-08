@@ -141,6 +141,32 @@
     .check-card .acts button { flex: 1; padding: 10px; font-size: 15px; }
     #till-screen { position: relative; }
 
+    /* ── Чеки смены: просмотр, возврат, смена оплаты ── */
+    .rc-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .rc-tools input { width: auto; flex: 1; min-width: 140px; padding: 10px 12px; font-size: 15px; }
+    .rc-list { display: flex; flex-direction: column; gap: 8px; }
+    .rc-row { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8);
+              border-radius: 12px; padding: 12px 14px; text-align: left; width: 100%; font-size: 15px; color: inherit; }
+    .rc-row .no { font-weight: 700; min-width: 120px; }
+    .rc-row .tm { color: var(--color-text-secondary, #6b7280); min-width: 50px; }
+    .rc-row .it { flex: 1; color: var(--color-text-secondary, #6b7280); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rc-row .sm { font-weight: 700; min-width: 90px; text-align: right; }
+    .tag { font-size: 12px; padding: 3px 8px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
+    .tag.cash { background: #e8f5e9; color: #1b5e20; } .tag.card { background: #e3f2fd; color: #0d47a1; }
+    .tag.ref { background: #fdecea; color: #b71c1c; } .tag.part { background: #fff4e5; color: #8a5300; }
+    .rc-detail { background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8); border-radius: 14px; padding: 16px; max-width: 720px; }
+    .rc-line { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f1f3; font-size: 15px; }
+    .rc-line .n { flex: 1; }
+    .rc-line .n small { display: block; color: var(--color-text-secondary, #6b7280); font-size: 13px; }
+    .rc-line .stp { display: flex; align-items: center; gap: 6px; }
+    .rc-line .stp button { width: 36px; height: 36px; background: #f4f5f7; font-size: 18px; color: inherit; }
+    .rc-line .stp span { min-width: 22px; text-align: center; font-weight: 700; }
+    .rc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .rc-actions button { padding: 12px 14px; font-size: 15px; }
+    .rc-hist { margin-top: 12px; font-size: 13px; color: var(--color-text-secondary, #6b7280); }
+    .approve-box { margin-top: 16px; border: 2px solid var(--color-primary, #1f8f5f); border-radius: 14px; padding: 16px; max-width: 360px; }
+    .approve-box h3 { margin: 0 0 4px; font-size: 17px; }
+
     @media (max-width: 760px) {
       .till-main { flex-direction: column; }
       .cart-col { width: 100%; max-height: 45%; border-left: none; border-top: 1px solid var(--admin-panel-border, #e3e5e8); }
@@ -194,6 +220,7 @@
     <div class="till-header">
       <div class="title"><span id="till-register">Касса</span><small id="till-sub"></small></div>
       <button class="btn-secondary" id="btn-checks">🧾 Отложенные <span id="checks-count" class="badge open">0</span></button>
+      <button class="btn-secondary" id="btn-receipts">📜 Чеки смены</button>
       <button class="btn-secondary" id="btn-lock">🔒 Заблокировать / сменить кассира</button>
       <button class="btn-danger" id="btn-close-shift">Закрыть смену</button>
     </div>
@@ -205,6 +232,27 @@
       </div>
       <div id="checks-list" class="checks-list"></div>
       <p class="error" id="checks-error"></p>
+    </div>
+    <!-- Пробитые чеки: просмотр, возврат, смена оплаты (PIN администратора) -->
+    <div id="receipts-panel" class="checks-panel" style="display:none">
+      <div class="checks-head">
+        <h2 style="margin:0" id="rc-title">Чеки за сегодня</h2>
+        <button class="btn-secondary" id="btn-receipts-close">Закрыть</button>
+      </div>
+      <div id="rc-list-view">
+        <div class="rc-tools">
+          <input id="rc-search" type="text" inputmode="search" placeholder="Номер чека, например 9E0C4F">
+          <input id="rc-date" type="date" style="flex:0 0 auto">
+          <button class="btn-secondary" id="btn-rc-refresh">Обновить</button>
+        </div>
+        <div id="rc-list" class="rc-list"></div>
+      </div>
+      <div id="rc-detail-view" style="display:none">
+        <button class="btn-secondary" id="btn-rc-back" style="margin-bottom:12px">← Все чеки</button>
+        <div class="rc-detail" id="rc-detail"></div>
+      </div>
+      <p class="error" id="rc-error"></p>
+      <div id="rc-ok"></div>
     </div>
     <div class="till-main">
       <div class="menu-col">

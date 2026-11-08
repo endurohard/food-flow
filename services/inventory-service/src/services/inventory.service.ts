@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import pkg from 'pg';
 const { Pool } = pkg;
 
@@ -512,12 +513,14 @@ export class InventoryService {
           // Record movement
           await client.query(
             `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type,
-              quantity, cost_price, reference_type, reference_id, performed_by, notes)
-             VALUES ($1, $2, $3, 'sale', $4, $5, 'order', $6, $7, $8)`,
+              quantity, cost_price, reference_type, reference_id, performed_by, notes, order_item_id)
+             VALUES ($1, $2, $3, 'sale', $4, $5, 'order', $6, $7, $8, $9)`,
             [
               enterpriseId || null, warehouseId, inventoryItemId, totalQty,
               totalQty > 0 ? cost / totalQty : 0, orderId, performedBy || null,
-              note
+              note,
+              // Строка чека: по ней возврат вернёт ровно то, что списала эта позиция
+              orderItem.order_item_id || null
             ]
           );
 
@@ -739,6 +742,200 @@ export class InventoryService {
       values
     );
     return result.rows;
+  }
+
+  /** Склады и позиции, затронутые заказом, — для перепроверки минимумов после возврата. */
+  async warehousesOfOrder(orderId: string): Promise<Array<{ warehouse_id: string; items: string[] }>> {
+    const r = await this.pool.query(
+      `SELECT warehouse_id, array_agg(DISTINCT inventory_item_id) AS items
+         FROM stock_movements WHERE reference_id = $1 GROUP BY warehouse_id`,
+      [orderId]
+    );
+    return r.rows;
+  }
+
+  /** Приход на склад внутри транзакции: остаток + партия (минус закрывается первым). */
+  private async inflow(client: any, warehouseId: string, itemId: string, qty: number, cost: number, enterpriseId: string) {
+    const r = await client.query(
+      `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity) VALUES ($1, $2, $3)
+       ON CONFLICT (warehouse_id, inventory_item_id)
+       DO UPDATE SET quantity = inventory_stock.quantity + $3, updated_at = NOW()
+       RETURNING quantity`,
+      [warehouseId, itemId, qty]
+    );
+    const after = parseFloat(r.rows?.[0]?.quantity);
+    const before = Number.isFinite(after) ? after - qty : 0;
+    const batchQty = qty - Math.min(qty, Math.max(0, -before));
+    if (batchQty > 1e-9) {
+      await client.query(
+        `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, quantity, cost_price)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [itemId, warehouseId, enterpriseId, batchQty, cost || null]
+      );
+    }
+  }
+
+  /**
+   * Возврат на склад по возврату чека: ровно то, что списала каждая строка
+   * чека (stock_movements.order_item_id), пропорционально возвращённому
+   * количеству и по той же себестоимости. Уже возвращённое не возвращается
+   * повторно; повтор с тем же refundId ничего не делает. Строки, проданные
+   * до появления привязки к строке чека, возвращаются пропорционально всему
+   * чеку.
+   */
+  async returnByOrder(data: {
+    orderId: string; refundId: string; enterpriseId: string; performedBy?: string;
+    items: Array<{ orderItemId: string; quantity: number }>;
+  }): Promise<{ returned: Array<{ inventoryItemId: string; quantity: number }>; replayed: boolean }> {
+    const tag = `[возврат ${data.refundId}]`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Сериализуем возвраты одного чека: два параллельных не вернут дважды
+      const ord = await client.query(
+        `SELECT id, order_number FROM orders WHERE id = $1 AND enterprise_id = $2 FOR UPDATE`,
+        [data.orderId, data.enterpriseId]
+      );
+      if (!ord.rows[0]) throw new Error('ORDER_NOT_FOUND');
+      const done = await client.query(
+        `SELECT 1 FROM stock_movements WHERE reference_type = 'order_return' AND reference_id = $1 AND notes LIKE $2 LIMIT 1`,
+        [data.orderId, `%${tag}%`]
+      );
+      if (done.rowCount) { await client.query('COMMIT'); return { returned: [], replayed: true }; }
+
+      const lines = await client.query(
+        `SELECT id, quantity FROM order_items WHERE order_id = $1`, [data.orderId]
+      );
+      const lineQty = new Map<string, number>(lines.rows.map((l: any) => [l.id, Number(l.quantity)]));
+      const totalUnits = [...lineQty.values()].reduce((a, b) => a + b, 0) || 1;
+
+      const sales = await client.query(
+        `SELECT warehouse_id, inventory_item_id, order_item_id, sum(quantity) AS qty,
+                sum(quantity * coalesce(cost_price, 0)) / NULLIF(sum(quantity), 0) AS cost
+           FROM stock_movements
+          WHERE reference_id = $1 AND movement_type = 'sale'
+          GROUP BY warehouse_id, inventory_item_id, order_item_id`,
+        [data.orderId]
+      );
+      const back = await client.query(
+        `SELECT warehouse_id, inventory_item_id, order_item_id, sum(quantity) AS qty
+           FROM stock_movements
+          WHERE reference_type = 'order_return' AND reference_id = $1
+          GROUP BY warehouse_id, inventory_item_id, order_item_id`,
+        [data.orderId]
+      );
+      const key = (r: any) => `${r.warehouse_id}|${r.inventory_item_id}|${r.order_item_id || ''}`;
+      const already = new Map<string, number>(back.rows.map((r: any) => [key(r), parseFloat(r.qty)]));
+
+      const returned: Array<{ inventoryItemId: string; quantity: number }> = [];
+      const legacyUnits = data.items.reduce((s, i) => s + i.quantity, 0);
+      for (const s of sales.rows) {
+        const sold = parseFloat(s.qty);
+        let want = 0;
+        if (s.order_item_id) {
+          const req = data.items.find((i) => i.orderItemId === s.order_item_id);
+          const lq = lineQty.get(s.order_item_id) || 0;
+          if (!req || !lq) continue;
+          want = sold * Math.min(req.quantity, lq) / lq;
+        } else {
+          want = sold * Math.min(legacyUnits, totalUnits) / totalUnits;
+        }
+        const qty = Math.round(Math.min(want, sold - (already.get(key(s)) || 0)) * 1000) / 1000;
+        if (qty <= 0) continue;
+        await this.inflow(client, s.warehouse_id, s.inventory_item_id, qty, parseFloat(s.cost) || 0, data.enterpriseId);
+        await client.query(
+          `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type, quantity,
+             cost_price, reference_type, reference_id, performed_by, notes, order_item_id)
+           VALUES ($1, $2, $3, 'return', $4, $5, 'order_return', $6, $7, $8, $9)`,
+          [data.enterpriseId, s.warehouse_id, s.inventory_item_id, qty, parseFloat(s.cost) || 0, data.orderId,
+           data.performedBy || null, `Возврат по чеку ${ord.rows[0].order_number} ${tag}`, s.order_item_id]
+        );
+        returned.push({ inventoryItemId: s.inventory_item_id, quantity: qty });
+      }
+      await client.query('COMMIT');
+      return { returned, replayed: false };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Перемещение между складами одного предприятия одной транзакцией:
+   * с исходного склада товар уходит по FIFO (со своей себестоимостью),
+   * на целевой приходит партией по той же средней цене. Раньше тип
+   * «перемещение» только уменьшал остаток — товар исчезал в никуда.
+   * Перемещать можно только то, что есть: в минус перемещение не уводит.
+   */
+  async transfer(data: {
+    fromWarehouseId: string; toWarehouseId: string; inventoryItemId: string;
+    quantity: number; notes?: string; performedBy?: string; enterpriseId: string;
+  }): Promise<{ transferId: string; costPrice: number; fromQuantity: number; toQuantity: number }> {
+    if (data.fromWarehouseId === data.toWarehouseId) throw new Error('TRANSFER_SAME_WAREHOUSE');
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const wh = await client.query(
+        `SELECT id FROM warehouses WHERE id = ANY($1::uuid[]) AND enterprise_id = $2 AND is_active = true`,
+        [[data.fromWarehouseId, data.toWarehouseId], data.enterpriseId]
+      );
+      if (wh.rowCount !== 2) throw new Error('TRANSFER_WAREHOUSE_NOT_FOUND');
+      const src = await client.query(
+        `SELECT quantity FROM inventory_stock WHERE warehouse_id = $1 AND inventory_item_id = $2 FOR UPDATE`,
+        [data.fromWarehouseId, data.inventoryItemId]
+      );
+      const have = parseFloat(src.rows[0]?.quantity ?? '0');
+      if (have + 1e-9 < data.quantity) throw new Error(`TRANSFER_INSUFFICIENT:${have}`);
+
+      const transferId = crypto.randomUUID();
+      const fifo = await this.consumeBatchesFIFO(client, data.fromWarehouseId, data.inventoryItemId, data.quantity);
+      const cost = (fifo.cost + fifo.uncovered * (await this.lastCost(client, data.inventoryItemId))) / data.quantity;
+      const note = data.notes ? `Перемещение: ${data.notes}` : 'Перемещение между складами';
+
+      const out = await client.query(
+        `UPDATE inventory_stock SET quantity = quantity - $1, updated_at = NOW()
+          WHERE warehouse_id = $2 AND inventory_item_id = $3 RETURNING quantity`,
+        [data.quantity, data.fromWarehouseId, data.inventoryItemId]
+      );
+      await client.query(
+        `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type, quantity,
+           cost_price, reference_type, reference_id, performed_by, notes)
+         VALUES ($1, $2, $3, 'transfer', $4, $5, 'transfer', $6, $7, $8)`,
+        [data.enterpriseId, data.fromWarehouseId, data.inventoryItemId, data.quantity, cost, transferId, data.performedBy || null, note]
+      );
+      const inn = await client.query(
+        `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity) VALUES ($1, $2, $3)
+         ON CONFLICT (warehouse_id, inventory_item_id)
+         DO UPDATE SET quantity = inventory_stock.quantity + $3, updated_at = NOW()
+         RETURNING quantity`,
+        [data.toWarehouseId, data.inventoryItemId, data.quantity]
+      );
+      // На целевом складе мог быть минус — его закрывает приход, партия только на остаток
+      const after = parseFloat(inn.rows[0].quantity);
+      const batchQty = data.quantity - Math.min(data.quantity, Math.max(0, -(after - data.quantity)));
+      if (batchQty > 1e-9) {
+        await client.query(
+          `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, quantity, cost_price)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [data.inventoryItemId, data.toWarehouseId, data.enterpriseId, batchQty, cost]
+        );
+      }
+      await client.query(
+        `INSERT INTO stock_movements (enterprise_id, warehouse_id, inventory_item_id, movement_type, quantity,
+           cost_price, reference_type, reference_id, performed_by, notes)
+         VALUES ($1, $2, $3, 'transfer_in', $4, $5, 'transfer', $6, $7, $8)`,
+        [data.enterpriseId, data.toWarehouseId, data.inventoryItemId, data.quantity, cost, transferId, data.performedBy || null, note]
+      );
+      await client.query('COMMIT');
+      return { transferId, costPrice: cost, fromQuantity: parseFloat(out.rows[0].quantity), toQuantity: after };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 
   /**

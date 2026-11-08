@@ -470,6 +470,58 @@ export class AuthService {
     return sessionId;
   }
 
+  /**
+   * Подтверждение действия на кассе PIN-ом владельца или админа (возврат,
+   * правка чека). Сессия кассы должна быть живой и принадлежать кассиру.
+   * Пять неверных PIN подряд — подтверждение на этой смене закрыто 5 минут.
+   * Ответ — короткий (5 мин) подписанный допуск на одно действие.
+   */
+  async approvePosAction(p: { enterpriseId: string; cashierId: string; registerId: string; sessionId: string; pin: string; action: string }):
+      Promise<{ approvalToken: string; approverId: string; approverName: string }> {
+    const s = await this.pool.query(
+      `SELECT id, approve_failures, approve_locked_until > NOW() AS locked
+         FROM cash_register_sessions
+        WHERE id = $1 AND user_id = $2 AND register_id = $3 AND status = 'active' AND expires_at > NOW()`,
+      [p.sessionId, p.cashierId, p.registerId]
+    );
+    if (!s.rows[0]) throw new AuthError('Сессия кассы неактивна — разблокируйте кассу PIN-ом кассира', 403, 'SESSION');
+    if (s.rows[0].locked) throw new AuthError('Слишком много неверных PIN — подождите 5 минут', 429, 'LOCKED');
+
+    const admins = await this.pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.pin_hash
+         FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
+        WHERE eu.enterprise_id = $1 AND eu.role IN ('owner', 'admin') AND eu.is_active = true
+          AND u.is_active = true AND u.pin_hash IS NOT NULL`,
+      [p.enterpriseId]
+    );
+    let approver: any = null;
+    for (const a of admins.rows) {
+      if (await bcrypt.compare(p.pin, a.pin_hash)) { approver = a; break; }
+    }
+    if (!approver) {
+      await this.pool.query(
+        `UPDATE cash_register_sessions
+            SET approve_failures = CASE WHEN approve_failures + 1 >= 5 THEN 0 ELSE approve_failures + 1 END,
+                approve_locked_until = CASE WHEN approve_failures + 1 >= 5 THEN NOW() + INTERVAL '5 minutes' ELSE approve_locked_until END
+          WHERE id = $1`,
+        [p.sessionId]
+      );
+      if (!admins.rows.length) {
+        throw new AuthError('В организации никто из администраторов не задал PIN — задайте его в «Устройства»', 409, 'NO_ADMIN_PIN');
+      }
+      throw new AuthError('Неверный PIN администратора', 401, 'BAD_PIN');
+    }
+    await this.pool.query('UPDATE cash_register_sessions SET approve_failures = 0 WHERE id = $1', [p.sessionId]);
+    const approvalToken = jwt.sign(
+      { typ: 'pos_approval', approverId: approver.id, enterpriseId: p.enterpriseId, registerId: p.registerId,
+        sessionId: p.sessionId, cashierId: p.cashierId, action: p.action },
+      config.jwt.secret,
+      { expiresIn: '5m' }
+    );
+    const approverName = [approver.first_name, approver.last_name].filter(Boolean).join(' ') || approver.email;
+    return { approvalToken, approverId: approver.id, approverName };
+  }
+
   /** Последняя сессия кассира на кассе (без ORDER BY бралась случайная из нескольких). */
   async getCashRegisterSessionByRegister(registerId: string, userId: string): Promise<any> {
     const result = await this.pool.query(

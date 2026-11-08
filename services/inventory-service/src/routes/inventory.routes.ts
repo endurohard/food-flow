@@ -172,7 +172,10 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
     const schema = Joi.object({
       warehouseId: Joi.string().uuid().required(),
       inventoryItemId: Joi.string().uuid().required(),
-      movementType: Joi.string().valid('receipt', 'write_off', 'transfer', 'sale', 'adjustment_plus', 'adjustment_minus', 'return').required(),
+      // «Перемещение» — отдельным запросом POST /transfers: отсюда оно только
+      // уменьшало бы остаток, и товар пропадал бы, не дойдя до второго склада
+      movementType: Joi.string().valid('receipt', 'write_off', 'sale', 'adjustment_plus', 'adjustment_minus', 'return')
+        .required().messages({ 'any.only': 'Тип движения: приход, списание или корректировка. Перемещение — через «Перемещение между складами»' }),
       quantity: Joi.number().positive().required(),
       costPrice: Joi.number().min(0).optional(),
       referenceType: Joi.string().optional(),
@@ -184,7 +187,7 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
       invoiceId: Joi.string().uuid().optional()
     });
     const { error, value } = schema.validate(req.body);
-    if (error) return res.status(400).json({ error: error.details[0].message });
+    if (error) return res.status(400).json({ error: error.details[0].message, message: error.details[0].message });
 
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {
@@ -209,6 +212,64 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
     return res.status(201).json({ movement });
   } catch (error) {
     console.error('Create movement error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Возврат на склад по возврату чека (вызывает order-service, internal-token)
+router.post('/return-by-order', authenticateInternal, requireRole('admin', 'owner'), async (req: Request, res: Response) => {
+  try {
+    const { error, value } = Joi.object({
+      orderId: Joi.string().uuid().required(),
+      refundId: Joi.string().uuid().required(),
+      enterpriseId: Joi.string().uuid().optional(),
+      performedBy: Joi.string().uuid().optional(),
+      items: Joi.array().items(Joi.object({
+        orderItemId: Joi.string().uuid().required(),
+        quantity: Joi.number().positive().required()
+      })).min(1).required()
+    }).validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+    const enterpriseId = req.isInternal ? value.enterpriseId : req.enterpriseId;
+    if (!enterpriseId) return res.status(400).json({ error: 'enterpriseId required' });
+    const r = await inventoryService.returnByOrder({ ...value, enterpriseId });
+    const whs = await inventoryService.warehousesOfOrder(value.orderId);
+    for (const w of whs) checkStockLater(w.warehouse_id, w.items);
+    return res.json(r);
+  } catch (e: any) {
+    if (e.message === 'ORDER_NOT_FOUND') return res.status(404).json({ error: 'Заказ не найден' });
+    console.error('Return by order error:', e);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Перемещение между складами своего предприятия
+router.post('/transfers', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
+  try {
+    const { error, value } = Joi.object({
+      fromWarehouseId: Joi.string().uuid().required(),
+      toWarehouseId: Joi.string().uuid().required(),
+      inventoryItemId: Joi.string().uuid().required(),
+      quantity: Joi.number().positive().required(),
+      notes: Joi.string().max(500).allow('').optional()
+    }).validate(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message, message: error.details[0].message });
+    if (!req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    if (!(await inventoryService.itemBelongsTo(value.inventoryItemId, req.enterpriseId))) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Позиция не принадлежит предприятию' });
+    }
+    const r = await inventoryService.transfer({ ...value, performedBy: req.userId, enterpriseId: req.enterpriseId });
+    checkStockLater(value.fromWarehouseId, [value.inventoryItemId]);
+    checkStockLater(value.toWarehouseId, [value.inventoryItemId]);
+    return res.status(201).json(r);
+  } catch (e: any) {
+    const m = String(e.message || '');
+    if (m === 'TRANSFER_SAME_WAREHOUSE') return res.status(400).json({ error: m, message: 'Склады отправки и получения совпадают' });
+    if (m === 'TRANSFER_WAREHOUSE_NOT_FOUND') return res.status(403).json({ error: m, message: 'Склад не найден в вашем предприятии' });
+    if (m.startsWith('TRANSFER_INSUFFICIENT')) {
+      return res.status(409).json({ error: 'TRANSFER_INSUFFICIENT', message: `На складе отправки только ${parseFloat(m.split(':')[1]) || 0} — переместить больше нельзя` });
+    }
+    console.error('Transfer error:', e);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

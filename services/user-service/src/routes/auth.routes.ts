@@ -359,6 +359,34 @@ router.post('/cash-register/lock', authenticateUser, async (req: Request, res: R
   }
 });
 
+const approveSchema = Joi.object({
+  registerId: Joi.string().uuid().required(),
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required().messages({ 'string.pattern.base': 'PIN — 4 цифры' }),
+  action: Joi.string().valid('refund', 'payment_change').required(),
+});
+
+/** PIN владельца/админа подтверждает возврат или правку чека на кассе. */
+router.post('/cash-register/approve', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const { error, value } = approveSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (!(await checkRegister(req, res, value.registerId))) return;
+    const sessionId = String(req.headers['x-register-session'] || '');
+    if (!/^[0-9a-f-]{36}$/i.test(sessionId)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Нет сессии кассы — войдите по PIN кассира' });
+    }
+    const r = await authService.approvePosAction({
+      enterpriseId: req.enterpriseId!, cashierId: req.userId!, registerId: value.registerId,
+      sessionId, pin: value.pin, action: value.action,
+    });
+    return res.json(r);
+  } catch (error: any) {
+    if (error instanceof AuthError) return res.status(error.statusCode).json({ error: error.code || 'Error', message: error.message });
+    console.error('Cash register approve error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 /** Снимает блокировку PIN-ом и продлевает ту же сессию. */
 router.post('/cash-register/unlock', authenticateUser, async (req: Request, res: Response) => {
   try {
