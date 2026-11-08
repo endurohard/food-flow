@@ -266,9 +266,14 @@ AUTH.applyBusinessType = function () {
     const allowed = MODULE_ACCESS[page];
     // Скрываем с !important — страничные стили задают display на .nav-item с !important
     if (!allowed || !type || allowed.includes(type)) {
-      a.style.removeProperty('display');
+      // Снимаем только своё скрытие: пункт мог спрятать ролевой фильтр страницы
+      if (a.dataset.btHidden) {
+        a.style.removeProperty('display');
+        delete a.dataset.btHidden;
+      }
     } else {
       a.style.setProperty('display', 'none', 'important');
+      a.dataset.btHidden = '1';
     }
   });
   this.renderBusinessBadge(type);
