@@ -184,7 +184,7 @@
   (function buildKeypad() {
     var keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'OK'];
     $('keypad').innerHTML = keys.map(function (k) {
-      return '<button data-k="' + k + '"' + (k.length > 1 ? ' class="wide"' : '') + '>' + (k === 'C' ? 'Стереть' : k) + '</button>';
+      return '<button data-k="' + k + '"' + (isNaN(k) ? ' class="wide"' : '') + '>' + (k === 'C' ? 'Стереть' : k) + '</button>';
     }).join('');
     $('keypad').querySelectorAll('button').forEach(function (b) {
       b.addEventListener('click', function () { pressKey(b.dataset.k); });
@@ -626,7 +626,7 @@
   // вводит действие, админ подходит и набирает свой PIN прямо здесь.
   var rc = { list: [], current: null, sel: {}, pending: null, pin: '', reason: '' };
 
-  function payTag(m) { return m === 'card' ? '<span class="tag card">Карта</span>' : '<span class="tag cash">Наличные</span>'; }
+  function payTag(m) { return m === 'card' ? '<span class="tag t-card">Карта</span>' : '<span class="tag t-cash">Наличные</span>'; }
   function refundTag(r) {
     var ref = Number(r.refunded_amount) || 0;
     if (r.status === 'cancelled') return ' <span class="tag ref">Возврат</span>';

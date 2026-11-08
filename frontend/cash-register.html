@@ -87,6 +87,7 @@
     .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
     .keypad button { padding: 18px 0; font-size: 24px; background: #f4f5f7; color: inherit; }
     .keypad button.wide { font-size: 16px; }
+    .rc-row .it { min-width: 0; }
 
     /* ── Продажи ── */
     #till-screen { flex-direction: column; }
@@ -152,7 +153,8 @@
     .rc-row .it { flex: 1; color: var(--color-text-secondary, #6b7280); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rc-row .sm { font-weight: 700; min-width: 90px; text-align: right; }
     .tag { font-size: 12px; padding: 3px 8px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
-    .tag.cash { background: #e8f5e9; color: #1b5e20; } .tag.card { background: #e3f2fd; color: #0d47a1; }
+    /* не .card: этот класс уже занят карточками экранов (белый блок с тенью) */
+    .tag.t-cash { background: #e8f5e9; color: #1b5e20; } .tag.t-card { background: #e3f2fd; color: #0d47a1; }
     .tag.ref { background: #fdecea; color: #b71c1c; } .tag.part { background: #fff4e5; color: #8a5300; }
     .rc-detail { background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8); border-radius: 14px; padding: 16px; max-width: 720px; }
     .rc-line { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f1f3; font-size: 15px; }
