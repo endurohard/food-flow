@@ -275,6 +275,16 @@ const FEATURE_PAGES = {
   'calls.html':         'telephony'
 };
 
+// Есть ли у заведения доставка: от этого зависят колонки «На доставке» /
+// «Доставлено» в «Заказах» и плитки панели. Кофейня, кафе и производство
+// работают у стойки или в зале — статусы доставки у них пустые и только
+// сбивают («почему в кофейне есть Доставлено»). Тип не выбран — показываем.
+const DELIVERY_TYPES = ['restaurant', 'delivery'];
+AUTH.hasDelivery = function () {
+  const type = this.getBusinessType();
+  return !type || DELIVERY_TYPES.includes(type);
+};
+
 AUTH.getFeatures = function () {
   try {
     const ent = JSON.parse(localStorage.getItem('ff_enterprise') || 'null');

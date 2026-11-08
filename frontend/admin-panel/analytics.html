@@ -251,7 +251,6 @@
     <meta name="theme-color" content="#49B20D">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Аналитика - FoodFlow</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -979,696 +978,736 @@ AUTH.requireAuth();
     </div>
   </header>
 
-        <div class="container">
-    <div class="page-title">Аналитика</div>
-    <div class="page-subtitle">Отчёты и статистика для владельца и менеджера</div>
+        <div class="container an-page">
+  <style>
+    /* ══ Аналитика ══════════════════════════════════════════════════════
+       Палитра каналов проверена валидатором (CVD/контраст) на фоне #FFFDF7:
+       Доставка #2E7D4F · Зал #E0892B · Самовывоз #3A6EA5. Оранжевый ниже
+       3:1 к фону — поэтому у каждого сегмента есть подпись и цифры в легенде. */
+    .an-page { --an-del: #2E7D4F; --an-hall: #E0892B; --an-pick: #3A6EA5;
+               --an-prev: #B3AA96; --an-grid: #ECE5D3; --an-ink2: var(--color-text-secondary); }
+    .an-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .an-head p { margin: 4px 0 0; color: var(--an-ink2); font-size: 14px; }
+    .an-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .an-seg { display: inline-flex; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 10px; padding: 3px; overflow-x: auto; max-width: 100%; }
+    .an-seg button { flex: 0 0 auto; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--color-text-primary);
+                     height: 34px; padding: 0 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+    .an-seg button:hover { background: var(--admin-content-bg); }
+    .an-seg button[aria-pressed="true"] { background: var(--color-text-primary); color: var(--admin-card-bg); font-weight: 600; }
+    .an-range { display: none; align-items: center; gap: 6px; font-size: 14px; color: var(--an-ink2); }
+    .an-range.open { display: inline-flex; }
+    .an-range input { height: 38px; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-card-bg);
+                      font: inherit; font-size: 14px; padding: 0 8px; color: var(--color-text-primary); }
 
-    <!-- Date Filter -->
-    <div class="date-filter">
-      <span class="filter-label">Период:</span>
-      <button class="filter-btn active" onclick="setDateFilter('today')">Сегодня</button>
-      <button class="filter-btn" onclick="setDateFilter('yesterday')">Вчера</button>
-      <button class="filter-btn" onclick="setDateFilter('week')">Неделя</button>
-      <button class="filter-btn" onclick="setDateFilter('month')">Месяц</button>
-      <button class="filter-btn" onclick="setDateFilter('all')">Всё время</button>
+    .an-card { background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 14px; padding: 20px; min-width: 0; }
+    .an-card h2 { margin: 0; font-size: 16px; font-weight: 700; }
+    .an-card .an-sub { margin: 2px 0 0; font-size: 13px; color: var(--an-ink2); }
+    .an-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 
-      <div class="date-range-section">
-        <label class="filter-label">От:</label>
-        <input type="date" id="dateFrom" class="filter-btn" style="cursor: pointer; padding: 8px 12px;" onchange="setCustomDateRange()">
-        <label class="filter-label">До:</label>
-        <input type="date" id="dateTo" class="filter-btn" style="cursor: pointer; padding: 8px 12px;" onchange="setCustomDateRange()">
-        <button class="filter-btn" onclick="clearCustomDateRange()">Сбросить</button>
-      </div>
+    .an-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .an-kpi { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 14px; }
+    .an-kpi-label { font-size: 13px; font-weight: 600; color: var(--an-ink2); }
+    .an-kpi-value { font-family: var(--font-family-heading); font-size: 32px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+    .an-kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; }
+    .an-kpi-foot > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+    .an-kpi-foot > div { flex: 1; }
+    .an-delta-cap { line-height: 1.3; }
+    .an-delta:empty { display: none; }
+    .an-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+                background: var(--admin-content-bg); color: var(--an-ink2); white-space: nowrap; }
+    .an-delta svg { width: 12px; height: 12px; }
+    .an-delta.good { background: #E7F1E9; color: #1F5C39; }
+    .an-delta.bad  { background: #FBE6E0; color: #9E3420; }
+    .an-delta-cap { font-size: 12px; color: var(--an-ink2); }
+    .an-spark { width: 96px; height: 34px; flex-shrink: 0; }
+
+    .an-row { display: grid; gap: 16px; margin-bottom: 16px; }
+    .an-row-main { grid-template-columns: minmax(0, 1fr); }
+    .an-row-2 { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+    .an-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 1100px) { .an-row-2, .an-row-3 { grid-template-columns: minmax(0, 1fr); } }
+
+    .an-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--an-ink2); }
+    .an-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .an-sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .an-sw.line { height: 2px; border-radius: 1px; width: 14px; }
+    .an-chart { position: relative; height: 300px; }
+    .an-chart.sm { height: 220px; }
+    .an-empty { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; text-align: center;
+                color: var(--an-ink2); font-size: 14px; padding: 16px; }
+    .an-empty.show { display: flex; }
+
+    .an-heat { display: grid; grid-template-columns: 28px repeat(24, minmax(0, 1fr)); gap: 3px; font-size: 11px; color: var(--an-ink2); }
+    .an-heat .c { aspect-ratio: 1 / 1; border-radius: 4px; background: #F1ECDF; min-height: 12px; }
+    .an-heat .c:hover { outline: 2px solid var(--color-text-primary); outline-offset: 1px; }
+    .an-heat .h { text-align: center; font-size: 10px; line-height: 14px; }
+    .an-heat .d { display: flex; align-items: center; font-size: 11px; }
+    .an-heat-scale { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--an-ink2); margin-top: 12px; }
+    .an-heat-scale i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .an-heat-wrap { overflow-x: auto; }
+    .an-heat-wrap > .an-heat { min-width: 560px; }
+
+    .an-donut-wrap { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 20px; align-items: center; }
+    @media (max-width: 520px) { .an-donut-wrap { grid-template-columns: minmax(0, 1fr); } }
+    .an-donut { position: relative; width: 180px; height: 180px; margin: 0 auto; }
+    .an-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+    .an-donut-center b { font-family: var(--font-family-heading); font-size: 26px; }
+    .an-donut-center small { font-size: 12px; color: var(--an-ink2); }
+    .an-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .an-list li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: 14px; }
+    .an-list .v { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+    .an-list .m { grid-column: 2 / 4; font-size: 12px; color: var(--an-ink2); }
+
+    .an-bars { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .an-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; font-size: 14px; }
+    .an-bars .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .an-bars .track { grid-column: 1 / 3; height: 10px; background: #F1ECDF; border-radius: 5px; overflow: hidden; }
+    .an-bars .fill { height: 100%; background: var(--color-primary); border-radius: 0 4px 4px 0; min-width: 2px; }
+
+    .an-stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; background: #F1ECDF; margin: 4px 0 16px; }
+    .an-stack i { display: block; height: 100%; }
+
+    .an-fin { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+    .an-fin div b { display: block; font-family: var(--font-family-heading); font-size: 24px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .an-fin div span { font-size: 13px; color: var(--an-ink2); }
+    .an-note { font-size: 12px; color: var(--an-ink2); margin-top: 12px; }
+
+    .an-tip { position: fixed; z-index: 1500; pointer-events: none; background: var(--color-text-primary); color: var(--admin-card-bg);
+              font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; box-shadow: var(--shadow-modal); display: none; max-width: 240px; }
+    .an-tip b { font-weight: 700; }
+    .an-loading .an-kpi-value, .an-loading .an-svg { opacity: .35; transition: opacity .2s; }
+    .an-svg { width: 100%; height: 100%; }
+    .an-svg svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .an-svg text { font-family: var(--font-family); }
+    .an-donut .an-svg path { transition: opacity .15s; }
+    .an-donut .an-svg path:hover { opacity: .85; }
+    .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  </style>
+
+  <div class="an-head">
+    <div>
+      <h1>Аналитика</h1>
+      <p id="anPeriodText">Загрузка…</p>
     </div>
-
-    <!-- Key Metrics -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Выручка</div>
-        <div class="stat-value" id="revenueValue">0 ₽</div>
-        <div class="stat-change positive" id="revenueChange">
-          <span>▲</span>
-          <span>0%</span>
-          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
-        </div>
+    <div class="an-period">
+      <div class="an-seg" role="group" aria-label="Период" id="anSeg">
+        <button type="button" data-p="today">Сегодня</button>
+        <button type="button" data-p="yesterday">Вчера</button>
+        <button type="button" data-p="7">7 дней</button>
+        <button type="button" data-p="30">30 дней</button>
+        <button type="button" data-p="90">90 дней</button>
+        <button type="button" data-p="custom">Период…</button>
       </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Заказы</div>
-        <div class="stat-value" id="ordersValue">0</div>
-        <div class="stat-change positive" id="ordersChange">
-          <span>▲</span>
-          <span>0%</span>
-          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Средний чек</div>
-        <div class="stat-value" id="avgCheckValue">0 ₽</div>
-        <div class="stat-change positive" id="avgCheckChange">
-          <span>▲</span>
-          <span>0%</span>
-          <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Доставлено</div>
-        <div class="stat-value" id="completedValue">0</div>
-        <div class="metric-small">
-          <span id="completionRate">0%</span> успешных заказов
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Среднее время</div>
-        <div class="stat-value" id="avgTimeValue">0 мин</div>
-        <div class="metric-small">от заказа до доставки</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Активные курьеры</div>
-        <div class="stat-value" id="couriersValue">0</div>
-        <div class="metric-small">
-          <span id="courierOrders">0</span> заказов в работе
-        </div>
-      </div>
-    </div>
-
-    <!-- Charts -->
-    <div class="charts-grid">
-      <div class="chart-card full-width">
-        <div class="chart-title">Выручка и заказы</div>
-        <canvas id="revenueChart" height="80"></canvas>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-title">Заказы по часам</div>
-        <canvas id="hourlyChart"></canvas>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-title">Статусы заказов</div>
-        <canvas id="statusChart"></canvas>
-      </div>
-    </div>
-
-    <!-- Finance KPI Row -->
-    <div class="stats-grid" id="financeKpiGrid" style="margin-bottom:24px;">
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Выручка (фин.)</div>
-        <div class="stat-value" id="finRevenue">—</div>
-        <div class="metric-small">из Finance API</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Заказов (фин.)</div>
-        <div class="stat-value" id="finOrderCount">—</div>
-        <div class="metric-small">из Finance API</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Средний чек (фин.)</div>
-        <div class="stat-value" id="finAvgCheck">—</div>
-        <div class="metric-small">из Finance API</div>
-      </div>
-      <div class="stat-card" id="pnlCard">
-        <div class="stat-icon"></div>
-        <div class="stat-label">Прибыль (P&amp;L)</div>
-        <div class="stat-value" id="finProfit">—</div>
-        <div class="metric-small">Выручка − Расходы</div>
-      </div>
-    </div>
-
-    <!-- Tables -->
-    <div class="tables-grid">
-      <div class="table-card">
-        <div class="table-title">Топ блюд</div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Блюдо</th>
-              <th>Заказов</th>
-              <th>Выручка</th>
-            </tr>
-          </thead>
-          <tbody id="topDishesTable">
-            <tr>
-              <td colspan="4" style="text-align: center; color: var(--color-grey-5);">
-                Загрузка данных...
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="table-card">
-        <div class="table-title">Топ курьеров</div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Курьер</th>
-              <th>Доставок</th>
-              <th>Рейтинг</th>
-            </tr>
-          </thead>
-          <tbody id="topCouriersTable">
-            <tr>
-              <td colspan="4" style="text-align: center; color: var(--color-grey-5);">
-                Загрузка данных...
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="an-range" id="anRange">
+        <label class="visually-hidden" for="anFrom">С даты</label>
+        <input type="date" id="anFrom">
+        <span>—</span>
+        <label class="visually-hidden" for="anTo">По дату</label>
+        <input type="date" id="anTo">
       </div>
     </div>
   </div>
 
+  <!-- KPI -->
+  <div class="an-kpis" id="anKpis">
+    <div class="an-card an-kpi" data-kpi="revenue">
+      <div class="an-kpi-label">Выручка</div>
+      <div class="an-kpi-value">—</div>
+      <div class="an-kpi-foot"><div><span class="an-delta">—</span> <span class="an-delta-cap"></span></div><svg class="an-spark" aria-hidden="true"></svg></div>
+    </div>
+    <div class="an-card an-kpi" data-kpi="orders">
+      <div class="an-kpi-label">Заказы</div>
+      <div class="an-kpi-value">—</div>
+      <div class="an-kpi-foot"><div><span class="an-delta">—</span> <span class="an-delta-cap"></span></div><svg class="an-spark" aria-hidden="true"></svg></div>
+    </div>
+    <div class="an-card an-kpi" data-kpi="avg">
+      <div class="an-kpi-label">Средний чек</div>
+      <div class="an-kpi-value">—</div>
+      <div class="an-kpi-foot"><div><span class="an-delta">—</span> <span class="an-delta-cap"></span></div><svg class="an-spark" aria-hidden="true"></svg></div>
+    </div>
+    <div class="an-card an-kpi" data-kpi="cancel">
+      <div class="an-kpi-label">Доля отмен</div>
+      <div class="an-kpi-value">—</div>
+      <div class="an-kpi-foot"><div><span class="an-delta">—</span> <span class="an-delta-cap"></span></div><svg class="an-spark" aria-hidden="true"></svg></div>
+    </div>
+  </div>
+
+  <!-- Динамика -->
+  <div class="an-row an-row-main">
+    <section class="an-card" aria-labelledby="anTrendTitle">
+      <div class="an-card-head">
+        <div>
+          <h2 id="anTrendTitle">Выручка по дням</h2>
+          <p class="an-sub" id="anTrendSub">Без отменённых заказов</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;">
+          <div class="an-legend" id="anTrendLegend">
+            <span><i class="an-sw" style="background:var(--color-primary)"></i><span id="anLegCur">Выбранный период</span></span>
+            <span><i class="an-sw line" style="background:var(--an-prev)"></i><span id="anLegPrev">Прошлый период</span></span>
+          </div>
+          <div class="an-seg" role="group" aria-label="Показатель" id="anMetric">
+            <button type="button" data-m="revenue" aria-pressed="true">Выручка</button>
+            <button type="button" data-m="orders">Заказы</button>
+            <button type="button" data-m="avg">Средний чек</button>
+          </div>
+        </div>
+      </div>
+      <div class="an-chart">
+        <div id="anTrend" class="an-svg"></div>
+        <div class="an-empty" id="anTrendEmpty">За этот период заказов нет</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Загрузка + каналы -->
+  <div class="an-row an-row-2">
+    <section class="an-card" aria-labelledby="anHeatTitle">
+      <div class="an-card-head">
+        <div>
+          <h2 id="anHeatTitle">Когда приходят заказы</h2>
+          <p class="an-sub">Число заказов по дню недели и часу — видно пики, под которые ставить смены</p>
+        </div>
+      </div>
+      <div class="an-heat-wrap"><div class="an-heat" id="anHeat"></div></div>
+      <div class="an-heat-scale" id="anHeatScale"></div>
+    </section>
+
+    <section class="an-card" aria-labelledby="anChTitle">
+      <div class="an-card-head">
+        <div>
+          <h2 id="anChTitle">Каналы продаж</h2>
+          <p class="an-sub">Доля выручки по типу заказа</p>
+        </div>
+      </div>
+      <div class="an-donut-wrap">
+        <div class="an-donut">
+          <div id="anDonut" class="an-svg"></div>
+          <div class="an-donut-center"><b id="anDonutTotal">—</b><small>заказов</small></div>
+        </div>
+        <ul class="an-list" id="anChannels"></ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- Оплата · итоги · финансы -->
+  <div class="an-row an-row-3">
+    <section class="an-card" aria-labelledby="anPayTitle">
+      <div class="an-card-head"><div><h2 id="anPayTitle">Способы оплаты</h2><p class="an-sub">Выручка по способу оплаты заказа</p></div></div>
+      <ul class="an-bars" id="anPay"></ul>
+    </section>
+
+    <section class="an-card" aria-labelledby="anStTitle">
+      <div class="an-card-head"><div><h2 id="anStTitle">Чем закончились заказы</h2><p class="an-sub" id="anStSub">Все заказы периода</p></div></div>
+      <div class="an-stack" id="anStack" role="img" aria-label="Доли завершённых, текущих и отменённых заказов"></div>
+      <ul class="an-list" id="anStatus"></ul>
+    </section>
+
+    <section class="an-card" aria-labelledby="anFinTitle" id="anFinCard">
+      <div class="an-card-head"><div><h2 id="anFinTitle">Деньги</h2><p class="an-sub">По проведённым платежам и расходам</p></div></div>
+      <div class="an-fin" id="anFin">
+        <div><span>Выручка</span><b id="anFinRev">—</b></div>
+        <div><span>Расходы</span><b id="anFinExp">—</b></div>
+        <div><span>Прибыль</span><b id="anFinProfit">—</b></div>
+      </div>
+      <p class="an-note" id="anFinNote"></p>
+    </section>
+  </div>
+
+  <div class="an-tip" id="anTip" role="tooltip"></div>
+</div>
+
   <script>
-    let currentFilter = 'week';
-    let orders = [];
-    let charts = {};
+  (function () {
+    'use strict';
 
-    function dateStr(d) {
-      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    // ── Константы ───────────────────────────────────────────────────────
+    var C = {
+      primary: '#2E7D4F', prev: '#B3AA96', grid: '#ECE5D3', ink: '#23201A', ink2: '#6B6352', surface: '#FFFDF7',
+      channel: { delivery: '#2E7D4F', dine_in: '#E0892B', pickup: '#3A6EA5' },
+      // Статусные цвета — только для «чем закончились», всегда с подписью
+      done: '#2E7D4F', active: '#B3AA96', cancelled: '#D94F30'
+    };
+    var CHANNELS = [
+      { key: 'delivery', label: 'Доставка' },
+      { key: 'dine_in', label: 'Зал' },
+      { key: 'pickup', label: 'Самовывоз' }
+    ];
+    var PAY = { cash: 'Наличные', card: 'Карта', online: 'Онлайн', sbp: 'СБП', mixed: 'Смешанная', bonus: 'Бонусы' };
+    var DONE = ['delivered', 'completed', 'closed', 'paid', 'served'];
+    var CANCEL = ['cancelled', 'canceled', 'refunded'];
+    var WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    var DAY = 86400000;
+
+    var state = { period: '7', metric: 'revenue', cur: [], prev: [], range: null };
+    try { state.period = localStorage.getItem('ff_an_period') || '7'; } catch (e) {}
+    try { state.metric = localStorage.getItem('ff_an_metric') || 'revenue'; } catch (e) {}
+
+    // ── Утилиты ─────────────────────────────────────────────────────────
+    var $ = function (id) { return document.getElementById(id); };
+    function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function rub(n) { return Math.round(n).toLocaleString('ru-RU') + ' ₽'; }
+    function num(n) { return Math.round(n).toLocaleString('ru-RU'); }
+    function compact(n) {
+      var a = Math.abs(n);
+      if (a >= 1e6) return (n / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млн';
+      if (a >= 1e4) return Math.round(n / 1e3).toLocaleString('ru-RU') + ' тыс';
+      return Math.round(n).toLocaleString('ru-RU');
     }
+    function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+    function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function fmtDay(d, withYear) { return d.toLocaleDateString('ru-RU', withYear ? { day: 'numeric', month: 'long', year: 'numeric' } : { day: 'numeric', month: 'long' }); }
+    function ts(o) { var t = o.created_at || o.createdAt; return t ? new Date(t) : null; }
+    function total(o) { return Number(o.total) || 0; }
+    function isCancel(o) { return CANCEL.indexOf(o.status) !== -1; }
+    function isDone(o) { return DONE.indexOf(o.status) !== -1; }
+    function channelOf(o) { var t = o.order_type || o.orderType || 'delivery'; return t === 'dinein' ? 'dine_in' : t; }
 
-    function getDateRange() {
-      const now = new Date();
-      const todayStr = dateStr(now);
-      const dfEl = document.getElementById('dateFrom');
-      const dtEl = document.getElementById('dateTo');
-      if (dfEl && dfEl.value && dtEl && dtEl.value) {
-        return { from: dfEl.value, to: dtEl.value };
-      }
-      if (currentFilter === 'today') {
-        return { from: todayStr, to: todayStr };
-      }
-      if (currentFilter === 'yesterday') {
-        const y = new Date(now); y.setDate(y.getDate()-1);
-        const ys = dateStr(y);
-        return { from: ys, to: ys };
-      }
-      if (currentFilter === 'month') {
-        const m = new Date(now); m.setDate(m.getDate()-30);
-        return { from: dateStr(m), to: todayStr };
-      }
-      // default: week
-      const w = new Date(now); w.setDate(w.getDate()-7);
-      return { from: dateStr(w), to: todayStr };
-    }
-
-    // Sidebar functions
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      sidebar.classList.toggle('open');
-      overlay.classList.toggle('active');
-    }
-
-    function closeSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      sidebar.classList.remove('open');
-      overlay.classList.remove('active');
-    }
-
-    // Initialize
-    document.addEventListener('DOMContentLoaded', async () => {
-      initCharts();
-      await loadData();
-      updateDashboard();
-      await loadFinanceData();
-    });
-
-    // Load orders data via AUTH.fetch
-    async function loadData() {
-      try {
-        const range = getDateRange();
-        const res = await AUTH.fetch('/api/orders?dateFrom=' + range.from + '&dateTo=' + range.to + '&limit=500');
-        if (res.ok) {
-          const data = await res.json();
-          orders = data.orders || data.data || [];
+    // Период: [from, to) по местному времени + такой же предыдущий
+    function getRange() {
+      var today = startOfDay(new Date()), from, to;
+      var p = state.period;
+      if (p === 'today') { from = today; to = addDays(today, 1); }
+      else if (p === 'yesterday') { from = addDays(today, -1); to = today; }
+      else if (p === 'custom') {
+        var f = $('anFrom').value, t = $('anTo').value;
+        if (!f || !t) { from = addDays(today, -6); to = addDays(today, 1); }
+        else {
+          from = startOfDay(new Date(f + 'T00:00:00')); to = addDays(startOfDay(new Date(t + 'T00:00:00')), 1);
+          if (to <= from) { var s = from; from = addDays(to, -1); to = addDays(s, 1); }
         }
-      } catch (error) {
-        console.error('Error loading orders:', error);
-        orders = [];
-      }
+      } else { var n = parseInt(p, 10) || 7; from = addDays(today, -(n - 1)); to = addDays(today, 1); }
+      var days = Math.round((to - from) / DAY);
+      return { from: from, to: to, days: days, prevFrom: addDays(from, -days), prevTo: from, hourly: days === 1 };
     }
 
-    // Load Finance data (revenue + P&L)
-    async function loadFinanceData() {
-      const range = getDateRange();
-      const params = 'dateFrom=' + range.from + '&dateTo=' + range.to;
-
-      try {
-        const revRes = await AUTH.fetch('/api/finance/reports/revenue?' + params);
-        if (revRes.ok) {
-          const revData = await revRes.json();
-          const r = revData.report || {};
-          const rev = Number(r.total_revenue) || 0;
-          const cnt = Number(r.order_count) || 0;
-          const avg = Number(r.avg_check) || 0;
-          document.getElementById('finRevenue').textContent = rev.toLocaleString('ru-RU') + ' ₽';
-          document.getElementById('finOrderCount').textContent = cnt;
-          document.getElementById('finAvgCheck').textContent = Math.round(avg).toLocaleString('ru-RU') + ' ₽';
-        }
-      } catch (e) { console.error('Finance revenue error:', e); }
-
-      try {
-        const pnlRes = await AUTH.fetch('/api/finance/reports/pnl?' + params);
-        if (pnlRes.ok) {
-          const pnlData = await pnlRes.json();
-          const p = pnlData.report || {};
-          const profit = Number(p.profit) || 0;
-          const el = document.getElementById('finProfit');
-          const card = document.getElementById('pnlCard');
-          el.textContent = profit.toLocaleString('ru-RU') + ' ₽';
-          el.style.color = profit >= 0 ? 'var(--color-success)' : '#ef4444';
-        }
-      } catch (e) { console.error('Finance P&L error:', e); }
+    // Сервер сравнивает created_at <= dateTo; строка «YYYY-MM-DD» — это полночь,
+    // поэтому раньше «Сегодня» всегда было пустым. Передаём точные границы.
+    async function fetchOrders(from, to) {
+      var url = '/api/orders?dateFrom=' + encodeURIComponent(from.toISOString()) +
+                '&dateTo=' + encodeURIComponent(new Date(to - 1).toISOString()) + '&limit=5000';
+      var res = await AUTH.fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      return data.orders || data.data || [];
     }
 
-    // Set date filter
-    async function setDateFilter(filter) {
-      currentFilter = filter;
-      document.getElementById('dateFrom').value = '';
-      document.getElementById('dateTo').value = '';
-
-      // Update button states
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
+    // ── Агрегация ───────────────────────────────────────────────────────
+    function buckets(list, r, from) {
+      var n = r.hourly ? 24 : r.days, out = [];
+      for (var i = 0; i < n; i++) out.push({ revenue: 0, orders: 0, all: 0, cancel: 0 });
+      list.forEach(function (o) {
+        var t = ts(o); if (!t) return;
+        var i = r.hourly ? t.getHours() : Math.floor((startOfDay(t) - from) / DAY + 0.5);
+        if (i < 0 || i >= n) return;
+        out[i].all++;
+        if (isCancel(o)) { out[i].cancel++; return; }
+        out[i].orders++; out[i].revenue += total(o);
       });
-      if (event && event.target) event.target.classList.add('active');
-
-      await loadData();
-      updateDashboard();
-      await loadFinanceData();
+      out.forEach(function (b) { b.avg = b.orders ? b.revenue / b.orders : 0; b.cancelRate = b.all ? b.cancel / b.all * 100 : 0; });
+      return out;
+    }
+    function summary(list) {
+      var s = { revenue: 0, orders: 0, all: list.length, cancel: 0 };
+      list.forEach(function (o) { if (isCancel(o)) s.cancel++; else { s.orders++; s.revenue += total(o); } });
+      s.avg = s.orders ? s.revenue / s.orders : 0;
+      s.cancelRate = s.all ? s.cancel / s.all * 100 : 0;
+      return s;
     }
 
-    // Filter orders by date — orders already filtered server-side, just return all
-    function filterOrdersByDate(ordersArr) {
-      return ordersArr;
+    // ── KPI ─────────────────────────────────────────────────────────────
+    var UP = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V2M2.5 5.5L6 2l3.5 3.5"/></svg>';
+    var DOWN = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v8M2.5 6.5L6 10l3.5-3.5"/></svg>';
+
+    function setKpi(key, value, cur, prev, series, opts) {
+      var card = document.querySelector('[data-kpi="' + key + '"]');
+      card.querySelector('.an-kpi-value').textContent = value;
+      var chip = card.querySelector('.an-delta'), cap = card.querySelector('.an-delta-cap');
+      chip.className = 'an-delta';
+      if (opts.points) {
+        // Доля отмен: разница в процентных пунктах, рост — плохо
+        var d = cur - prev;
+        if (!opts.prevAll) { chip.textContent = ''; cap.textContent = 'нет данных для сравнения'; }
+        else if (Math.abs(d) < 0.05) { chip.textContent = 'без изменений'; cap.textContent = ''; }
+        else {
+          chip.innerHTML = (d > 0 ? UP : DOWN) + ' ' + Math.abs(d).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' п.п.';
+          chip.classList.add(d > 0 ? 'bad' : 'good'); cap.textContent = opts.cap || 'к прошлому периоду';
+        }
+      } else if (!prev) { chip.textContent = ''; cap.textContent = cur ? 'в прошлом периоде продаж не было' : 'нет данных для сравнения'; }
+      else {
+        var pct = (cur - prev) / prev * 100;
+        if (Math.abs(pct) < 0.5) { chip.textContent = 'без изменений'; cap.textContent = ''; }
+        else {
+          chip.innerHTML = (pct > 0 ? UP : DOWN) + ' ' + Math.abs(pct).toLocaleString('ru-RU', { maximumFractionDigits: pct > -10 && pct < 10 ? 1 : 0 }) + '%';
+          chip.classList.add(pct > 0 ? 'good' : 'bad'); cap.textContent = opts.cap || 'к прошлому периоду';
+        }
+      }
+      chip.title = opts.title || '';
+      drawSpark(card.querySelector('.an-spark'), series, opts.color || C.primary);
     }
 
-    // Set custom date range
-    async function setCustomDateRange() {
-      const dateFrom = document.getElementById('dateFrom').value;
-      const dateTo = document.getElementById('dateTo').value;
+    function drawSpark(svg, vals, color) {
+      var w = 96, h = 34, pad = 3;
+      if (!vals.length || vals.every(function (v) { return !v; })) { svg.innerHTML = ''; return; }
+      var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals.concat(0));
+      var span = max - min || 1, n = vals.length;
+      var pts = vals.map(function (v, i) {
+        var x = n === 1 ? w / 2 : pad + i * (w - pad * 2) / (n - 1);
+        var y = h - pad - (v - min) / span * (h - pad * 2);
+        return [x, y];
+      });
+      var line = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
+      var area = line + ' L' + pts[n - 1][0].toFixed(1) + ' ' + (h - pad) + ' L' + pts[0][0].toFixed(1) + ' ' + (h - pad) + ' Z';
+      var last = pts[n - 1];
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      svg.innerHTML = '<path d="' + area + '" fill="' + color + '" fill-opacity=".1"/>' +
+        '<path d="' + line + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3.5" fill="' + color + '" stroke="' + C.surface + '" stroke-width="2"/>';
+    }
 
-      if (dateFrom && dateTo) {
-        // Deactivate preset buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-          if (btn.onclick && btn.onclick.toString().includes('setDateFilter')) {
-            btn.classList.remove('active');
-          }
+    // ── Динамика ────────────────────────────────────────────────────────
+    var METRIC = {
+      revenue: { title: 'Выручка', fmt: rub, axis: compact },
+      orders: { title: 'Заказы', fmt: num, axis: num },
+      avg: { title: 'Средний чек', fmt: rub, axis: compact }
+    };
+
+    function trendLabels(r) {
+      if (r.hourly) { var a = []; for (var h = 0; h < 24; h++) a.push(String(h).padStart(2, '0') + ':00'); return a; }
+      var out = [];
+      for (var i = 0; i < r.days; i++) {
+        var d = addDays(r.from, i);
+        out.push(r.days > 31 ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ', ' + WD[(d.getDay() + 6) % 7].toLowerCase());
+      }
+      return out;
+    }
+
+    function drawTrend(r, cur, prev, anyOrders) {
+      var m = METRIC[state.metric];
+      $('anTrendTitle').textContent = m.title + (r.hourly ? ' по часам' : ' по дням');
+      $('anTrendSub').textContent = state.metric === 'orders' ? 'Без отменённых заказов' : 'Без отменённых заказов, ₽';
+      $('anLegCur').textContent = r.hourly ? (state.period === 'yesterday' ? 'Вчера' : 'Сегодня') : 'Выбранный период';
+      $('anLegPrev').textContent = r.hourly ? (state.period === 'yesterday' ? 'Позавчера' : 'Вчера') : 'Прошлый период';
+      document.querySelectorAll('#anMetric button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.m === state.metric)); });
+      $('anTrendEmpty').classList.toggle('show', !anyOrders);
+
+      var labels = trendLabels(r);
+      var curVals = cur.map(function (b) { return Math.round(b[state.metric]); });
+      var prevVals = prev.map(function (b) { return Math.round(b[state.metric]); });
+      var prevLabels = [];
+      for (var i = 0; i < labels.length; i++) {
+        prevLabels.push(r.hourly ? labels[i] : fmtDay(addDays(r.prevFrom, i)));
+      }
+
+      // Сегодняшний день ещё идёт — его столбец бледнее, в подсказке пометка
+      var partialIdx = -1, now = new Date();
+      if (r.to > now) partialIdx = r.hourly ? now.getHours() : Math.floor((startOfDay(now) - r.from) / DAY + 0.5);
+      trendData = { r: r, labels: labels, cur: curVals, prev: prevVals, prevLabels: prevLabels, m: m, partialIdx: partialIdx };
+      renderTrendSvg();
+    }
+
+    // Столбцы текущего периода + линия прошлого, одна ось Y.
+    // Рисуется в SVG по ширине контейнера; перерисовка при ресайзе.
+    var trendData = null, NS = 'http://www.w3.org/2000/svg';
+    function niceMax(v) {
+      if (v <= 0) return 1;
+      var p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p;
+      return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+    }
+    function renderTrendSvg() {
+      var box = $('anTrend'); if (!trendData || !box.clientWidth) return;
+      var d = trendData, n = d.labels.length;
+      var W = box.clientWidth, H = box.clientHeight || 300;
+      var ticks = 4, raw = Math.max.apply(null, d.cur.concat(d.prev, [0]));
+      var max = raw > 0 ? niceMax(raw * 1.05 / ticks) * ticks : 0, tickLabels = [];
+      var allZero = max === 0; if (allZero) max = 1;
+      for (var t = 0; t <= ticks; t++) tickLabels.push(d.m.axis(max / ticks * t));
+      var L = allZero ? 8 : 8 + Math.max.apply(null, tickLabels.map(function (x) { return x.length; })) * 6.6, R = 8, T = 10, B = 28;
+      var pw = W - L - R, ph = H - T - B, slot = pw / n;
+      var bw = Math.max(2, Math.min(24, slot * 0.62));
+      var y = function (v) { return T + ph - v / max * ph; };
+      var x = function (i) { return L + slot * i + slot / 2; };
+      var h = '';
+      for (t = 0; t <= ticks; t++) {
+        var yy = Math.round(y(max / ticks * t)) + 0.5;
+        h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + C.grid + '" stroke-width="1"/>';
+        if (!allZero) h += '<text x="' + (L - 8) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="' + C.ink2 + '">' + tickLabels[t] + '</text>';
+      }
+      // подписи X: не чаще, чем помещаются
+      var every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(pw / 74))));
+      for (var i = 0; i < n; i++) {
+        if (i % every) continue;
+        var lab = d.labels[i]; if (slot * every < 96) lab = lab.split(',')[0];
+        h += '<text x="' + x(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + C.ink2 + '">' + esc(lab) + '</text>';
+      }
+      // столбцы: скругление 4px сверху, плоско у нуля
+      for (i = 0; i < n; i++) {
+        var v = d.cur[i]; if (!v) continue;
+        var top = y(v), bx = x(i) - bw / 2, bh = T + ph - top, r = Math.min(4, bw / 2, bh);
+        var partial = d.partialIdx === i;
+        h += '<path data-i="' + i + '" class="an-bar" fill="' + C.primary + '"' + (partial ? ' fill-opacity=".45"' : '') + ' d="M' + bx + ' ' + (T + ph) + 'V' + (top + r) +
+             'Q' + bx + ' ' + top + ' ' + (bx + r) + ' ' + top + 'H' + (bx + bw - r) + 'Q' + (bx + bw) + ' ' + top + ' ' + (bx + bw) + ' ' + (top + r) +
+             'V' + (T + ph) + 'Z"/>';
+      }
+      // линия прошлого периода
+      if (d.prev.some(function (v) { return v; })) {
+        var pts = d.prev.map(function (v, i) { return x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ');
+        if (n === 1) h += '<circle cx="' + x(0) + '" cy="' + y(d.prev[0]) + '" r="4" fill="' + C.prev + '" stroke="' + C.surface + '" stroke-width="2"/>';
+        else h += '<polyline points="' + pts + '" fill="none" stroke="' + C.prev + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+      h += '<g id="anTrendHi"></g>';
+      h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + ph + 0.5) + '" y2="' + (T + ph + 0.5) + '" stroke="#D8CFBA" stroke-width="1"/>';
+      // зоны наведения шире столбца
+      for (i = 0; i < n; i++) h += '<rect data-i="' + i + '" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '" fill="transparent"/>';
+      box.innerHTML = '<svg xmlns="' + NS + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(d.m.title) + ': столбцы — выбранный период, линия — прошлый">' + h + '</svg>';
+
+      var svg = box.firstChild, hi = svg.querySelector('#anTrendHi'), tip = $('anTip');
+      function show(i, e) {
+        hi.innerHTML = '<rect x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '" fill="' + C.ink + '" fill-opacity=".05" rx="4"/>' +
+          (d.prev.some(function (v) { return v; }) ? '<circle cx="' + x(i) + '" cy="' + y(d.prev[i]) + '" r="4.5" fill="' + C.prev + '" stroke="' + C.surface + '" stroke-width="2"/>' : '');
+        var title = d.r.hourly ? d.labels[i] : fmtDay(addDays(d.r.from, i));
+        tip.innerHTML = '<b>' + esc(title) + '</b>' + (i === d.partialIdx ? ' <span style="opacity:.75">· ещё идёт</span>' : '') + '<br>' + esc(d.m.title) + ': <b>' + d.m.fmt(d.cur[i]) + '</b><br>' +
+          '<span style="opacity:.75">' + esc(d.r.hourly ? $('anLegPrev').textContent : 'Было ' + d.prevLabels[i]) + ': ' + d.m.fmt(d.prev[i]) + '</span>';
+        tip.style.display = 'block';
+        var px = e.clientX + 14, py = e.clientY + 14;
+        if (px + tip.offsetWidth > window.innerWidth - 8) px = e.clientX - tip.offsetWidth - 14;
+        if (py + tip.offsetHeight > window.innerHeight - 8) py = e.clientY - tip.offsetHeight - 14;
+        tip.style.left = px + 'px'; tip.style.top = py + 'px';
+      }
+      svg.addEventListener('mousemove', function (e) {
+        var el = e.target.closest('[data-i]');
+        if (el) show(+el.getAttribute('data-i'), e); else { hi.innerHTML = ''; tip.style.display = 'none'; }
+      });
+      svg.addEventListener('mouseleave', function () { hi.innerHTML = ''; tip.style.display = 'none'; });
+    }
+
+    // ── Тепловая карта ──────────────────────────────────────────────────
+    var RAMP = ['#F1ECDF', '#D6E8DA', '#A9CFB3', '#6FAE83', '#3F8A5A', '#1F5C39'];
+    function drawHeat(list) {
+      var grid = [], max = 0;
+      for (var d = 0; d < 7; d++) { grid.push(new Array(24).fill(0)); }
+      list.forEach(function (o) {
+        if (isCancel(o)) return;
+        var t = ts(o); if (!t) return;
+        var wd = (t.getDay() + 6) % 7; grid[wd][t.getHours()]++;
+        if (grid[wd][t.getHours()] > max) max = grid[wd][t.getHours()];
+      });
+      var html = '<div></div>';
+      for (var h = 0; h < 24; h++) html += '<div class="h" aria-hidden="true">' + (h % 3 === 0 ? h : '') + '</div>';
+      for (d = 0; d < 7; d++) {
+        html += '<div class="d">' + WD[d] + '</div>';
+        for (h = 0; h < 24; h++) {
+          var v = grid[d][h];
+          var step = v === 0 ? 0 : Math.min(5, 1 + Math.floor((v / max) * 4.999));
+          var label = WD[d] + ', ' + String(h).padStart(2, '0') + ':00–' + String((h + 1) % 24).padStart(2, '0') + ':00: ' + v + ' ' + plural(v, 'заказ', 'заказа', 'заказов');
+          html += '<div class="c" style="background:' + RAMP[step] + '" data-tip="' + esc(label) + '" aria-label="' + esc(label) + '"></div>';
+        }
+      }
+      $('anHeat').innerHTML = html;
+      var sc = '<span>меньше</span>';
+      RAMP.forEach(function (c) { sc += '<i style="background:' + c + '"></i>'; });
+      sc += '<span>больше' + (max ? ' (до ' + max + ' в час)' : '') + '</span>';
+      $('anHeatScale').innerHTML = sc;
+    }
+    function plural(n, a, b, c) { n = Math.abs(n) % 100; var n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
+
+    // ── Каналы ──────────────────────────────────────────────────────────
+    function drawChannels(list) {
+      var s = {};
+      CHANNELS.forEach(function (c) { s[c.key] = { orders: 0, revenue: 0 }; });
+      var count = 0, rev = 0;
+      list.forEach(function (o) {
+        if (isCancel(o)) return;
+        var k = channelOf(o); if (!s[k]) return;
+        s[k].orders++; s[k].revenue += total(o); count++; rev += total(o);
+      });
+      $('anDonutTotal').textContent = num(count);
+      $('anChannels').innerHTML = CHANNELS.map(function (c) {
+        var x = s[c.key], share = rev ? x.revenue / rev * 100 : 0;
+        return '<li><i class="an-sw" style="background:' + C.channel[c.key] + '"></i><span>' + c.label + '</span>' +
+          '<span class="v">' + (rev ? share.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + '%' : '—') + '</span>' +
+          '<span class="m">' + rub(x.revenue) + ' · ' + num(x.orders) + ' ' + plural(x.orders, 'заказ', 'заказа', 'заказов') + '</span></li>';
+      }).join('');
+      // Кольцо: сегменты с зазором 2px цвета фона, подсказка при наведении
+      var R0 = 90, R1 = 64, cx = 90, cy = 90, gap = 2 / R0, ang = -Math.PI / 2, svgH = '';
+      var live = CHANNELS.filter(function (c) { return s[c.key].revenue > 0; });
+      if (!rev) {
+        svgH = '<circle cx="90" cy="90" r="77" fill="none" stroke="#F1ECDF" stroke-width="26"/>';
+      } else if (live.length === 1) {
+        var c1 = live[0];
+        svgH = '<circle cx="90" cy="90" r="77" fill="none" stroke="' + C.channel[c1.key] + '" stroke-width="26" data-tip="' + esc(c1.label + ': ' + rub(rev) + ' (100%)') + '"/>';
+      } else {
+        live.forEach(function (c) {
+          var v = s[c.key].revenue, sweep = v / rev * Math.PI * 2;
+          var a0 = ang + gap / 2, a1 = ang + sweep - gap / 2; ang += sweep;
+          if (a1 <= a0) return;
+          var big = a1 - a0 > Math.PI ? 1 : 0;
+          var p = function (r, a) { return (cx + r * Math.cos(a)).toFixed(2) + ' ' + (cy + r * Math.sin(a)).toFixed(2); };
+          svgH += '<path fill="' + C.channel[c.key] + '" data-tip="' + esc(c.label + ': ' + rub(v) + ' (' + Math.round(v / rev * 100) + '%)') + '" d="M' + p(R0, a0) +
+            ' A' + R0 + ' ' + R0 + ' 0 ' + big + ' 1 ' + p(R0, a1) + ' L' + p(R1, a1) + ' A' + R1 + ' ' + R1 + ' 0 ' + big + ' 0 ' + p(R1, a0) + ' Z"/>';
         });
-
-        // Highlight date inputs
-        document.getElementById('dateFrom').style.borderColor = 'var(--color-primary)';
-        document.getElementById('dateTo').style.borderColor = 'var(--color-primary)';
-
-        currentFilter = 'custom';
-        await loadData();
-        updateDashboard();
-        await loadFinanceData();
       }
+      $('anDonut').innerHTML = '<svg xmlns="' + NS + '" viewBox="0 0 180 180" role="img" aria-label="Доля выручки по каналам">' + svgH + '</svg>';
     }
 
-    // Clear custom date range
-    function clearCustomDateRange() {
-      document.getElementById('dateFrom').value = '';
-      document.getElementById('dateTo').value = '';
-      document.getElementById('dateFrom').style.borderColor = '';
-      document.getElementById('dateTo').style.borderColor = '';
-
-      // Reactivate "today" button
-      currentFilter = 'today';
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
+    // ── Оплата ──────────────────────────────────────────────────────────
+    function drawPay(list) {
+      var s = {}, any = false;
+      list.forEach(function (o) {
+        if (isCancel(o)) return;
+        var k = o.payment_method || o.paymentMethod || 'none';
+        if (!s[k]) s[k] = { revenue: 0, orders: 0 };
+        s[k].revenue += total(o); s[k].orders++; any = true;
       });
-      document.querySelector('button[onclick="setDateFilter(\'today\')"]').classList.add('active');
-
-      updateDashboard();
-    }
-
-    // Update dashboard
-    function updateDashboard() {
-      const filtered = filterOrdersByDate(orders);
-
-      // Calculate metrics — support both created_at and createdAt field names
-      const revenue = filtered.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-      const ordersCount = filtered.length;
-      const avgCheck = ordersCount > 0 ? revenue / ordersCount : 0;
-      const completed = filtered.filter(o => o.status === 'delivered').length;
-      const completionRate = ordersCount > 0 ? (completed / ordersCount * 100).toFixed(1) : 0;
-
-      // Calculate average time (no time data in simple API)
-      const avgTime = '—';
-
-      // Active couriers
-      const activeCouriers = new Set(filtered.filter(o => o.status === 'out_for_delivery').map(o => o.courier_id || o.courierId)).size;
-      const ordersInDelivery = filtered.filter(o => o.status === 'out_for_delivery').length;
-
-      // Update UI
-      document.getElementById('revenueValue').textContent = `${revenue.toLocaleString('ru-RU')} ₽`;
-      document.getElementById('ordersValue').textContent = ordersCount;
-      document.getElementById('avgCheckValue').textContent = `${Math.round(avgCheck).toLocaleString('ru-RU')} ₽`;
-      document.getElementById('completedValue').textContent = completed;
-      document.getElementById('completionRate').textContent = `${completionRate}%`;
-      document.getElementById('avgTimeValue').textContent = avgTime;
-      document.getElementById('couriersValue').textContent = activeCouriers;
-      document.getElementById('courierOrders').textContent = ordersInDelivery;
-
-      // Update change indicators (no historical comparison available)
-      updateChangeIndicator('revenueChange', 0);
-      updateChangeIndicator('ordersChange', 0);
-      updateChangeIndicator('avgCheckChange', 0);
-
-      // Update charts
-      updateCharts(filtered);
-
-      // Update tables
-      updateTopDishes(filtered);
-      updateTopCouriers(filtered);
-    }
-
-    // Update change indicator
-    function updateChangeIndicator(id, change) {
-      const element = document.getElementById(id);
-      const isPositive = change >= 0;
-
-      element.className = `stat-change ${isPositive ? 'positive' : 'negative'}`;
-      element.innerHTML = `
-        <span>${isPositive ? '▲' : '▼'}</span>
-        <span>${Math.abs(change).toFixed(1)}%</span>
-        <span style="color: var(--color-grey-5); margin-left: 4px;">vs прошлый период</span>
-      `;
-    }
-
-    // Initialize charts
-    function initCharts() {
-      // Revenue Chart
-      const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-      charts.revenue = new Chart(revenueCtx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [
-            {
-              label: 'Выручка (₽)',
-              data: [],
-              borderColor: 'var(--color-primary)',
-              backgroundColor: 'var(--color-primary-light)',
-              tension: 0.4,
-              fill: true,
-              yAxisID: 'y'
-            },
-            {
-              label: 'Заказы',
-              data: [],
-              borderColor: 'var(--color-success)',
-              backgroundColor: 'rgba(67, 160, 71, 0.1)',
-              tension: 0.4,
-              fill: true,
-              yAxisID: 'y1'
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
-          scales: {
-            y: {
-              type: 'linear',
-              display: true,
-              position: 'left',
-              grid: { color: 'var(--admin-border)' },
-              ticks: { color: 'var(--color-text-secondary)' }
-            },
-            y1: {
-              type: 'linear',
-              display: true,
-              position: 'right',
-              grid: { drawOnChartArea: false },
-              ticks: { color: 'var(--color-text-secondary)' }
-            },
-            x: {
-              grid: { color: 'var(--admin-border)' },
-              ticks: { color: 'var(--color-text-secondary)' }
-            }
-          },
-          plugins: {
-            legend: {
-              labels: { color: 'var(--color-text-primary)' }
-            }
-          }
-        }
-      });
-
-      // Hourly Chart
-      const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
-      charts.hourly = new Chart(hourlyCtx, {
-        type: 'bar',
-        data: {
-          labels: ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23'],
-          datasets: [{
-            label: 'Заказов',
-            data: [],
-            backgroundColor: 'rgba(0, 176, 116, 0.8)',
-            borderColor: 'var(--color-primary)',
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'var(--admin-border)' },
-              ticks: { color: 'var(--color-text-secondary)' }
-            },
-            x: {
-              grid: { color: 'var(--admin-border)' },
-              ticks: { color: 'var(--color-text-secondary)' }
-            }
-          },
-          plugins: {
-            legend: {
-              labels: { color: 'var(--color-text-primary)' }
-            }
-          }
-        }
-      });
-
-      // Status Chart
-      const statusCtx = document.getElementById('statusChart').getContext('2d');
-      charts.status = new Chart(statusCtx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Новые', 'Подтверждены', 'Готовятся', 'Готовы', 'На доставке', 'Доставлены', 'Отменены'],
-          datasets: [{
-            data: [],
-            backgroundColor: [
-              'var(--color-warning)',
-              'var(--color-primary)',
-              '#8b5cf6',
-              'var(--color-success)',
-              '#06b6d4',
-              'var(--color-success)',
-              'var(--color-danger)'
-            ],
-            borderWidth: 2,
-            borderColor: '#ffffff'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { color: 'var(--color-text-primary)', padding: 15 }
-            }
-          }
-        }
-      });
-    }
-
-    // Update charts
-    function updateCharts(filtered) {
-      // Group by date for revenue chart — support both created_at and createdAt
-      const dateGroups = {};
-      filtered.forEach(order => {
-        const ts = order.created_at || order.createdAt;
-        if (!ts) return;
-        const date = new Date(ts).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-        if (!dateGroups[date]) {
-          dateGroups[date] = { revenue: 0, count: 0 };
-        }
-        dateGroups[date].revenue += Number(order.total) || 0;
-        dateGroups[date].count += 1;
-      });
-
-      const dates = Object.keys(dateGroups).sort();
-      const revenueData = dates.map(d => dateGroups[d].revenue);
-      const countData = dates.map(d => dateGroups[d].count);
-
-      charts.revenue.data.labels = dates;
-      charts.revenue.data.datasets[0].data = revenueData;
-      charts.revenue.data.datasets[1].data = countData;
-      charts.revenue.update();
-
-      // Hourly distribution
-      const hourlyData = new Array(24).fill(0);
-      filtered.forEach(order => {
-        const ts = order.created_at || order.createdAt;
-        if (!ts) return;
-        const hour = new Date(ts).getHours();
-        hourlyData[hour]++;
-      });
-
-      charts.hourly.data.datasets[0].data = hourlyData;
-      charts.hourly.update();
-
-      // Status distribution
-      const statusCounts = {
-        pending: 0,
-        confirmed: 0,
-        preparing: 0,
-        ready: 0,
-        out_for_delivery: 0,
-        delivered: 0,
-        cancelled: 0
-      };
-
-      filtered.forEach(order => {
-        if (statusCounts[order.status] !== undefined) {
-          statusCounts[order.status]++;
-        }
-      });
-
-      charts.status.data.datasets[0].data = Object.values(statusCounts);
-      charts.status.update();
-    }
-
-    // Update top dishes table
-    function updateTopDishes(filtered) {
-      const dishStats = {};
-
-      filtered.forEach(order => {
-        const items = order.items || order.order_items || [];
-        if (!Array.isArray(items)) return;
-        items.forEach(item => {
-          const name = item.name || item.dish_name || item.product_name || 'Неизвестно';
-          const qty = Number(item.quantity) || 1;
-          const price = Number(item.price) || Number(item.unit_price) || 0;
-          if (!dishStats[name]) {
-            dishStats[name] = { count: 0, revenue: 0 };
-          }
-          dishStats[name].count += qty;
-          dishStats[name].revenue += price * qty;
-        });
-      });
-
-      const sorted = Object.entries(dishStats)
-        .sort((a, b) => b[1].revenue - a[1].revenue)
-        .slice(0, 10);
-
-      const tbody = document.getElementById('topDishesTable');
-
-      if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-grey-5);">Нет данных</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = sorted.map(([name, stats], index) => {
-        const rankClass = index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other';
-        const maxRevenue = sorted[0][1].revenue;
-        const percentage = (stats.revenue / maxRevenue * 100).toFixed(0);
-
-        return `
-          <tr>
-            <td>
-              <div class="rank-badge ${rankClass}">${index + 1}</div>
-            </td>
-            <td>
-              <div style="font-weight: 600;">${name}</div>
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: ${percentage}%"></div>
-              </div>
-            </td>
-            <td>${stats.count}</td>
-            <td style="font-weight: 600; color: var(--color-success);">${stats.revenue.toLocaleString()} ₽</td>
-          </tr>
-        `;
+      var rows = Object.keys(s).map(function (k) { return { key: k, label: k === 'none' ? 'Не указан' : (PAY[k] || k), revenue: s[k].revenue, orders: s[k].orders }; })
+        .sort(function (a, b) { return b.revenue - a.revenue; });
+      if (!any) { $('anPay').innerHTML = '<li style="color:var(--an-ink2);display:block">За этот период оплат нет</li>'; return; }
+      var max = rows[0].revenue || 1;
+      $('anPay').innerHTML = rows.slice(0, 6).map(function (r) {
+        return '<li><span>' + esc(r.label) + ' <span style="color:var(--an-ink2);font-size:12px">· ' + num(r.orders) + '</span></span><span class="v">' + rub(r.revenue) + '</span>' +
+          '<div class="track"><div class="fill" style="width:' + (r.revenue / max * 100).toFixed(1) + '%"></div></div></li>';
       }).join('');
     }
 
-    // Update top couriers table
-    function updateTopCouriers(filtered) {
-      const courierStats = {};
-
-      filtered.filter(o => o.status === 'delivered').forEach(order => {
-        const name = order.courierName || order.courier_name || (order.courier && (order.courier.name || order.courier.first_name)) || null;
-        if (!name) return;
-        if (!courierStats[name]) {
-          courierStats[name] = { count: 0, rating: 4.5 + Math.random() * 0.5 };
-        }
-        courierStats[name].count++;
-      });
-
-      const sorted = Object.entries(courierStats)
-        .sort((a, b) => b[1].count - a[1].count)
-        .slice(0, 10);
-
-      const tbody = document.getElementById('topCouriersTable');
-
-      if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-grey-5);">Нет данных</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = sorted.map(([name, stats], index) => {
-        const rankClass = index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other';
-        const maxCount = sorted[0][1].count;
-        const percentage = (stats.count / maxCount * 100).toFixed(0);
-
-        return `
-          <tr>
-            <td>
-              <div class="rank-badge ${rankClass}">${index + 1}</div>
-            </td>
-            <td>
-              <div style="font-weight: 600;">${name}</div>
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: ${percentage}%"></div>
-              </div>
-            </td>
-            <td>${stats.count}</td>
-            <td>
-              <span style="color: var(--color-warning);">★</span>
-              <span style="font-weight: 600;">${stats.rating.toFixed(1)}</span>
-            </td>
-          </tr>
-        `;
+    // ── Итоги заказов ───────────────────────────────────────────────────
+    function drawStatus(list) {
+      var done = 0, cancel = 0, active = 0;
+      list.forEach(function (o) { if (isCancel(o)) cancel++; else if (isDone(o)) done++; else active++; });
+      var all = list.length;
+      $('anStSub').textContent = all ? 'Всего ' + num(all) + ' ' + plural(all, 'заказ', 'заказа', 'заказов') : 'Заказов нет';
+      var parts = [
+        { label: 'Выполнены', n: done, color: C.done },
+        { label: 'Ещё в работе', n: active, color: C.active },
+        { label: 'Отменены', n: cancel, color: C.cancelled }
+      ];
+      $('anStack').innerHTML = all ? parts.filter(function (p) { return p.n; }).map(function (p) {
+        return '<i style="width:' + (p.n / all * 100) + '%;background:' + p.color + '" data-tip="' + esc(p.label + ': ' + p.n) + '"></i>';
+      }).join('') : '';
+      $('anStatus').innerHTML = parts.map(function (p) {
+        return '<li><i class="an-sw" style="background:' + p.color + '"></i><span>' + p.label + '</span><span class="v">' + num(p.n) +
+          (all ? ' <span style="color:var(--an-ink2);font-weight:400">· ' + Math.round(p.n / all * 100) + '%</span>' : '') + '</span></li>';
       }).join('');
     }
+
+    // ── Финансы (платежи и расходы) ─────────────────────────────────────
+    async function loadFinance(r) {
+      var q = 'dateFrom=' + encodeURIComponent(r.from.toISOString()) + '&dateTo=' + encodeURIComponent(new Date(r.to - 1).toISOString());
+      $('anFinNote').textContent = '';
+      try {
+        var res = await AUTH.fetch('/api/finance/reports/pnl?' + q);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var p = (await res.json()).report || {};
+        var rev = p.revenue ? Number(p.revenue.net) || 0 : 0;
+        var exp = p.expenses ? Number(p.expenses.total) || 0 : 0;
+        var profit = Number(p.profit) || 0;
+        $('anFinRev').textContent = rub(rev);
+        $('anFinExp').textContent = rub(exp);
+        $('anFinProfit').textContent = (profit < 0 ? '−' : '') + rub(Math.abs(profit));
+        $('anFinNote').textContent = rev ? 'Маржа ' + (Number(p.marginPercent) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + '%. Выручка здесь — по проведённым платежам за вычетом возвратов, поэтому может отличаться от суммы заказов.' : 'За период нет проведённых платежей.';
+      } catch (e) {
+        ['anFinRev', 'anFinExp', 'anFinProfit'].forEach(function (id) { $(id).textContent = '—'; });
+        $('anFinNote').textContent = 'Финансовый отчёт недоступен для этой роли или сервис не ответил.';
+      }
+    }
+
+    // ── Подсказки для карты и полосы ────────────────────────────────────
+    function setupTips() {
+      var tip = $('anTip');
+      document.addEventListener('mousemove', function (e) {
+        var t = e.target.closest && e.target.closest('.an-page [data-tip]');
+        if (!t) {
+          // над графиком динамики подсказкой управляет сам график
+          if (!(e.target.closest && e.target.closest('#anTrend'))) tip.style.display = 'none';
+          return;
+        }
+        tip.textContent = t.getAttribute('data-tip');
+        tip.style.display = 'block';
+        var x = e.clientX + 14, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight;
+        if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
+        if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
+        tip.style.left = x + 'px'; tip.style.top = y + 'px';
+      });
+    }
+
+    // ── Сборка ──────────────────────────────────────────────────────────
+    function periodText(r) {
+      var last = addDays(r.to, -1);
+      var cur = r.days === 1 ? fmtDay(r.from, true) : fmtDay(r.from) + ' — ' + fmtDay(last, true);
+      var plast = addDays(r.prevTo, -1);
+      var prev = r.days === 1 ? fmtDay(r.prevFrom) : fmtDay(r.prevFrom) + ' — ' + fmtDay(plast);
+      return cur + ' · сравнение с ' + prev;
+    }
+
+    function render() {
+      var r = state.range, cur = state.cur, prev = state.prev;
+      // Если период ещё идёт (включает сегодня), KPI сравниваются с тем же
+      // отрезком прошлого периода: сегодня до 15:00 — со вчера до 15:00.
+      var now = new Date(), partial = r.to > now;
+      var prevCut = partial ? new Date(r.prevFrom.getTime() + (now - r.from)) : r.prevTo;
+      var prevFair = partial ? prev.filter(function (o) { var t = ts(o); return t && t < prevCut; }) : prev;
+      var sc = summary(cur), sp = summary(prevFair);
+      var capText = partial ? (r.days === 1 ? 'ко вчера на это время' : 'к прошлому периоду на это время') : 'к прошлому периоду';
+      var bc = buckets(cur, r, r.from), bp = buckets(prev, r, r.prevFrom);
+      setKpi('revenue', rub(sc.revenue), sc.revenue, sp.revenue, bc.map(function (b) { return b.revenue; }), { title: 'Было: ' + rub(sp.revenue), cap: capText });
+      setKpi('orders', num(sc.orders), sc.orders, sp.orders, bc.map(function (b) { return b.orders; }), { title: 'Было: ' + num(sp.orders), cap: capText });
+      setKpi('avg', rub(sc.avg), sc.avg, sp.avg, bc.map(function (b) { return b.avg; }), { title: 'Было: ' + rub(sp.avg), cap: capText });
+      setKpi('cancel', sc.all ? sc.cancelRate.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + '%' : '—', sc.cancelRate, sp.cancelRate,
+        bc.map(function (b) { return b.cancelRate; }), { points: true, prevAll: sp.all, color: C.cancelled, cap: capText,
+        title: 'Было: ' + (sp.all ? sp.cancelRate.toFixed(1) + '%' : 'нет заказов') });
+      drawTrend(r, bc, bp, cur.length > 0);
+      drawHeat(cur);
+      drawChannels(cur);
+      drawPay(cur);
+      drawStatus(cur);
+    }
+
+    async function load() {
+      var r = getRange();
+      state.range = r;
+      $('anPeriodText').textContent = periodText(r);
+      document.querySelectorAll('#anSeg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.p === state.period)); });
+      $('anRange').classList.toggle('open', state.period === 'custom');
+      document.querySelector('.an-page').classList.add('an-loading');
+      try {
+        var res = await Promise.all([fetchOrders(r.from, r.to), fetchOrders(r.prevFrom, r.prevTo).catch(function () { return []; })]);
+        if (state.range !== r) return; // пока грузили, выбрали другой период
+        state.cur = res[0]; state.prev = res[1];
+      } catch (e) {
+        console.error('analytics: orders load failed', e);
+        state.cur = []; state.prev = [];
+        $('anPeriodText').textContent = periodText(r) + ' · не удалось загрузить заказы';
+      }
+      document.querySelector('.an-page').classList.remove('an-loading');
+      render();
+      loadFinance(r);
+    }
+
+    function init() {
+      var today = new Date();
+      $('anTo').value = ymd(today); $('anFrom').value = ymd(addDays(today, -6));
+      $('anTo').max = ymd(today); $('anFrom').max = ymd(today);
+      $('anSeg').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        state.period = b.dataset.p;
+        try { localStorage.setItem('ff_an_period', state.period); } catch (err) {}
+        load();
+        if (state.period === 'custom') $('anFrom').focus();
+      });
+      ['anFrom', 'anTo'].forEach(function (id) { $(id).addEventListener('change', function () { if (state.period === 'custom') load(); }); });
+      $('anMetric').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        state.metric = b.dataset.m;
+        try { localStorage.setItem('ff_an_metric', state.metric); } catch (err) {}
+        var r = state.range;
+        drawTrend(r, buckets(state.cur, r, r.from), buckets(state.prev, r, r.prevFrom), state.cur.length > 0);
+      });
+      if (window.ResizeObserver) new ResizeObserver(function () { renderTrendSvg(); }).observe($('anTrend'));
+      setupTips();
+      load();
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  })();
   </script>
 </div><!-- /main-wrapper -->
 

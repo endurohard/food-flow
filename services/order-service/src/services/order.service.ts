@@ -12,7 +12,7 @@ export const VALID_ORDER_STATUSES = [
   'confirmed',
   'preparing',
   'ready',
-  'out_for_delivery',
+  'delivering',  // так называется значение enum order_status; out_for_delivery в БД нет
   'delivered',
   'completed',
   'cancelled'

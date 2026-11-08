@@ -1107,7 +1107,7 @@ AUTH.requireAuth();
           </div>
           <div class="kpi-numbers">
             <div class="kpi-value" id="kpiDelivered">—</div>
-            <div class="kpi-label">Доставлено</div>
+            <div class="kpi-label">Выполнено сегодня</div>
           </div>
         </div>
 
@@ -1141,7 +1141,7 @@ AUTH.requireAuth();
           </div>
           <div class="kpi-numbers">
             <div class="kpi-value" id="kpiRevenue">—</div>
-            <div class="kpi-label">Выручка, ₽</div>
+            <div class="kpi-label">Выручка сегодня, ₽</div>
           </div>
         </div>
 
@@ -1321,34 +1321,36 @@ AUTH.requireAuth();
   /* ════════════════════════════════════
      KPI CARDS
   ════════════════════════════════════ */
-  async function loadKPI() {
-    /* All orders — for total count and revenue calculation */
-    const allData = await apiFetch('/api/orders?limit=1');
-    if (allData) {
-      const total = allData.total ?? 0;
-      const el = document.getElementById('kpiOrders');
-      if (el) el.textContent = total;
-    } else {
-      const el = document.getElementById('kpiOrders');
-      if (el) el.textContent = '—';
-    }
+  function todayStartIso() {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
 
-    /* Delivered */
-    const delData = await apiFetch('/api/orders?status=delivered&limit=1');
-    const elDel   = document.getElementById('kpiDelivered');
-    if (elDel) elDel.textContent = delData ? (delData.total ?? 0) : '—';
+  async function loadKPI() {
+    // Все плитки — за сегодня: «Заказов сегодня» раньше считала заказы за
+    // всё время. «Выполнено» и выручка учитывают и completed (так закрывает
+    // касса), и delivered: по одному delivered у кофейни выходило 0 ₽.
+    const since = encodeURIComponent(todayStartIso());
+    const allData = await apiFetch('/api/orders?limit=1&dateFrom=' + since);
+    const el = document.getElementById('kpiOrders');
+    if (el) el.textContent = allData ? (allData.total ?? 0) : '—';
+
+    const [compData, delData] = await Promise.all([
+      apiFetch('/api/orders?status=completed&limit=500&dateFrom=' + since),
+      apiFetch('/api/orders?status=delivered&limit=500&dateFrom=' + since)
+    ]);
+    const elDel = document.getElementById('kpiDelivered');
+    if (elDel) elDel.textContent = (compData && delData) ? ((compData.total ?? 0) + (delData.total ?? 0)) : '—';
 
     /* Cancelled */
-    const canData = await apiFetch('/api/orders?status=cancelled&limit=1');
+    const canData = await apiFetch('/api/orders?status=cancelled&limit=1&dateFrom=' + since);
     const elCan   = document.getElementById('kpiCancelled');
     if (elCan) elCan.textContent = canData ? (canData.total ?? 0) : '—';
 
-    /* Revenue — sum total from delivered orders (up to 100) */
-    const revData = await apiFetch('/api/orders?status=delivered&limit=100');
-    const elRev   = document.getElementById('kpiRevenue');
+    const elRev = document.getElementById('kpiRevenue');
     if (elRev) {
-      if (revData && Array.isArray(revData.orders)) {
-        const sum = revData.orders.reduce((acc, o) => acc + (Number(o.total) || 0), 0);
+      if (compData && delData && Array.isArray(compData.orders) && Array.isArray(delData.orders)) {
+        const sum = compData.orders.concat(delData.orders).reduce((acc, o) => acc + (Number(o.total) || 0), 0);
         elRev.textContent = formatAmount(sum) + ' ₽';
       } else {
         elRev.textContent = '—';
@@ -1373,7 +1375,9 @@ AUTH.requireAuth();
     confirmed: { label: 'Принят',    cls: 'badge-info'    },
     preparing: { label: 'Готовится', cls: 'badge-info'    },
     ready:     { label: 'Готов',     cls: 'badge-success' },
+    delivering: { label: 'В пути',   cls: 'badge-info'    },
     delivered: { label: 'Доставлен', cls: 'badge-success' },
+    completed: { label: 'Выполнен',  cls: 'badge-success' },
     cancelled: { label: 'Отменён',   cls: 'badge-danger'  },
   };
 
@@ -1446,6 +1450,13 @@ AUTH.requireAuth();
     const pct   = v => Math.round(v / total * 100) + '%';
 
     /* Update legend */
+    // Заведению без доставки (кофейня) сектор и подпись «Доставка» не нужны
+    const hasDelivery = typeof AUTH === 'undefined' || typeof AUTH.hasDelivery !== 'function' || AUTH.hasDelivery();
+    if (!hasDelivery) {
+      const leg = document.getElementById('piePctDelivery');
+      const row = leg && leg.closest('.pie-legend-item');
+      if (row) row.style.display = 'none';
+    }
     const pd = document.getElementById('piePctDelivery');
     const pi = document.getElementById('piePctDineIn');
     const pp = document.getElementById('piePctPickup');
@@ -1459,10 +1470,10 @@ AUTH.requireAuth();
     new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Доставка', 'Зал', 'Самовывоз'],
+        labels: hasDelivery ? ['Доставка', 'Зал', 'Самовывоз'] : ['Зал', 'Самовывоз'],
         datasets: [{
-          data: [counts.delivery, counts.dine_in, counts.pickup],
-          backgroundColor: [THEME.primary, THEME.danger, THEME.warning],
+          data: hasDelivery ? [counts.delivery, counts.dine_in, counts.pickup] : [counts.dine_in, counts.pickup],
+          backgroundColor: hasDelivery ? [THEME.primary, THEME.danger, THEME.warning] : [THEME.danger, THEME.warning],
           borderWidth: 0,
           hoverOffset: 6,
         }],

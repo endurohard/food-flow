@@ -1350,14 +1350,14 @@ AUTH.requireAuth();
           <div class="stat-value" id="headerReady" style="color: var(--color-success);">0</div>
         </div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" data-delivery-only>
         <div class="stat-icon" style="background: rgba(6, 182, 212, 0.1);"></div>
         <div class="stat-info">
           <div class="stat-label">На дост.</div>
           <div class="stat-value" id="headerDelivery" style="color: #06b6d4;">0</div>
         </div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card" data-delivery-only>
         <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">✔</div>
         <div class="stat-info">
           <div class="stat-label">Доставл.</div>
@@ -1523,8 +1523,8 @@ AUTH.requireAuth();
         </div>
       </div>
 
-      <!-- На доставке -->
-      <div class="kanban-column" data-status="out_for_delivery">
+      <!-- На доставке: статус в БД называется delivering (out_for_delivery в enum нет) -->
+      <div class="kanban-column" data-status="delivering" data-delivery-only>
         <div class="column-header">
           <div class="column-title" style="color: #06b6d4;">
             На доставке
@@ -1540,7 +1540,7 @@ AUTH.requireAuth();
       </div>
 
       <!-- Доставлено -->
-      <div class="kanban-column" data-status="delivered">
+      <div class="kanban-column" data-status="delivered" data-delivery-only>
         <div class="column-header">
           <div class="column-title" style="color: var(--color-success);">
             ✔ Доставлено
@@ -1551,6 +1551,23 @@ AUTH.requireAuth();
           <div class="empty-column">
             <div class="empty-icon"></div>
             <div>Нет доставленных заказов</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Выполнено: так закрывает заказ касса (completed). Без этой колонки
+           продажи кофейни и самовывоза не показывались на доске вовсе. -->
+      <div class="kanban-column" data-status="completed">
+        <div class="column-header">
+          <div class="column-title" style="color: var(--color-success);">
+            ✔ Выполнено
+          </div>
+          <div class="column-count" id="countCompleted">0</div>
+        </div>
+        <div class="cards-container" id="columnCompleted">
+          <div class="empty-column">
+            <div class="empty-icon"></div>
+            <div>Нет выполненных заказов</div>
           </div>
         </div>
       </div>
@@ -1660,10 +1677,11 @@ AUTH.requireAuth();
     // Load orders
     async function loadOrders() {
       try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders`);
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders?limit=200`);
         if (response.ok) {
           const data = await response.json();
-          const newOrders = data.data || [];
+          // Роут отдаёт { orders, total }; чтение data.data давало пустую доску
+          const newOrders = (data.orders || []).map(normalizeOrder);
 
           // Check for new orders
           if (newOrders.length > orders.length) {
@@ -1679,13 +1697,52 @@ AUTH.requireAuth();
       }
     }
 
+    // Строка API → вид карточки. Поля в базе snake_case, total — строка
+    // numeric (без приведения сумма смены склеивалась как текст), состава
+    // в списке нет.
+    function normalizeOrder(o) {
+      const name = [o.first_name, o.last_name].filter(Boolean).join(' ');
+      return {
+        ...o,
+        orderNumber: o.order_number || String(o.id).slice(-4),
+        createdAt: o.created_at,
+        total: Number(o.total) || 0,
+        customer: { name: name || 'Гость', phone: o.customer_phone || '' },
+        deliveryAddress: o.delivery_address || '',
+        courierName: o.courier_name || '',
+        specialInstructions: o.special_instructions || '',
+        items: Array.isArray(o.items) ? o.items : []
+      };
+    }
+
+    // Доставку показываем только заведениям, у которых она есть (AUTH.hasDelivery)
+    function deliveryOn() {
+      return typeof AUTH === 'undefined' || typeof AUTH.hasDelivery !== 'function' || AUTH.hasDelivery();
+    }
+
+    function jsArg(id) {
+      return "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    }
+
+    // Подтверждение вторым нажатием вместо confirm(): во встроенном браузере
+    // VS Code confirm() заблокирован и кнопка выглядела мёртвой
+    const pendingConfirm = {};
+    function confirmTwice(key, text) {
+      if (pendingConfirm[key]) { delete pendingConfirm[key]; return true; }
+      pendingConfirm[key] = true;
+      showNotification('⚠️ ' + text + ' — нажмите ещё раз для подтверждения', 'error');
+      setTimeout(() => { delete pendingConfirm[key]; }, 5000);
+      return false;
+    }
+
     // Update statistics
     function updateStats() {
       const pending = orders.filter(o => o.status === 'pending').length;
       const confirmed = orders.filter(o => o.status === 'confirmed').length;
       const preparing = orders.filter(o => o.status === 'preparing').length;
       const ready = orders.filter(o => o.status === 'ready').length;
-      const delivery = orders.filter(o => o.status === 'out_for_delivery').length;
+      const delivery = orders.filter(o => o.status === 'delivering').length;
+      const completed = orders.filter(o => o.status === 'completed').length;
       const delivered = orders.filter(o => o.status === 'delivered').length;
 
       document.getElementById('headerPending').textContent = pending;
@@ -1701,15 +1758,21 @@ AUTH.requireAuth();
       document.getElementById('countReady').textContent = ready;
       document.getElementById('countDelivery').textContent = delivery;
       document.getElementById('countDelivered').textContent = delivered;
+      document.getElementById('countCompleted').textContent = completed;
     }
 
     // Render Kanban board
     function renderKanban() {
-      const statuses = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
+      const hasDelivery = deliveryOn();
+      document.querySelectorAll('[data-delivery-only]').forEach(el => {
+        el.style.display = hasDelivery ? '' : 'none';
+      });
+      const statuses = ['pending', 'confirmed', 'preparing', 'ready']
+        .concat(hasDelivery ? ['delivering', 'delivered'] : [], ['completed']);
 
       statuses.forEach(status => {
         let containerId;
-        if (status === 'out_for_delivery') {
+        if (status === 'delivering') {
           containerId = 'columnOut_for_delivery';
         } else {
           containerId = `column${status.charAt(0).toUpperCase() + status.slice(1)}`;
@@ -1719,7 +1782,7 @@ AUTH.requireAuth();
         const filtered = orders.filter(o => {
           const matchesStatus = o.status === status;
           const matchesSearch = !searchTerm ||
-            o.id.toString().includes(searchTerm) ||
+            String(o.orderNumber).includes(searchTerm) ||
             o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             o.customer.phone.includes(searchTerm);
           return matchesStatus && matchesSearch;
@@ -1731,16 +1794,18 @@ AUTH.requireAuth();
             confirmed: '📋',
             preparing: '🍳',
             ready: '🎉',
-            out_for_delivery: '🚗',
-            delivered: '🎉'
+            delivering: '🚗',
+            delivered: '🎉',
+            completed: '✔'
           };
           const texts = {
             pending: 'Нет новых заказов',
             confirmed: 'Нет подтвержденных',
             preparing: 'Ничего не готовится',
             ready: 'Нет готовых заказов',
-            out_for_delivery: 'Нет заказов на доставке',
-            delivered: 'Нет доставленных заказов'
+            delivering: 'Нет заказов на доставке',
+            delivered: 'Нет доставленных заказов',
+            completed: 'Нет выполненных заказов'
           };
           container.innerHTML = `
             <div class="empty-column">
@@ -1765,7 +1830,7 @@ AUTH.requireAuth();
         <div class="order-card" draggable="true" data-order-id="${order.id}">
           ${isNew ? '<div class="new-order-badge">NEW</div>' : ''}
           <div class="card-header">
-            <div class="order-number">#${order.id}</div>
+            <div class="order-number">#${order.orderNumber}</div>
             <div class="order-time">
               <span class="time-value">${elapsed} мин назад</span>
             </div>
@@ -1799,30 +1864,35 @@ AUTH.requireAuth();
             <div class="order-total">${order.total} ₽</div>
             <div class="card-actions">
               ${order.status === 'pending' || order.status === 'confirmed' ? `
-                <button class="action-icon-btn btn-kitchen" onclick="sendToKitchen(${order.id})" title="Отправить на кухню">
+                <button class="action-icon-btn btn-kitchen" onclick="sendToKitchen(${jsArg(order.id)})" title="Отправить на кухню">
                   👨‍🍳
                 </button>
               ` : ''}
               ${order.status === 'preparing' ? `
-                <button class="action-icon-btn btn-ready" onclick="markAsReady(${order.id})" title="Готово">
+                <button class="action-icon-btn btn-ready" onclick="markAsReady(${jsArg(order.id)})" title="Готово">
                   ✅
                 </button>
               ` : ''}
-              ${order.status === 'ready' ? `
-                <button class="action-icon-btn btn-delivery" onclick="openCourierModal(${order.id})" title="Передать курьеру">
+              ${order.status === 'ready' && deliveryOn() && order.order_type === 'delivery' ? `
+                <button class="action-icon-btn btn-delivery" onclick="openCourierModal(${jsArg(order.id)})" title="Передать курьеру">
                   🚚
                 </button>
               ` : ''}
-              ${order.status === 'out_for_delivery' ? `
-                <button class="action-icon-btn btn-delivered" onclick="markAsDelivered(${order.id})" title="Доставлено">
+              ${order.status === 'ready' && order.order_type !== 'delivery' ? `
+                <button class="action-icon-btn btn-delivered" onclick="markAsCompleted(${jsArg(order.id)})" title="Выдан гостю">
                   ✔️
                 </button>
               ` : ''}
-              <button class="action-icon-btn btn-print" onclick="printOrder(${order.id})" title="Печать чека">
+              ${order.status === 'delivering' ? `
+                <button class="action-icon-btn btn-delivered" onclick="markAsDelivered(${jsArg(order.id)})" title="Доставлено">
+                  ✔️
+                </button>
+              ` : ''}
+              <button class="action-icon-btn btn-print" onclick="printOrder(${jsArg(order.id)})" title="Печать чека">
                 🖨️
               </button>
-              ${order.status !== 'delivered' && order.status !== 'cancelled' ? `
-                <button class="action-icon-btn btn-cancel" onclick="cancelOrder(${order.id})" title="Отменить">
+              ${!['delivered', 'completed', 'cancelled'].includes(order.status) ? `
+                <button class="action-icon-btn btn-cancel" onclick="cancelOrder(${jsArg(order.id)})" title="Отменить">
                   ✕
                 </button>
               ` : ''}
@@ -1865,6 +1935,11 @@ AUTH.requireAuth();
       }
     }
 
+    // Самовывоз и заказ у стойки: выдан гостю — заказ закрыт
+    async function markAsCompleted(orderId) {
+      await updateStatus(orderId, 'completed');
+    }
+
     // Send all pending/confirmed orders to kitchen
     async function sendAllToKitchen() {
       const toSend = orders.filter(o => o.status === 'pending' || o.status === 'confirmed');
@@ -1873,8 +1948,7 @@ AUTH.requireAuth();
         return;
       }
 
-      const confirmed = confirm(`Отправить ${toSend.length} заказов на кухню?`);
-      if (!confirmed) return;
+      if (!confirmTwice('all-kitchen', `Отправить ${toSend.length} заказов на кухню`)) return;
 
       for (const order of toSend) {
         await updateStatus(order.id, 'preparing');
@@ -1893,8 +1967,7 @@ AUTH.requireAuth();
 
     // Cancel order
     async function cancelOrder(orderId) {
-      const confirmed = confirm(`Отменить заказ #${orderId}?`);
-      if (!confirmed) return;
+      if (!confirmTwice('cancel-' + orderId, 'Отменить заказ')) return;
 
       await updateStatus(orderId, 'cancelled');
       showNotification(`Заказ #${orderId} отменен`);
@@ -1957,7 +2030,8 @@ AUTH.requireAuth();
           if (dragging) {
             const orderId = dragging.dataset.orderId;
             const newStatus = column.dataset.status;
-            await updateStatus(parseInt(orderId), newStatus);
+            // id — UUID: parseInt превращал его в NaN и перенос молча не работал
+            await updateStatus(orderId, newStatus);
             showNotification(`Заказ #${orderId} перемещен в "${getStatusName(newStatus)}"`);
           }
         });
@@ -1970,8 +2044,9 @@ AUTH.requireAuth();
         confirmed: 'Подтверждены',
         preparing: 'Готовятся',
         ready: 'Готовы',
-        out_for_delivery: 'На доставке',
-        delivered: 'Доставлено'
+        delivering: 'На доставке',
+        delivered: 'Доставлено',
+        completed: 'Выполнено'
       };
       return names[status] || status;
     }
@@ -2039,7 +2114,7 @@ AUTH.requireAuth();
         const response = await AUTH.fetch(`${API_BASE_URL}/orders/${selectedOrderIdForCourier}`, {
           method: 'PUT',
           body: JSON.stringify({
-            status: 'out_for_delivery',
+            status: 'delivering',
             // Идентификаторы — UUID-строки, приводить к числу нельзя
             courierId: courierId,
             courierName: courier.name

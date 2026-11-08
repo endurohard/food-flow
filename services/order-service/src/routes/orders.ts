@@ -3,6 +3,7 @@ import Joi from 'joi';
 import { OrderService, OrderError } from '../services/order.service';
 import { authenticateUser, optionalAuth } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
+import { resolveOrderListScope } from './order-list-scope';
 import { RabbitMQPublisher } from '../services/rabbitmq.service';
 import { config } from '../config';
 
@@ -40,10 +41,19 @@ const createOrderSchema = Joi.object({
  */
 router.get('/', authenticateUser, async (req: Request, res: Response) => {
   try {
-    const result = await orderService.list({
+    const scope = resolveOrderListScope({
+      userId: req.userId,
+      userRole: req.userRole,
+      enterpriseRole: req.enterpriseRole,
       enterpriseId: req.enterpriseId,
+      queryCustomerId: req.query.customerId as string,
+    });
+    if (!scope.ok) return res.status(scope.status).json({ error: 'Forbidden', message: scope.message });
+
+    const result = await orderService.list({
+      enterpriseId: scope.enterpriseId,
       restaurantId: req.query.restaurantId as string,
-      customerId: req.query.customerId as string || req.userId,
+      customerId: scope.customerId,
       status: req.query.status as string,
       orderType: req.query.orderType as string,
       dateFrom: req.query.dateFrom as string,

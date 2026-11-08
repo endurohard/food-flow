@@ -186,3 +186,27 @@ describe('правила в тесте не разошлись с auth.js', () =
     expect(keys.sort()).toEqual(Object.keys(MODULE_ACCESS).sort());
   });
 });
+
+// В кофейне в «Заказах» и на панели висели «На доставке» / «Доставлено»
+describe('доставка по типу заведения', () => {
+  const src = fs.readFileSync(AUTH_JS, 'utf8');
+  const m = /const DELIVERY_TYPES\s*=\s*\[([^\]]*)\]/.exec(src);
+  const types = m ? m[1].split(',').map((x) => x.trim().replace(/['"]/g, '')).filter(Boolean) : [];
+  const hasDelivery = (t) => !t || types.includes(t);
+
+  it('список типов с доставкой найден в auth.js', () => {
+    expect(types.length).toBeGreaterThan(0);
+  });
+  it('у кофейни и производства доставки нет', () => {
+    expect(hasDelivery('coffee_shop')).toBe(false);
+    expect(hasDelivery('production')).toBe(false);
+  });
+  it('у ресторана и службы доставки есть, без типа — показываем', () => {
+    expect(hasDelivery('restaurant')).toBe(true);
+    expect(hasDelivery('delivery')).toBe(true);
+    expect(hasDelivery(null)).toBe(true);
+  });
+  it('hasDelivery в auth.js пропускает пустой тип и сверяет со списком', () => {
+    expect(src).toMatch(/AUTH\.hasDelivery\s*=\s*function[\s\S]*?return !type \|\| DELIVERY_TYPES\.includes\(type\)/);
+  });
+});

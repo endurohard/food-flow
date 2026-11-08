@@ -123,7 +123,7 @@
     const waiting = orders.filter((o) => o.status === 'ready')
       .map((o) => ({ o, wait: minutesSince(o.updated_at || o.created_at) }))
       .sort((a, b) => b.wait - a.wait);
-    const onTheWay = orders.filter((o) => o.status === 'out_for_delivery');
+    const onTheWay = orders.filter((o) => o.status === 'delivering');
     const delivered = orders.filter((o) => o.delivered_at && o.created_at);
     const durations = delivered.map((o) => (new Date(o.delivered_at) - new Date(o.created_at)) / 60000);
     const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
