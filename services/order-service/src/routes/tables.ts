@@ -1,22 +1,53 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
-import { TableService } from '../services/table.service';
+import { TableService, TableError } from '../services/table.service';
 import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { config } from '../config';
 
 const router = Router();
 const tableService = new TableService(config.database.url);
 
+// Номер стола храним строкой (бывает «12», «Б-3»), но форма шлёт число —
+// принимаем оба вида и приводим к строке, иначе Joi.string() отвергал «3».
+const tableNumberSchema = Joi.alternatives()
+  .try(Joi.string().trim().min(1).max(20), Joi.number().integer().min(1).max(99999))
+  .custom((v) => String(v));
+
 const createTableSchema = Joi.object({
-  tableNumber: Joi.string().min(1).max(20).required(),
-  section: Joi.string().max(50).optional(),
-  seats: Joi.number().integer().min(1).optional(),
+  // restaurantId приходит в том же теле: без него в схеме каждый POST
+  // отвергался «"restaurantId" is not allowed», и стол не создавался никогда.
+  restaurantId: Joi.string().uuid().required(),
+  tableNumber: tableNumberSchema.required(),
+  section: Joi.string().max(50).allow(null, '').optional(),
+  seats: Joi.number().integer().min(1).max(100).optional(),
   posX: Joi.number().integer().optional(),
   posY: Joi.number().integer().optional(),
   width: Joi.number().integer().min(10).optional(),
   height: Joi.number().integer().min(10).optional(),
   shape: Joi.string().valid('rectangle', 'circle', 'square').optional()
 });
+
+const updateTableSchema = Joi.object({
+  tableNumber: tableNumberSchema.optional(),
+  section: Joi.string().max(50).allow(null, '').optional(),
+  seats: Joi.number().integer().min(1).max(100).optional(),
+  status: Joi.string().valid('free', 'occupied', 'reserved').optional(),
+  posX: Joi.number().integer().optional(),
+  posY: Joi.number().integer().optional(),
+  width: Joi.number().integer().min(10).optional(),
+  height: Joi.number().integer().min(10).optional(),
+  shape: Joi.string().valid('rectangle', 'circle', 'square').optional()
+}).min(1);
+
+export { createTableSchema, updateTableSchema };
+
+function sendError(res: Response, error: unknown, what: string) {
+  if (error instanceof TableError) {
+    return res.status(error.status).json({ error: error.message, message: error.message });
+  }
+  console.error(`Failed to ${what} table:`, error);
+  return res.status(500).json({ error: 'Internal server error' });
+}
 
 /**
  * GET /api/tables?restaurantId=
@@ -46,9 +77,9 @@ router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'oper
  */
 router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.body.restaurantId;
-    if (!restaurantId) {
-      return res.status(400).json({ error: 'restaurantId is required' });
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
 
     const { error, value } = createTableSchema.validate(req.body);
@@ -56,11 +87,11 @@ router.post('/', authenticateUser, requireRole('admin', 'owner', 'manager'), asy
       return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
     }
 
-    const table = await tableService.create(restaurantId, value, req.enterpriseId);
+    const { restaurantId, ...data } = value;
+    const table = await tableService.create(restaurantId, data, req.enterpriseId);
     return res.status(201).json({ table });
   } catch (error) {
-    console.error('Failed to create table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, error, 'create');
   }
 });
 
@@ -74,14 +105,18 @@ router.put('/:id', authenticateUser, requireRole('admin', 'owner', 'manager', 'o
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
 
-    const table = await tableService.update(req.params.id, req.body, req.enterpriseId);
+    const { error, value } = updateTableSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    }
+
+    const table = await tableService.update(req.params.id, value, req.enterpriseId);
     if (!table) {
       return res.status(404).json({ error: 'Table not found' });
     }
     return res.json({ table });
   } catch (error) {
-    console.error('Failed to update table:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendError(res, error, 'update');
   }
 });
 

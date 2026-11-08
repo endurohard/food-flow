@@ -12,6 +12,13 @@ export interface CreateTableInput {
   shape?: string;
 }
 
+/** Ошибка с HTTP-кодом: роут отдаёт её как есть, без 500. */
+export class TableError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 export class TableService {
   private pool: InstanceType<typeof Pool>;
 
@@ -37,7 +44,21 @@ export class TableService {
     return result.rows;
   }
 
+  /**
+   * Предприятие стола берём из самой точки, а не из токена: иначе по чужому
+   * restaurantId можно было завести стол в чужой точке со своим enterprise_id.
+   */
   async create(restaurantId: string, data: CreateTableInput, enterpriseId?: string): Promise<any> {
+    const rest = await this.pool.query(
+      'SELECT enterprise_id FROM restaurants WHERE id = $1',
+      [restaurantId]
+    );
+    const owner = rest.rows[0];
+    if (!owner || (enterpriseId && owner.enterprise_id !== enterpriseId)) {
+      throw new TableError(404, 'Точка не найдена в вашем предприятии');
+    }
+    await this.assertNumberFree(restaurantId, data.tableNumber);
+
     const result = await this.pool.query(
       `INSERT INTO restaurant_tables (restaurant_id, table_number, section, seats,
         pos_x, pos_y, width, height, shape, enterprise_id)
@@ -53,10 +74,28 @@ export class TableService {
         data.width || 100,
         data.height || 100,
         data.shape || 'rectangle',
-        enterpriseId || null
+        owner.enterprise_id
       ]
     );
     return result.rows[0];
+  }
+
+  /** Два активных «Стола 3» в одной точке — касса и официант путают заказы. */
+  private async assertNumberFree(restaurantId: string, tableNumber: string, exceptId?: string): Promise<void> {
+    const values: any[] = [restaurantId, tableNumber];
+    let extra = '';
+    if (exceptId) {
+      values.push(exceptId);
+      extra = ' AND id <> $3';
+    }
+    const dup = await this.pool.query(
+      `SELECT 1 FROM restaurant_tables
+        WHERE restaurant_id = $1 AND table_number = $2 AND is_active = true${extra}`,
+      values
+    );
+    if ((dup.rowCount ?? 0) > 0) {
+      throw new TableError(409, `Стол № ${tableNumber} уже есть в этой точке`);
+    }
   }
 
   async update(tableId: string, data: Partial<CreateTableInput> & { status?: string }, enterpriseId?: string): Promise<any> {
@@ -78,6 +117,15 @@ export class TableService {
     }
 
     if (fields.length === 0) return null;
+
+    if (data.tableNumber !== undefined) {
+      const cur = await this.pool.query(
+        `SELECT restaurant_id FROM restaurant_tables WHERE id = $1${enterpriseId ? ' AND enterprise_id = $2' : ''}`,
+        enterpriseId ? [tableId, enterpriseId] : [tableId]
+      );
+      if (!cur.rows[0]) return null;
+      await this.assertNumberFree(cur.rows[0].restaurant_id, data.tableNumber, tableId);
+    }
 
     const conds = [`id = $${p++}`];
     values.push(tableId);

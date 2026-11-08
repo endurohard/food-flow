@@ -1169,6 +1169,13 @@ AUTH.requireAuth();
     <!-- Header -->
     <div class="header">
       <h1 class="title">Столы</h1>
+      <button type="button" class="btn btn-primary" id="addTableBtn" onclick="openCreateModal()">+ Добавить стол</button>
+    </div>
+
+    <!-- Ошибка связи с сервером: показываем причину вместо пустого/локального списка -->
+    <div id="dataError" style="display:none;margin-bottom:16px;padding:14px 16px;border-radius:10px;background:#FBE9E3;color:#B23F26;">
+      <span id="dataErrorText"></span>
+      <button type="button" class="btn btn-secondary" style="margin-left:12px;" onclick="initializeTables()">Повторить</button>
     </div>
 
     <!-- Statistics -->
@@ -1244,10 +1251,41 @@ AUTH.requireAuth();
   </div>
 
   <script>
+    // Источник данных — только API. Раньше при любой ошибке экран молча
+    // переходил на localStorage: стол «добавлялся», но в базу не попадал
+    // и исчезал в другом браузере.
     let tables = [];
     let currentHall = 'main';
     let currentTable = null;
     let currentRestaurantId = null;
+    let dataSourceOk = false;
+    let deleteArmed = false;
+
+    const HALLS = { main: 'Основной зал', vip: 'VIP зал', terrace: 'Терраса' };
+
+    function jsArg(v) { return JSON.stringify(String(v)).replace(/"/g, '&quot;'); }
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiError(res) {
+      try {
+        const d = await res.json();
+        return d.message || d.error || ('HTTP ' + res.status);
+      } catch (e) { return 'HTTP ' + res.status; }
+    }
+
+    function showDataError(msg) {
+      document.getElementById('dataErrorText').textContent = 'Не удалось загрузить столы: ' + msg;
+      document.getElementById('dataError').style.display = 'block';
+    }
+    function hideDataError() { document.getElementById('dataError').style.display = 'none'; }
+
+    function requireServer(action) {
+      if (dataSourceOk && currentRestaurantId) return true;
+      showNotification('❌ ' + action + ': нет связи с сервером — обновите страницу');
+      return false;
+    }
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1264,69 +1302,42 @@ AUTH.requireAuth();
       overlay.classList.remove('active');
     }
 
-    // Load tables from API
     async function initializeTables() {
+      dataSourceOk = false;
+      hideDataError();
       document.getElementById('tablesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--color-grey-5);">Загрузка...</div>';
       try {
-        // Get restaurant list
         const restRes = await AUTH.fetch('/api/restaurants');
-        if (restRes.ok) {
-          const restData = await restRes.json();
-          if (restData.restaurants && restData.restaurants.length > 0) {
-            currentRestaurantId = restData.restaurants[0].id;
-          }
-        }
-      } catch (e) {
-        console.log('Failed to load restaurants:', e.message);
-      }
-
-      if (!currentRestaurantId) {
-        // Fallback to localStorage
-        _loadTablesFromLocalStorage();
-        renderTables();
-        return;
-      }
-
-      try {
-        const res = await AUTH.fetch(`/api/tables?restaurantId=${currentRestaurantId}`);
-        if (res.ok) {
-          const data = await res.json();
-          tables = (data.tables || []).map(t => ({
-            id: t.id,
-            number: t.table_number || t.number,
-            hall: t.section || 'main',
-            seats: t.seats || t.capacity || 4,
-            status: t.status || 'free',
-            orderId: t.current_order_id || null,
-            occupiedAt: t.occupied_at || null,
-            customerName: t.reservation_name || null,
-            customerPhone: t.reservation_phone || null,
-            reservedFor: t.reserved_for || null,
-            reservationNotes: t.reservation_notes || null
-          }));
-          renderTables();
+        if (!restRes.ok) throw new Error(await apiError(restRes));
+        const restData = await restRes.json();
+        const list = restData.restaurants || [];
+        if (!list.length) {
+          // Не сбой, а отсутствие точки: столы привязаны к точке
+          document.getElementById('tablesGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--color-grey-5);">У предприятия нет ни одной точки — сначала создайте её в «Настройках»</div>';
+          tables = [];
+          updateStats();
           return;
         }
+        currentRestaurantId = list[0].id;
+
+        const res = await AUTH.fetch('/api/tables?restaurantId=' + encodeURIComponent(currentRestaurantId));
+        if (!res.ok) throw new Error(await apiError(res));
+        const data = await res.json();
+        tables = (data.tables || []).map(t => ({
+          id: t.id,
+          number: t.table_number,
+          hall: t.section && HALLS[t.section] ? t.section : 'main',
+          seats: t.seats || 4,
+          status: t.status || 'free'
+        }));
+        dataSourceOk = true;
+        renderTables();
       } catch (e) {
-        console.log('API tables load failed:', e.message);
-      }
-
-      // Fallback
-      _loadTablesFromLocalStorage();
-      renderTables();
-    }
-
-    function _loadTablesFromLocalStorage() {
-      const savedTables = localStorage.getItem('restaurantTables');
-      if (savedTables) {
-        tables = JSON.parse(savedTables);
-      } else {
         tables = [];
+        updateStats();
+        document.getElementById('tablesGrid').innerHTML = '';
+        showDataError(e.message);
       }
-    }
-
-    function saveTables() {
-      localStorage.setItem('restaurantTables', JSON.stringify(tables));
     }
 
     function switchHall(hall) {
@@ -1338,316 +1349,223 @@ AUTH.requireAuth();
     }
 
     function updateStats() {
-      const stats = {
-        free: tables.filter(t => t.status === 'free').length,
-        occupied: tables.filter(t => t.status === 'occupied').length,
-        reserved: tables.filter(t => t.status === 'reserved').length,
-        total: tables.length
-      };
+      document.getElementById('statFree').textContent = tables.filter(t => t.status === 'free').length;
+      document.getElementById('statOccupied').textContent = tables.filter(t => t.status === 'occupied').length;
+      document.getElementById('statReserved').textContent = tables.filter(t => t.status === 'reserved').length;
+      document.getElementById('statTotal').textContent = tables.length;
+    }
 
-      document.getElementById('statFree').textContent = stats.free;
-      document.getElementById('statOccupied').textContent = stats.occupied;
-      document.getElementById('statReserved').textContent = stats.reserved;
-      document.getElementById('statTotal').textContent = stats.total;
+    function seatsWord(n) {
+      const m10 = n % 10, m100 = n % 100;
+      if (m10 === 1 && m100 !== 11) return 'место';
+      if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'места';
+      return 'мест';
     }
 
     function renderTables() {
+      updateStats();
+      if (!dataSourceOk) return;
       const grid = document.getElementById('tablesGrid');
-      const hallTables = tables.filter(t => t.hall === currentHall);
+      const hallTables = tables
+        .filter(t => t.hall === currentHall)
+        .sort((a, b) => String(a.number).localeCompare(String(b.number), 'ru', { numeric: true }));
 
       if (hallTables.length === 0) {
-        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--color-grey-5); padding: 60px;">В этом зале нет столов</div>';
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--color-grey-5); padding: 60px;">В этом зале нет столов — нажмите «+ Добавить стол»</div>';
         return;
       }
 
-      grid.innerHTML = hallTables.map(table => {
-        const timeInfo = getTimeInfo(table);
-        return `
-          <div class="table-card ${table.status}" onclick="openTableModal(${table.id})">
-            <div class="table-number">Стол ${table.number}</div>
-            <div class="table-seats">👥 ${table.seats} мест${table.seats > 4 ? '' : 'а'}</div>
-            <div class="table-status ${table.status}">
-              ${getStatusText(table.status)}
-            </div>
-            ${timeInfo ? `<div class="table-time">${timeInfo}</div>` : ''}
+      grid.innerHTML = hallTables.map(table => `
+          <div class="table-card ${esc(table.status)}" onclick="openTableModal(${jsArg(table.id)})">
+            <div class="table-number">Стол ${esc(table.number)}</div>
+            <div class="table-seats">👥 ${table.seats} ${seatsWord(table.seats)}</div>
+            <div class="table-status ${esc(table.status)}">${getStatusText(table.status)}</div>
           </div>
-        `;
-      }).join('');
-
-      updateStats();
+        `).join('');
     }
 
     function getStatusText(status) {
-      const texts = {
-        free: 'Свободен',
-        occupied: 'Занят',
-        reserved: 'Забронирован'
-      };
-      return texts[status] || status;
+      return { free: 'Свободен', occupied: 'Занят', reserved: 'Забронирован' }[status] || esc(status);
     }
 
-    function getTimeInfo(table) {
-      if (table.status === 'occupied' && table.occupiedAt) {
-        const elapsed = Math.floor((new Date() - new Date(table.occupiedAt)) / 1000 / 60);
-        return `⏱️ ${elapsed} мин`;
+    function hallOptions(selected) {
+      return Object.keys(HALLS).map(k => `<option value="${k}" ${k === selected ? 'selected' : ''}>${HALLS[k]}</option>`).join('');
+    }
+
+    function nextTableNumber() {
+      // Номер общий для точки, а не для зала: два «Стола 1» в разных залах
+      // путают кассу, и сервер такой дубль отвергнет
+      const nums = tables.map(t => parseInt(t.number, 10)).filter(n => !isNaN(n));
+      return nums.length ? Math.max(...nums) + 1 : 1;
+    }
+
+    function tableFormFields(t) {
+      return `
+        <div class="form-group">
+          <label class="form-label" for="fNumber">Номер стола</label>
+          <input type="text" class="form-input" id="fNumber" maxlength="20" value="${esc(t.number)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="fSeats">Мест за столом</label>
+          <input type="number" class="form-input" id="fSeats" min="1" max="100" value="${t.seats}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="fHall">Зал</label>
+          <select class="form-select" id="fHall">${hallOptions(t.hall)}</select>
+        </div>
+        <div id="formError" style="display:none;margin:8px 0;color:#B23F26;"></div>`;
+    }
+
+    function readTableForm() {
+      const number = document.getElementById('fNumber').value.trim();
+      const seats = Number(document.getElementById('fSeats').value);
+      const hall = document.getElementById('fHall').value;
+      if (!number) return { error: 'Укажите номер стола' };
+      if (!Number.isInteger(seats) || seats < 1 || seats > 100) return { error: 'Мест — целое число от 1 до 100' };
+      return { tableNumber: number, seats, section: hall };
+    }
+
+    function showFormError(msg) {
+      const el = document.getElementById('formError');
+      el.textContent = msg;
+      el.style.display = msg ? 'block' : 'none';
+    }
+
+    function openCreateModal() {
+      if (!requireServer('Добавление стола')) return;
+      currentTable = null;
+      document.getElementById('modalTitle').textContent = 'Новый стол';
+      document.getElementById('modalBody').innerHTML = tableFormFields({ number: nextTableNumber(), seats: 2, hall: currentHall }) + `
+        <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-primary" id="saveBtn" style="flex: 1; min-width: 120px;" onclick="createTable()">Добавить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+        </div>`;
+      document.getElementById('tableModal').classList.add('active');
+      document.getElementById('fNumber').focus();
+    }
+
+    async function createTable() {
+      if (!requireServer('Добавление стола')) return;
+      const form = readTableForm();
+      if (form.error) return showFormError(form.error);
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      try {
+        const res = await AUTH.fetch('/api/tables', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ restaurantId: currentRestaurantId, ...form })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        currentHall = form.section;
+        switchHall(currentHall);
+        closeModal();
+        showNotification('Стол ' + form.tableNumber + ' добавлен');
+        await initializeTables();
+      } catch (e) {
+        // Модалку не закрываем: введённое не должно теряться
+        showFormError('❌ Не сохранено: ' + e.message);
+      } finally {
+        btn.disabled = false;
       }
-      if (table.status === 'reserved' && table.reservedFor) {
-        return `🕐 ${table.reservedFor}`;
-      }
-      return '';
     }
 
     function openTableModal(tableId) {
       currentTable = tables.find(t => t.id === tableId);
       if (!currentTable) return;
+      deleteArmed = false;
+      currentTable.newStatus = currentTable.status;
+      document.getElementById('modalTitle').textContent = 'Стол ' + currentTable.number;
+      renderEditBody();
+      document.getElementById('tableModal').classList.add('active');
+    }
 
-      const modal = document.getElementById('tableModal');
-      const title = document.getElementById('modalTitle');
-      const body = document.getElementById('modalBody');
-
-      title.textContent = `Стол #${currentTable.number}`;
-
-      body.innerHTML = `
-        <div class="table-info-section">
-          <div class="info-row">
-            <span class="info-label">Зал:</span>
-            <span class="info-value">${getHallName(currentTable.hall)}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Мест:</span>
-            <span class="info-value">${currentTable.seats}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Статус:</span>
-            <span class="info-value">${getStatusText(currentTable.status)}</span>
-          </div>
-          ${currentTable.occupiedAt ? `
-          <div class="info-row">
-            <span class="info-label">Занят:</span>
-            <span class="info-value">${getTimeInfo(currentTable)}</span>
-          </div>
-          ` : ''}
-        </div>
-
+    function renderEditBody() {
+      const t = currentTable;
+      const st = t.newStatus;
+      document.getElementById('modalBody').innerHTML = tableFormFields(t) + `
         <div class="form-group">
-          <label class="form-label">Изменить статус:</label>
+          <label class="form-label">Статус</label>
           <div class="status-buttons">
-            <button class="status-btn ${currentTable.status === 'free' ? 'active' : ''}" onclick="changeTableStatus('free')">
-              🟢<br>Свободен
-            </button>
-            <button class="status-btn ${currentTable.status === 'occupied' ? 'active occupied' : ''}" onclick="changeTableStatus('occupied')">
-              🔴<br>Занят
-            </button>
-            <button class="status-btn ${currentTable.status === 'reserved' ? 'active reserved' : ''}" onclick="changeTableStatus('reserved')">
-              🟡<br>Бронь
-            </button>
+            <button type="button" class="status-btn ${st === 'free' ? 'active' : ''}" onclick="changeTableStatus('free')">🟢<br>Свободен</button>
+            <button type="button" class="status-btn ${st === 'occupied' ? 'active occupied' : ''}" onclick="changeTableStatus('occupied')">🔴<br>Занят</button>
+            <button type="button" class="status-btn ${st === 'reserved' ? 'active reserved' : ''}" onclick="changeTableStatus('reserved')">🟡<br>Бронь</button>
           </div>
         </div>
-
-        ${currentTable.status === 'reserved' ? `
-        <div class="form-group">
-          <label class="form-label">Имя клиента:</label>
-          <input type="text" class="form-input" id="customerName" value="${currentTable.customerName || ''}" placeholder="Иван Иванов">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Телефон:</label>
-          <input type="tel" class="form-input" id="customerPhone" value="${currentTable.customerPhone || ''}" placeholder="+7 999 123-45-67">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Время брони:</label>
-          <input type="time" class="form-input" id="reservedFor" value="${currentTable.reservedFor || ''}">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Комментарий:</label>
-          <textarea class="form-textarea" id="reservationNotes" placeholder="Дополнительная информация...">${currentTable.reservationNotes || ''}</textarea>
-        </div>
-        ` : ''}
-
-        ${currentTable.status === 'occupied' ? `
-        <div class="form-group">
-          <label class="form-label">Номер заказа:</label>
-          <input type="number" class="form-input" id="orderId" value="${currentTable.orderId || ''}" placeholder="123">
-        </div>
-        ` : ''}
-
         <div style="display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap;">
-          <button class="btn btn-primary" style="flex: 1; min-width: 120px;" onclick="saveTableChanges()">
-            💾 Сохранить
-          </button>
-          <button class="btn btn-secondary" onclick="closeModal()">
-            Отмена
-          </button>
-        </div>
-      `;
-
-      modal.classList.add('active');
+          <button type="button" class="btn btn-primary" id="saveBtn" style="flex: 1; min-width: 120px;" onclick="saveTableChanges()">💾 Сохранить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+          <button type="button" class="btn btn-secondary" id="deleteBtn" style="color:#B23F26;" onclick="deleteTable()">${deleteArmed ? 'Точно удалить?' : 'Удалить'}</button>
+        </div>`;
     }
 
     function changeTableStatus(newStatus) {
       if (!currentTable) return;
-
-      currentTable.status = newStatus;
-
-      if (newStatus === 'occupied') {
-        currentTable.occupiedAt = new Date().toISOString();
-        delete currentTable.customerName;
-        delete currentTable.customerPhone;
-        delete currentTable.reservedFor;
-        delete currentTable.reservationNotes;
-      } else if (newStatus === 'free') {
-        delete currentTable.occupiedAt;
-        delete currentTable.orderId;
-        delete currentTable.customerName;
-        delete currentTable.customerPhone;
-        delete currentTable.reservedFor;
-        delete currentTable.reservationNotes;
-      } else if (newStatus === 'reserved') {
-        delete currentTable.occupiedAt;
-        delete currentTable.orderId;
-      }
-
-      openTableModal(currentTable.id); // Refresh modal
+      // Сохраняем введённое в полях, чтобы перерисовка их не сбросила
+      currentTable.number = document.getElementById('fNumber').value;
+      currentTable.seats = Number(document.getElementById('fSeats').value) || currentTable.seats;
+      currentTable.hall = document.getElementById('fHall').value;
+      currentTable.newStatus = newStatus;
+      renderEditBody();
     }
 
     async function saveTableChanges() {
-      if (!currentTable) return;
-
-      if (currentTable.status === 'reserved') {
-        const name = document.getElementById('customerName')?.value;
-        const phone = document.getElementById('customerPhone')?.value;
-        const time = document.getElementById('reservedFor')?.value;
-        const notes = document.getElementById('reservationNotes')?.value;
-
-        if (!name || !phone || !time) {
-          showNotification('Заполните все обязательные поля для брони');
-          return;
-        }
-
-        currentTable.customerName = name;
-        currentTable.customerPhone = phone;
-        currentTable.reservedFor = time;
-        currentTable.reservationNotes = notes;
-      }
-
-      if (currentTable.status === 'occupied') {
-        const orderId = document.getElementById('orderId')?.value;
-        if (orderId) {
-          currentTable.orderId = parseInt(orderId);
-        }
-      }
-
-      // Try API update
+      if (!currentTable || !requireServer('Сохранение стола')) return;
+      const form = readTableForm();
+      if (form.error) return showFormError(form.error);
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
       try {
-        const payload = {
-          status: currentTable.status,
-          currentOrderId: currentTable.orderId || null,
-          reservationName: currentTable.customerName || null,
-          reservationPhone: currentTable.customerPhone || null,
-          reservedFor: currentTable.reservedFor || null,
-          reservationNotes: currentTable.reservationNotes || null
-        };
-        const res = await AUTH.fetch(`/api/tables/${currentTable.id}`, {
+        const res = await AUTH.fetch('/api/tables/' + encodeURIComponent(currentTable.id), {
           method: 'PUT',
-          body: JSON.stringify(payload)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...form, status: currentTable.newStatus })
         });
-        if (res.ok) {
-          showNotification('Стол обновлен');
-          closeModal();
-          await initializeTables();
-          return;
-        }
+        if (!res.ok) throw new Error(await apiError(res));
+        closeModal();
+        showNotification('Стол обновлён');
+        await initializeTables();
       } catch (e) {
-        console.log('API table update failed:', e.message);
+        showFormError('❌ Не сохранено: ' + e.message);
+      } finally {
+        btn.disabled = false;
       }
-
-      // Fallback to localStorage
-      const idx = tables.findIndex(t => t.id === currentTable.id);
-      if (idx !== -1) tables[idx] = { ...currentTable };
-      saveTables();
-      renderTables();
-      closeModal();
-      showNotification('Стол обновлен');
     }
 
-    function getHallName(hall) {
-      const names = {
-        main: '🏛️ Основной зал',
-        vip: '⭐ VIP зал',
-        terrace: '☀️ Терраса'
-      };
-      return names[hall] || hall;
-    }
-
-    async function addNewTable() {
-      if (!currentRestaurantId) {
-        showNotification('Сначала загрузите данные ресторана');
+    // Подтверждение — вторым нажатием на ту же кнопку: confirm() во встроенном
+    // браузере VS Code заблокирован, и кнопка выглядела бы мёртвой
+    async function deleteTable() {
+      if (!currentTable || !requireServer('Удаление стола')) return;
+      if (!deleteArmed) {
+        deleteArmed = true;
+        document.getElementById('deleteBtn').textContent = 'Точно удалить?';
         return;
       }
-      const hallName = getHallName(currentHall);
-      const hallTables = tables.filter(t => t.hall === currentHall);
-      const nextNumber = hallTables.length > 0 ? Math.max(...hallTables.map(t => t.number)) + 1 : 1;
-
-      const seats = prompt(`Сколько мест за столом #${nextNumber} в зале "${hallName}"?`, '4');
-      if (!seats || isNaN(seats)) return;
-
       try {
-        const res = await AUTH.fetch('/api/tables', {
-          method: 'POST',
-          body: JSON.stringify({
-            restaurantId: currentRestaurantId,
-            tableNumber: nextNumber,
-            section: currentHall,
-            seats: parseInt(seats)
-          })
-        });
-        if (res.ok) {
-          showNotification(`Стол #${nextNumber} добавлен`);
-          await initializeTables();
-          return;
-        }
+        const res = await AUTH.fetch('/api/tables/' + encodeURIComponent(currentTable.id), { method: 'DELETE' });
+        if (!res.ok) throw new Error(await apiError(res));
+        const num = currentTable.number;
+        closeModal();
+        showNotification('Стол ' + num + ' удалён');
+        await initializeTables();
       } catch (e) {
-        console.log('API add table failed:', e.message);
+        showFormError('❌ Не удалено: ' + e.message);
       }
-
-      // Fallback
-      const maxId = tables.length > 0 ? Math.max(...tables.map(t => typeof t.id === 'number' ? t.id : 0)) + 1 : 1;
-      tables.push({ id: maxId, number: nextNumber, hall: currentHall, seats: parseInt(seats), status: 'free' });
-      saveTables();
-      renderTables();
-      showNotification(`Стол #${nextNumber} добавлен`);
     }
 
     function closeModal() {
       document.getElementById('tableModal').classList.remove('active');
       currentTable = null;
-    }
-
-    async function refreshTables() {
-      await initializeTables();
-      showNotification('Данные обновлены');
+      deleteArmed = false;
     }
 
     function showNotification(message) {
       const notification = document.getElementById('notification');
-      const text = document.getElementById('notificationText');
-
-      text.textContent = message;
+      document.getElementById('notificationText').textContent = message;
       notification.classList.add('show');
-
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, 3000);
+      setTimeout(() => notification.classList.remove('show'), 3000);
     }
 
-    // Update timers every minute
-    setInterval(() => {
-      renderTables();
-    }, 60000);
-
-    // Initialize
     initializeTables();
   </script>
 </div><!-- /main-wrapper -->
