@@ -230,18 +230,22 @@ AUTH.setBusinessType = async function (type) {
   this.applyBusinessType();
 };
 
-// Best-effort: подтягивает предприятие в ff_enterprise, если его ещё нет.
-// Нужен, чтобы свежий вход на другом устройстве подхватил серверный тип
-// без локального ff_business_type. Тихо игнорирует ошибки сети/прав.
+// Best-effort: обновляет предприятие в ff_enterprise при каждой загрузке
+// страницы. Раньше брали только при пустом кэше — и выключенный в
+// «Функционале» раздел (или смена типа на другом устройстве) не доходил до
+// уже вошедших браузеров никогда. Меню сразу строится по кэшу, затем
+// перестраивается по свежим данным. Тихо игнорирует ошибки сети/прав.
 AUTH.hydrateEnterprise = async function () {
-  if (localStorage.getItem('ff_enterprise')) return;
   const user = this.getUser();
   if (!user || !user.enterpriseId) return;
   try {
     const res = await this.fetch('/api/enterprises/' + user.enterpriseId);
+    if (!res.ok) return;
     const data = await res.json();
     if (data && data.enterprise) {
-      localStorage.setItem('ff_enterprise', JSON.stringify(data.enterprise));
+      const fresh = JSON.stringify(data.enterprise);
+      if (fresh === localStorage.getItem('ff_enterprise')) return;
+      localStorage.setItem('ff_enterprise', fresh);
       this.applyBusinessType();
     }
   } catch (e) { /* ignore — фильтрация всё равно работает по ff_business_type */ }
@@ -253,9 +257,35 @@ AUTH.hydrateEnterprise = async function () {
 // requireSuperAdmin ему недоступны по праву, а меню об этом не знало.
 const SUPER_ADMIN_PAGES = ['enterprises.html', 'super-admin.html'];
 
+// Переключатели «Настройки → Функционал» (enterprises.features) → экраны.
+// Раньше флаги сохранялись в базу, но меню их не читало: выключенная
+// «Кухня» у кофейни оставалась в меню. Скрываем только по явному false —
+// у старых организаций в features лежат лишь часть ключей, и отсутствие
+// ключа не должно прятать раздел (дефолт inventory:false на форме убрал бы
+// склад у всех, кто ни разу не открывал настройки).
+const FEATURE_PAGES = {
+  'tables.html':        'tables',
+  'hall-designer.html': 'tables',
+  'kds.html':           'kds',
+  'menu.html':          'menu',
+  'inventory.html':     'inventory',
+  'staff.html':         'staff',
+  'loyalty.html':       'loyalty',
+  'analytics.html':     'analytics',
+  'calls.html':         'telephony'
+};
+
+AUTH.getFeatures = function () {
+  try {
+    const ent = JSON.parse(localStorage.getItem('ff_enterprise') || 'null');
+    return (ent && ent.features && typeof ent.features === 'object') ? ent.features : {};
+  } catch (e) { return {}; }
+};
+
 AUTH.applyBusinessType = function () {
   const type = this.getBusinessType();
   const isSuper = this.getRole() === 'super_admin';
+  const features = this.getFeatures();
   document.querySelectorAll('a.nav-item[href]').forEach((a) => {
     const page = (a.getAttribute('href') || '').split('/').pop();
     // Сначала роль: отбор по типу заведения к правам доступа отношения не имеет
@@ -264,8 +294,9 @@ AUTH.applyBusinessType = function () {
       return;
     }
     const allowed = MODULE_ACCESS[page];
+    const featureOff = FEATURE_PAGES[page] && features[FEATURE_PAGES[page]] === false;
     // Скрываем с !important — страничные стили задают display на .nav-item с !important
-    if (!allowed || !type || allowed.includes(type)) {
+    if (!featureOff && (!allowed || !type || allowed.includes(type))) {
       // Снимаем только своё скрытие: пункт мог спрятать ролевой фильтр страницы
       if (a.dataset.btHidden) {
         a.style.removeProperty('display');

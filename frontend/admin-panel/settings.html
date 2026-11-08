@@ -2171,6 +2171,15 @@ AUTH.requireAuth();
             return features;
         }
 
+        // Меню строится по ff_enterprise (AUTH.applyBusinessType): кладём туда
+        // подтверждённое сервером предприятие и перестраиваем меню сразу —
+        // иначе выключенный раздел оставался в меню до следующего входа.
+        function syncEnterpriseCache(ent) {
+            if (!ent || !ent.id) return;
+            localStorage.setItem('ff_enterprise', JSON.stringify(ent));
+            AUTH.applyBusinessType();
+        }
+
         // Load feature settings
         async function loadFeatureSettings() {
             featuresDataOk = false;
@@ -2220,8 +2229,9 @@ AUTH.requireAuth();
                 const data = await response.json();
                 const ent = (data && data.enterprise) || {};
                 serverFeatures = ent.features || features;
+                syncEnterpriseCache(ent);
                 // «Сохранено» только после подтверждения сервером
-                showNotification('✅ Настройки функционала сохранены. Обновите страницу, чтобы изменения вступили в силу.');
+                showNotification('✅ Настройки функционала сохранены, меню обновлено');
             } catch (error) {
                 showNotification('❌ Не сохранено: ' + error.message);
             }
@@ -2253,6 +2263,7 @@ AUTH.requireAuth();
                 const data = await response.json();
                 const ent = (data && data.enterprise) || {};
                 serverFeatures = ent.features || DEFAULT_FEATURES;
+                syncEnterpriseCache(ent);
                 applyFeaturesToForm(serverFeatures);
                 // Форму перекрашиваем только после подтверждения сервером
                 showNotification('✅ Настройки сброшены к значениям по умолчанию');
