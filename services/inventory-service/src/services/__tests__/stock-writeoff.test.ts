@@ -10,7 +10,7 @@ const batch = (id: string, qty: number, cost: number, at: string) =>
   ({ id, quantity: String(qty), cost_price: String(cost), received_at: at });
 
 /** Клиент: партии по FIFO (уважает ORDER BY из SQL), цена позиции, журнал запросов. */
-function makeConn(batches: any[], itemCost = '50') {
+function makeConn(batches: any[], itemCost = '50', stockAfter?: string) {
   const queries: { sql: string; params: any[] }[] = [];
   const conn: any = {
     queries,
@@ -23,6 +23,7 @@ function makeConn(batches: any[], itemCost = '50') {
       }
       if (/SELECT cost_price FROM inventory_items/.test(sql)) return { rows: [{ cost_price: itemCost }], rowCount: 1 };
       if (/INSERT INTO stock_movements/.test(sql)) return { rows: [{ id: 'm1' }], rowCount: 1 };
+      if (/INSERT INTO inventory_stock/.test(sql) && stockAfter !== undefined) return { rows: [{ quantity: stockAfter }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     }),
     release: jest.fn()
@@ -82,6 +83,20 @@ describe('addStockMovement — партии при ручном движении
     const ins = conn.queries.find((q: any) => /INSERT INTO inventory_batches/.test(q.sql));
     expect(ins.params[4]).toBe(3);
     expect(ins.params[5]).toBe(90);
+  });
+
+  it('приход после ухода в минус: партия только на то, что осталось после покрытия минуса', async () => {
+    // Было −0,4, пришло 1 → остаток 0,6; партия 0,6, а не 1 (0,4 уже продано)
+    const conn = makeConn([], '50', '0.600');
+    await svcWith(conn).addStockMovement({ warehouseId: 'w', inventoryItemId: 'i', movementType: 'receipt', quantity: 1, costPrice: 90, enterpriseId: 'e' });
+    const ins = conn.queries.find((q: any) => /INSERT INTO inventory_batches/.test(q.sql));
+    expect(ins.params[4]).toBeCloseTo(0.6);
+  });
+
+  it('приход меньше минуса — партия не создаётся вовсе', async () => {
+    const conn = makeConn([], '50', '-0.200');
+    await svcWith(conn).addStockMovement({ warehouseId: 'w', inventoryItemId: 'i', movementType: 'receipt', quantity: 0.3, costPrice: 90, enterpriseId: 'e' });
+    expect(conn.queries.some((q: any) => /INSERT INTO inventory_batches/.test(q.sql))).toBe(false);
   });
 
   it('корректировка «плюс» создаёт партию по последней цене позиции — остаток и партии сходятся', async () => {

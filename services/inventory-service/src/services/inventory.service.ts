@@ -269,28 +269,38 @@ export class InventoryService {
         ? Math.abs(data.quantity)
         : -Math.abs(data.quantity);
 
-      await client.query(
+      const stockRow = await client.query(
         `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity)
          VALUES ($1, $2, $3)
          ON CONFLICT (warehouse_id, inventory_item_id)
-         DO UPDATE SET quantity = inventory_stock.quantity + $3, updated_at = NOW()`,
+         DO UPDATE SET quantity = inventory_stock.quantity + $3, updated_at = NOW()
+         RETURNING quantity`,
         [data.warehouseId, data.inventoryItemId, quantityDelta]
       );
 
       // Партия на любой приход: и поставка, и возврат, и корректировка «плюс».
       // Иначе остаток растёт, а партий под него нет — FIFO потом не сходится.
+      // Если до прихода остаток был в минусе (продали больше, чем было),
+      // часть прихода закрывает этот минус: тот товар уже продан и в партию
+      // не попадает, иначе партий станет больше, чем товара на складе.
       if (isInflow) {
+        const qty = Math.abs(data.quantity);
+        const after = parseFloat(stockRow.rows?.[0]?.quantity);
+        const before = Number.isFinite(after) ? after - qty : 0;
+        const batchQty = qty - Math.min(qty, Math.max(0, -before));
         if (data.movementType !== 'receipt' && costPrice === undefined) {
           costPrice = await this.lastCost(client, data.inventoryItemId);
         }
-        await client.query(
-          `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [data.inventoryItemId, data.warehouseId, data.enterpriseId || null,
-           data.batchNumber || null, Math.abs(data.quantity),
-           costPrice || null, data.expiryDate || null,
-           data.supplierId || null, data.invoiceId || null]
-        );
+        if (batchQty > 1e-9) {
+          await client.query(
+            `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [data.inventoryItemId, data.warehouseId, data.enterpriseId || null,
+             data.batchNumber || null, batchQty,
+             costPrice || null, data.expiryDate || null,
+             data.supplierId || null, data.invoiceId || null]
+          );
+        }
       }
 
       // Update cost price on receipt
