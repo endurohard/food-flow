@@ -902,589 +902,878 @@ AUTH.requireAuth();
   </header>
 
     <!-- Main Content -->
-  <div class="container">
-    <!-- Tools Sidebar -->
-    <div class="sidebar-panel">
-      <div class="panel-title">🛠️ Инструменты</div>
+  <div class="container hd-page">
+  <style>
+    /* ══ Схема зала ══════════════════════════════════════════════════════
+       Столы — настоящие, из /api/tables (позиция, размер, форма хранятся в
+       базе и видны на всех устройствах). Мебель и зоны — у этой точки в
+       браузере (у столов в API для них нет полей), с выгрузкой в файл. */
+    html body .main-wrapper > .container.hd-page { display: block !important; height: auto !important; }
+    .hd-page { --hd-wood: #E9D8BC; --hd-wood-edge: #C9AE85; --hd-chair: #FFFDF7; --hd-chair-edge: #B9AE97;
+               --hd-free: #2E7D4F; --hd-busy: #D94F30; --hd-res: #C9971A; --hd-sel: #2E7D4F; }
+    .hd-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; margin-bottom: 16px; }
+    .hd-head p { margin: 4px 0 0; color: var(--color-text-secondary); font-size: 14px; }
+    .hd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .hd-seg { display: inline-flex; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 10px; padding: 3px; max-width: 100%; overflow-x: auto; }
+    .hd-seg button { flex: 0 0 auto; border: 0; background: transparent; font: inherit; font-size: 14px; color: var(--color-text-primary);
+                     height: 34px; padding: 0 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+    .hd-seg button:hover { background: var(--admin-content-bg); }
+    .hd-seg button[aria-pressed="true"] { background: var(--color-text-primary); color: var(--admin-card-bg); font-weight: 600; }
+    .hd-seg .cnt { font-size: 12px; opacity: .7; }
+    .hd-btn { height: 40px; padding: 0 12px; border: 1px solid var(--admin-border); background: var(--admin-card-bg); border-radius: 10px;
+              font: inherit; font-size: 14px; color: var(--color-text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .hd-btn:hover:not(:disabled) { background: var(--admin-content-bg); }
+    .hd-btn:disabled { opacity: .45; cursor: default; }
+    .hd-btn svg { width: 18px; height: 18px; }
+    .hd-btn.icon { width: 40px; padding: 0; justify-content: center; }
+    .hd-btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #FFFDF7; font-weight: 600; }
+    .hd-btn.primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+    .hd-btn.danger { color: #9E3420; border-color: #E8B7A8; }
+    .hd-btn.danger.confirm { background: #D94F30; color: #FFFDF7; border-color: #D94F30; }
+    .hd-zoom { min-width: 54px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
+    .hd-spacer { flex: 1; }
+    .hd-dirty { font-size: 13px; color: #9E3420; display: none; align-items: center; gap: 6px; }
+    .hd-dirty.show { display: inline-flex; }
+    .hd-dirty::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #D94F30; }
 
-      <!-- Hall Selector -->
-      <div class="tool-section">
-        <label class="tool-label">Зал</label>
-        <div class="hall-selector">
-          <button class="hall-btn active" data-hall="main" onclick="switchHall('main')">
-            Основной
-          </button>
-          <button class="hall-btn" data-hall="vip" onclick="switchHall('vip')">
-            VIP
-          </button>
-          <button class="hall-btn" data-hall="terrace" onclick="switchHall('terrace')">
-            Терраса
-          </button>
-        </div>
-      </div>
+    .hd-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
+    @media (max-width: 1180px) { .hd-layout { grid-template-columns: 200px minmax(0, 1fr); } .hd-props { grid-column: 1 / -1; } }
+    @media (max-width: 760px) {
+      .hd-layout { grid-template-columns: minmax(0, 1fr); }
+      .hd-stage { order: 1; height: 60vh; min-height: 340px; }
+      .hd-libpanel { order: 2; }
+      .hd-props { order: 3; }
+      .hd-lib { display: flex !important; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+      .hd-lib button { flex: 0 0 92px; }
+      .hd-hint.keys { display: none; }
+    }
+    /* В режиме занятости библиотека не нужна — план шире */
+    .hd-layout.view { grid-template-columns: minmax(0, 1fr) 260px; }
+    .hd-layout.view .hd-libpanel { display: none; }
+    @media (max-width: 1180px) { .hd-layout.view { grid-template-columns: minmax(0, 1fr); } }
+    .hd-panel { background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 14px; padding: 14px; }
+    .hd-panel h2 { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text-secondary); }
+    .hd-lib { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 16px; }
+    @media (max-width: 760px) { .hd-lib { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .hd-lib button { overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 7px; min-height: 74px;
+                     border: 1px solid var(--admin-border); border-radius: 10px; background: var(--admin-card-bg); cursor: grab;
+                     font: inherit; font-size: 12px; line-height: 1.2; color: var(--color-text-primary); text-align: center; touch-action: none; }
+    .hd-lib button:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+    .hd-lib button svg { width: 40px; height: 34px; }
+    .hd-lib small { color: var(--color-text-secondary); font-size: 11px; }
+    .hd-hint { font-size: 12px; color: var(--color-text-secondary); line-height: 1.45; margin: 0; }
+    .hd-hint kbd { font: 600 11px var(--font-family); border: 1px solid var(--color-grey-4); border-radius: 4px; padding: 0 4px; }
 
-      <!-- Tables -->
-      <div class="tool-section">
-        <label class="tool-label">Столы</label>
-        <div class="tool-grid">
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="round" data-seats="2">
-            <div class="tool-icon">⭕</div>
-            <div class="tool-name">Круглый<br>2 места</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="round" data-seats="4">
-            <div class="tool-icon">⭕</div>
-            <div class="tool-name">Круглый<br>4 места</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="square" data-seats="4">
-            <div class="tool-icon">⬜</div>
-            <div class="tool-name">Квадратный<br>4 места</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="rect" data-seats="6">
-            <div class="tool-icon">▭</div>
-            <div class="tool-name">Прямоугольный<br>6 мест</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="rect" data-seats="8">
-            <div class="tool-icon">▭</div>
-            <div class="tool-name">Длинный<br>8 мест</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="table" data-shape="round" data-seats="10">
-            <div class="tool-icon">⭕</div>
-            <div class="tool-name">Большой<br>10 мест</div>
-          </div>
-        </div>
-      </div>
+    .hd-stage { position: relative; background: var(--admin-card-bg); border: 1px solid var(--admin-border); border-radius: 14px;
+                overflow: auto; height: calc(100vh - 250px); min-height: 460px; overscroll-behavior: contain; }
+    .hd-canvas { position: relative; transform-origin: 0 0; }
+    .hd-floor { position: absolute; inset: 0; background-color: #FBF8F0; border-radius: 6px;
+                background-image: linear-gradient(#EFE8D8 1px, transparent 1px), linear-gradient(90deg, #EFE8D8 1px, transparent 1px),
+                                  linear-gradient(#F5F0E4 1px, transparent 1px), linear-gradient(90deg, #F5F0E4 1px, transparent 1px);
+                background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px; box-shadow: inset 0 0 0 2px #E4DAC4; }
+    .hd-item { position: absolute; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+    .hd-item:active { cursor: grabbing; }
+    .hd-item svg { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .hd-item.sel { outline: 2px solid var(--hd-sel); outline-offset: 3px; border-radius: 4px; z-index: 50; }
+    .hd-item.table { z-index: 10; }
+    .hd-item.table.sel { z-index: 60; }
+    .hd-item:focus-visible { outline: 2px dashed var(--hd-sel); outline-offset: 3px; }
+    .hd-handle { position: absolute; right: -9px; bottom: -9px; width: 16px; height: 16px; border-radius: 4px; background: #FFFDF7;
+                 border: 2px solid var(--hd-sel); cursor: nwse-resize; display: none; touch-action: none; }
+    .hd-item.sel .hd-handle { display: block; }
+    .view .hd-item { cursor: pointer; }
+    .view .hd-handle { display: none !important; }
+    .hd-guide { position: absolute; background: #2E7D4F; opacity: .5; pointer-events: none; z-index: 90; display: none; }
 
-      <!-- Objects -->
-      <div class="tool-section">
-        <label class="tool-label">Объекты</label>
-        <div class="tool-grid">
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="🚪">
-            <div class="tool-icon">🚪</div>
-            <div class="tool-name">Дверь</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="🪟">
-            <div class="tool-icon">🪟</div>
-            <div class="tool-name">Окно</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="🌿">
-            <div class="tool-icon">🌿</div>
-            <div class="tool-name">Растение</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="🖼️">
-            <div class="tool-icon">🖼️</div>
-            <div class="tool-name">Декор</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="💡">
-            <div class="tool-icon">💡</div>
-            <div class="tool-name">Свет</div>
-          </div>
-          <div class="tool-item" draggable="true" ondragstart="dragStart(event)" data-type="object" data-icon="🔥">
-            <div class="tool-icon">🔥</div>
-            <div class="tool-name">Камин</div>
-          </div>
-        </div>
-      </div>
+    .hd-empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px;
+                color: var(--color-text-secondary); font-size: 15px; pointer-events: none; z-index: 5; }
+    .hd-empty.show { display: flex; }
+    .hd-empty b { display: block; color: var(--color-text-primary); font-size: 17px; margin-bottom: 6px; }
+
+    .hd-props .row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+    .hd-props .row > * { min-width: 0; }
+    .hd-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 13px; color: var(--color-text-secondary); }
+    .hd-field input, .hd-field select { height: 38px; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-card-bg);
+                                         font: inherit; font-size: 14px; color: var(--color-text-primary); padding: 0 10px; min-width: 0; }
+    .hd-field input:focus, .hd-field select:focus { outline: 2px solid var(--color-primary); outline-offset: 0; border-color: transparent; }
+    .hd-shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+    .hd-shapes button { height: 52px; border: 1px solid var(--admin-border); border-radius: 8px; background: var(--admin-card-bg); cursor: pointer;
+                        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font: inherit; font-size: 11px; color: var(--color-text-primary); }
+    .hd-shapes button[aria-pressed="true"] { border-color: var(--color-primary); background: var(--color-primary-light); font-weight: 600; }
+    .hd-shapes svg { width: 22px; height: 22px; }
+    .hd-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .hd-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--color-text-secondary); }
+    .hd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .hd-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .hd-stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+    .hd-stat div { background: var(--admin-content-bg); border-radius: 10px; padding: 8px 10px; }
+    .hd-stat b { display: block; font-size: 20px; font-family: var(--font-family-heading); }
+    .hd-stat span { font-size: 12px; color: var(--color-text-secondary); }
+
+    .hd-toast { position: fixed; right: 24px; bottom: 24px; z-index: 2100; background: var(--color-text-primary); color: #FFFDF7; padding: 12px 16px;
+                border-radius: 10px; font-size: 14px; max-width: min(420px, calc(100vw - 32px)); box-shadow: var(--shadow-modal); display: none; }
+    .hd-toast.show { display: block; }
+    .hd-toast.err { background: #9E3420; }
+    .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  </style>
+
+  <div class="hd-head">
+    <div>
+      <h1>Схема зала</h1>
+      <p id="hdSub">Расставьте столы и мебель так, как они стоят в заведении. Столы сохраняются в базе и видны на кассе и в «Столах».</p>
     </div>
-
-    <!-- Canvas -->
-    <div class="canvas-container">
-      <div class="canvas-header">
-        <div class="canvas-title" id="canvasTitle">🏛️ Основной зал</div>
-        <div class="canvas-controls">
-          <button class="btn btn-secondary" onclick="exportLayout()">
-            📤 Экспорт
-          </button>
-        </div>
-      </div>
-      <div class="canvas" id="canvas" ondrop="drop(event)" ondragover="allowDrop(event)">
-        <!-- Elements will be added here -->
-      </div>
-    </div>
-
-    <!-- Properties Panel -->
-    <div class="properties-panel">
-      <div class="panel-title">⚙️ Свойства</div>
-      <div id="propertiesContent">
-        <div style="color: var(--color-grey-5); text-align: center; padding: 40px 0;">
-          Выберите элемент<br>для редактирования
-        </div>
-      </div>
+    <div class="hd-seg" role="group" aria-label="Режим" id="hdMode">
+      <button type="button" data-mode="edit" aria-pressed="true">Редактор</button>
+      <button type="button" data-mode="view" aria-pressed="false">Занятость</button>
     </div>
   </div>
 
-  <!-- Notification -->
-  <div class="notification" id="notification">
-    <span id="notificationText"></span>
+  <div class="hd-bar">
+    <div class="hd-seg" role="group" aria-label="Зал" id="hdHalls"></div>
+    <span class="hd-spacer"></span>
+    <button type="button" class="hd-btn icon" id="hdUndo" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 010 10h-2"/></svg></button>
+    <button type="button" class="hd-btn icon" id="hdRedo" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить" disabled>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l4 4-4 4"/><path d="M17 9H8a5 5 0 000 10h2"/></svg></button>
+    <button type="button" class="hd-btn icon" id="hdZoomOut" aria-label="Уменьшить"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 10h10"/></svg></button>
+    <span class="hd-zoom" id="hdZoomVal">100%</span>
+    <button type="button" class="hd-btn icon" id="hdZoomIn" aria-label="Увеличить"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 10h10M10 5v10"/></svg></button>
+    <button type="button" class="hd-btn" id="hdFit" title="Вписать зал в экран">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>Вписать</button>
+    <span class="hd-dirty" id="hdDirty">Не сохранено</span>
+    <button type="button" class="hd-btn primary" id="hdSave" disabled>Сохранить</button>
   </div>
+
+  <div class="hd-layout">
+    <aside class="hd-panel hd-libpanel" aria-label="Что поставить">
+      <h2>Столы</h2>
+      <div class="hd-lib" id="hdLibTables"></div>
+      <h2>Мебель и зоны</h2>
+      <div class="hd-lib" id="hdLibDecor"></div>
+      <p class="hd-hint keys">Перетащите на план или нажмите — встанет в центр. <kbd>Del</kbd> удалить, <kbd>Ctrl</kbd>+<kbd>D</kbd> копия, стрелки двигают, <kbd>R</kbd> поворот.</p>
+    </aside>
+
+    <section class="hd-stage" id="hdStage" aria-label="План зала">
+      <div class="hd-canvas" id="hdCanvas">
+        <div class="hd-floor" id="hdFloor"></div>
+        <div class="hd-guide" id="hdGuideV"></div>
+        <div class="hd-guide" id="hdGuideH"></div>
+      </div>
+      <div class="hd-empty" id="hdEmpty"></div>
+    </section>
+
+    <aside class="hd-panel hd-props" id="hdProps" aria-live="polite"></aside>
+  </div>
+
+  <div class="hd-toast" id="hdToast" role="status"></div>
+</div>
 
   <script>
-    let currentHall = 'main';
-    let layouts = JSON.parse(localStorage.getItem('hallLayouts') || '{}');
-    let currentElement = null;
-    let tableCounter = 0;
-    let isDragging = false;
-    let dragOffset = { x: 0, y: 0 };
+  (function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-    // Drag and drop from toolbar
-    function dragStart(event) {
-      const type = event.target.closest('.tool-item').dataset.type;
-      const data = {
-        type: type,
-        shape: event.target.closest('.tool-item').dataset.shape,
-        seats: event.target.closest('.tool-item').dataset.seats,
-        icon: event.target.closest('.tool-item').dataset.icon
-      };
-      event.dataTransfer.setData('text/plain', JSON.stringify(data));
-    }
+    var HALLS = { main: 'Основной зал', vip: 'VIP зал', terrace: 'Терраса' };
+    var FLOOR = { w: 1600, h: 1000 }, GRID = 10, CHAIR = 16;
+    var canEdit = AUTH.hasRole ? AUTH.hasRole(['admin', 'owner', 'manager', 'restaurant_owner', 'super_admin']) : true;
 
-    function allowDrop(event) {
-      event.preventDefault();
-    }
+    // ── Библиотека ──────────────────────────────────────────────────────
+    var TABLE_PRESETS = [
+      { shape: 'circle', seats: 2, w: 90, h: 90, label: 'Круглый', note: '2 места' },
+      { shape: 'circle', seats: 4, w: 110, h: 110, label: 'Круглый', note: '4 места' },
+      { shape: 'square', seats: 2, w: 90, h: 90, label: 'Квадратный', note: '2 места' },
+      { shape: 'square', seats: 4, w: 110, h: 110, label: 'Квадратный', note: '4 места' },
+      { shape: 'rectangle', seats: 6, w: 170, h: 100, label: 'Прямоугольный', note: '6 мест' },
+      { shape: 'rectangle', seats: 8, w: 220, h: 100, label: 'Длинный', note: '8 мест' },
+      { shape: 'circle', seats: 8, w: 160, h: 160, label: 'Банкетный', note: '8 мест' },
+      { shape: 'rectangle', seats: 2, w: 110, h: 70, label: 'У окна', note: '2 места' }
+    ];
+    var DECOR = {
+      wall:      { label: 'Стена', w: 240, h: 12 },
+      window:    { label: 'Окно', w: 140, h: 12 },
+      door:      { label: 'Дверь', w: 70, h: 70 },
+      column:    { label: 'Колонна', w: 40, h: 40 },
+      bar:       { label: 'Барная стойка', w: 260, h: 60 },
+      stool:     { label: 'Барный стул', w: 30, h: 30 },
+      sofa:      { label: 'Диван', w: 170, h: 60 },
+      armchair:  { label: 'Кресло', w: 60, h: 60 },
+      plant:     { label: 'Растение', w: 44, h: 44 },
+      cashier:   { label: 'Касса', w: 100, h: 60 },
+      kitchen:   { label: 'Кухня', w: 260, h: 180 },
+      wc:        { label: 'Туалет', w: 90, h: 90 },
+      stage:     { label: 'Сцена', w: 260, h: 120 },
+      stairs:    { label: 'Лестница', w: 90, h: 140 },
+      zone:      { label: 'Зона', w: 300, h: 200 },
+      label:     { label: 'Надпись', w: 160, h: 36 }
+    };
 
-    function drop(event) {
-      event.preventDefault();
-      const data = JSON.parse(event.dataTransfer.getData('text/plain'));
-
-      const canvas = document.getElementById('canvas');
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-
-      if (data.type === 'table') {
-        createTable(x, y, data.shape, parseInt(data.seats));
-      } else if (data.type === 'object') {
-        createObject(x, y, data.icon);
-      }
-
-      saveCurrentLayout();
-    }
-
-    function createTable(x, y, shape, seats) {
-      tableCounter++;
-      const table = document.createElement('div');
-      table.className = `table-element ${shape}`;
-      table.id = `table-${Date.now()}-${tableCounter}`;
-      table.style.left = `${x}px`;
-      table.style.top = `${y}px`;
-
-      if (shape === 'rect') {
-        table.style.width = seats === 6 ? '140px' : '180px';
-        table.style.height = '100px';
-      } else if (shape === 'round') {
-        const size = seats <= 4 ? '100px' : seats <= 8 ? '120px' : '150px';
-        table.style.width = size;
-        table.style.height = size;
-      } else if (shape === 'square') {
-        table.style.width = '100px';
-        table.style.height = '100px';
-      }
-
-      table.innerHTML = `
-        <div class="table-number">${tableCounter}</div>
-        <div class="table-seats">👥 ${seats}</div>
-        <button class="delete-btn" onclick="deleteElement('${table.id}')">×</button>
-      `;
-
-      table.addEventListener('mousedown', startDrag);
-      table.addEventListener('click', (e) => {
-        if (!e.target.classList.contains('delete-btn')) {
-          selectElement(table.id);
+    // ── Отрисовка ───────────────────────────────────────────────────────
+    function chairs(t) {
+      var w = t.w, h = t.h, n = Math.max(0, t.seats | 0), out = [], c = CHAIR;
+      var tw = w - c * 2, th = h - c * 2;
+      if (t.shape === 'circle') {
+        var r = Math.min(tw, th) / 2, cx = w / 2, cy = h / 2;
+        for (var i = 0; i < n; i++) {
+          var a = -Math.PI / 2 + i * 2 * Math.PI / n;
+          out.push({ x: cx + Math.cos(a) * (r + c / 2 + 2), y: cy + Math.sin(a) * (r + c / 2 + 2), rot: a * 180 / Math.PI + 90 });
         }
-      });
-
-      document.getElementById('canvas').appendChild(table);
-    }
-
-    function createObject(x, y, icon) {
-      const obj = document.createElement('div');
-      obj.className = 'object-element';
-      obj.id = `object-${Date.now()}`;
-      obj.style.left = `${x}px`;
-      obj.style.top = `${y}px`;
-      obj.textContent = icon;
-
-      obj.innerHTML += `<button class="delete-btn" onclick="deleteElement('${obj.id}')">×</button>`;
-
-      obj.addEventListener('mousedown', startDrag);
-      obj.addEventListener('click', (e) => {
-        if (!e.target.classList.contains('delete-btn')) {
-          selectElement(obj.id);
-        }
-      });
-
-      document.getElementById('canvas').appendChild(obj);
-    }
-
-    function startDrag(event) {
-      if (event.target.classList.contains('delete-btn')) return;
-
-      isDragging = true;
-      currentElement = event.currentTarget;
-
-      const rect = currentElement.getBoundingClientRect();
-      const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-
-      dragOffset.x = event.clientX - rect.left;
-      dragOffset.y = event.clientY - rect.top;
-
-      document.addEventListener('mousemove', drag);
-      document.addEventListener('mouseup', stopDrag);
-
-      currentElement.style.cursor = 'grabbing';
-      event.preventDefault();
-    }
-
-    function drag(event) {
-      if (!isDragging || !currentElement) return;
-
-      const canvas = document.getElementById('canvas');
-      const canvasRect = canvas.getBoundingClientRect();
-
-      let x = event.clientX - canvasRect.left - dragOffset.x;
-      let y = event.clientY - canvasRect.top - dragOffset.y;
-
-      // Keep within canvas bounds
-      x = Math.max(0, Math.min(x, canvas.offsetWidth - currentElement.offsetWidth));
-      y = Math.max(0, Math.min(y, canvas.offsetHeight - currentElement.offsetHeight));
-
-      currentElement.style.left = `${x}px`;
-      currentElement.style.top = `${y}px`;
-    }
-
-    function stopDrag() {
-      isDragging = false;
-      if (currentElement) {
-        currentElement.style.cursor = 'move';
-        saveCurrentLayout();
+        return out;
       }
-      document.removeEventListener('mousemove', drag);
-      document.removeEventListener('mouseup', stopDrag);
-    }
-
-    function selectElement(elementId) {
-      // Deselect all
-      document.querySelectorAll('.table-element, .object-element').forEach(el => {
-        el.classList.remove('selected');
-      });
-
-      const element = document.getElementById(elementId);
-      if (!element) return;
-
-      element.classList.add('selected');
-      showProperties(element);
-    }
-
-    function showProperties(element) {
-      const isTable = element.classList.contains('table-element');
-      const props = document.getElementById('propertiesContent');
-
-      if (isTable) {
-        const tableNum = element.querySelector('.table-number').textContent;
-        const tableSeats = element.querySelector('.table-seats').textContent.match(/\d+/)[0];
-
-        props.innerHTML = `
-          <div class="form-group">
-            <label class="form-label">Номер стола</label>
-            <input type="number" class="form-input" value="${tableNum}" onchange="updateTableNumber('${element.id}', this.value)">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Количество мест</label>
-            <input type="number" class="form-input" value="${tableSeats}" onchange="updateTableSeats('${element.id}', this.value)">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Форма</label>
-            <select class="form-select" onchange="updateTableShape('${element.id}', this.value)">
-              <option value="round" ${element.classList.contains('round') ? 'selected' : ''}>Круглая</option>
-              <option value="square" ${element.classList.contains('square') ? 'selected' : ''}>Квадратная</option>
-              <option value="rect" ${element.classList.contains('rect') ? 'selected' : ''}>Прямоугольная</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Позиция X</label>
-            <input type="number" class="form-input" value="${parseInt(element.style.left)}" onchange="updatePosition('${element.id}', this.value, null)">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Позиция Y</label>
-            <input type="number" class="form-input" value="${parseInt(element.style.top)}" onchange="updatePosition('${element.id}', null, this.value)">
-          </div>
-
-          <button class="btn btn-danger" style="width: 100%; margin-top: 12px;" onclick="deleteElement('${element.id}')">
-            🗑️ Удалить
-          </button>
-        `;
+      // по сторонам: длинные стороны первыми, торцы — если мест много
+      var sides = { top: 0, bottom: 0, left: 0, right: 0 };
+      var longH = tw >= th;
+      if (t.shape === 'square' || n <= 4) {
+        var order = longH ? ['top', 'bottom', 'left', 'right'] : ['left', 'right', 'top', 'bottom'];
+        if (n <= 2) order = longH ? ['top', 'bottom'] : ['left', 'right'];
+        for (i = 0; i < n; i++) sides[order[i % order.length]]++;
       } else {
-        props.innerHTML = `
-          <div class="form-group">
-            <label class="form-label">Иконка</label>
-            <input type="text" class="form-input" value="${element.textContent.trim()}" maxlength="2" onchange="updateObjectIcon('${element.id}', this.value)" style="font-size: 32px; text-align: center; height: 60px;">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Позиция X</label>
-            <input type="number" class="form-input" value="${parseInt(element.style.left)}" onchange="updatePosition('${element.id}', this.value, null)">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Позиция Y</label>
-            <input type="number" class="form-input" value="${parseInt(element.style.top)}" onchange="updatePosition('${element.id}', null, this.value)">
-          </div>
-
-          <button class="btn btn-danger" style="width: 100%; margin-top: 12px;" onclick="deleteElement('${element.id}')">
-            🗑️ Удалить
-          </button>
-        `;
+        var ends = n >= 6 ? 2 : 0, rest = n - ends;
+        if (longH) { sides.left = sides.right = ends / 2; sides.top = Math.ceil(rest / 2); sides.bottom = Math.floor(rest / 2); }
+        else { sides.top = sides.bottom = ends / 2; sides.left = Math.ceil(rest / 2); sides.right = Math.floor(rest / 2); }
       }
+      function along(k, len, start) { var a = []; for (var j = 0; j < k; j++) a.push(start + len * (j + 0.5) / k); return a; }
+      along(sides.top, tw, c).forEach(function (x) { out.push({ x: x, y: c / 2 - 1, rot: 0 }); });
+      along(sides.bottom, tw, c).forEach(function (x) { out.push({ x: x, y: h - c / 2 + 1, rot: 180 }); });
+      along(sides.left, th, c).forEach(function (y) { out.push({ x: c / 2 - 1, y: y, rot: -90 }); });
+      along(sides.right, th, c).forEach(function (y) { out.push({ x: w - c / 2 + 1, y: y, rot: 90 }); });
+      return out;
     }
 
-    function updateTableNumber(elementId, value) {
-      const element = document.getElementById(elementId);
-      element.querySelector('.table-number').textContent = value;
-      saveCurrentLayout();
-    }
+    var STATUS = { free: { c: '#2E7D4F', t: 'Свободен' }, occupied: { c: '#D94F30', t: 'Занят' }, reserved: { c: '#C9971A', t: 'Бронь' } };
 
-    function updateTableSeats(elementId, value) {
-      const element = document.getElementById(elementId);
-      element.querySelector('.table-seats').textContent = `👥 ${value}`;
-      saveCurrentLayout();
-    }
-
-    function updateTableShape(elementId, shape) {
-      const element = document.getElementById(elementId);
-      element.className = `table-element ${shape}`;
-      if (!element.classList.contains('selected')) {
-        element.classList.add('selected');
-      }
-      saveCurrentLayout();
-    }
-
-    function updatePosition(elementId, x, y) {
-      const element = document.getElementById(elementId);
-      if (x !== null) element.style.left = `${x}px`;
-      if (y !== null) element.style.top = `${y}px`;
-      saveCurrentLayout();
-    }
-
-    function updateObjectIcon(elementId, icon) {
-      const element = document.getElementById(elementId);
-      const deleteBtn = element.querySelector('.delete-btn');
-      element.textContent = icon;
-      element.appendChild(deleteBtn);
-      saveCurrentLayout();
-    }
-
-    function deleteElement(elementId) {
-      const element = document.getElementById(elementId);
-      if (element && confirm('Удалить этот элемент?')) {
-        element.remove();
-        document.getElementById('propertiesContent').innerHTML = `
-          <div style="color: var(--color-grey-5); text-align: center; padding: 40px 0;">
-            Выберите элемент<br>для редактирования
-          </div>
-        `;
-        saveCurrentLayout();
-        showNotification('🗑️ Элемент удален');
-      }
-    }
-
-    function switchHall(hall) {
-      currentHall = hall;
-
-      // Update buttons
-      document.querySelectorAll('.hall-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.hall === hall);
+    function tableSvg(t, view) {
+      var w = t.w, h = t.h, c = CHAIR, s = '';
+      chairs(t).forEach(function (p) {
+        s += '<g transform="translate(' + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ') rotate(' + p.rot.toFixed(1) + ')">' +
+             '<rect x="-9" y="-7" width="18" height="14" rx="5" fill="#FFFDF7" stroke="#B9AE97" stroke-width="1.5"/>' +
+             '<rect x="-7" y="-7" width="14" height="4" rx="2" fill="#D9CFB9"/></g>';
       });
+      var top = view && STATUS[t.status] ? STATUS[t.status].c : null;
+      var fill = top ? top : '#E9D8BC', edge = top ? top : '#C9AE85';
+      var fo = top ? ' fill-opacity=".16"' : '';
+      if (t.shape === 'circle') {
+        var r = Math.min(w, h) / 2 - c;
+        s += '<ellipse cx="' + w / 2 + '" cy="' + h / 2 + '" rx="' + (w / 2 - c) + '" ry="' + (h / 2 - c) + '" fill="' + fill + '"' + fo + ' stroke="' + edge + '" stroke-width="2"/>';
+      } else {
+        s += '<rect x="' + c + '" y="' + c + '" width="' + (w - c * 2) + '" height="' + (h - c * 2) + '" rx="' + (t.shape === 'square' ? 8 : 10) + '" fill="' + fill + '"' + fo + ' stroke="' + edge + '" stroke-width="2"/>';
+      }
+      var fs = Math.max(13, Math.min(24, Math.min(w, h) / 4.2));
+      s += '<text x="' + w / 2 + '" y="' + (h / 2 + fs * 0.12) + '" text-anchor="middle" dominant-baseline="middle" font-family="Bitter, Georgia, serif" font-weight="700" font-size="' + fs.toFixed(0) + '" fill="#23201A">' + esc(t.number) + '</text>';
+      if (Math.min(w, h) >= 100) {
+        s += '<text x="' + w / 2 + '" y="' + (h / 2 + fs * 0.9) + '" text-anchor="middle" font-size="11" fill="#6B6352">' +
+             (view && STATUS[t.status] ? STATUS[t.status].t : t.seats + ' ' + plural(t.seats, 'место', 'места', 'мест')) + '</text>';
+      }
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">' + s + '</svg>';
+    }
 
-      // Update title
-      const titles = {
-        main: '🏛️ Основной зал',
-        vip: '⭐ VIP зал',
-        terrace: '☀️ Терраса'
+    function decorSvg(d) {
+      var w = d.w, h = d.h, s = '', ink = '#6B6352';
+      var lab = function (txt, y) { return '<text x="' + w / 2 + '" y="' + (y || h / 2) + '" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" fill="#4A443A">' + esc(txt) + '</text>'; };
+      switch (d.kind) {
+        case 'wall': s = '<rect width="' + w + '" height="' + h + '" rx="2" fill="#5B5446"/>'; break;
+        case 'window': s = '<rect width="' + w + '" height="' + h + '" fill="#FFFDF7" stroke="#5B5446" stroke-width="2"/><line x1="2" y1="' + h / 2 + '" x2="' + (w - 2) + '" y2="' + h / 2 + '" stroke="#6E9CC9" stroke-width="2"/>'; break;
+        case 'door': s = '<path d="M0 ' + h + ' L0 0" stroke="#5B5446" stroke-width="4"/><path d="M0 0 A' + w + ' ' + h + ' 0 0 1 ' + w + ' ' + h + '" fill="none" stroke="#9C927C" stroke-width="1.5" stroke-dasharray="4 4"/><line x1="0" y1="' + h + '" x2="' + w + '" y2="' + h + '" stroke="#5B5446" stroke-width="2"/>'; break;
+        case 'column': s = '<rect width="' + w + '" height="' + h + '" rx="4" fill="#8A8170"/><path d="M0 0L' + w + ' ' + h + 'M' + w + ' 0L0 ' + h + '" stroke="#A39A87" stroke-width="1.5"/>'; break;
+        case 'bar': s = '<rect width="' + w + '" height="' + h + '" rx="10" fill="#A9845A" stroke="#7F6040" stroke-width="2"/><rect x="6" y="6" width="' + (w - 12) + '" height="' + (h * 0.35) + '" rx="6" fill="#C8A67C"/>' + lab('Бар', h * 0.68); break;
+        case 'stool': s = '<circle cx="' + w / 2 + '" cy="' + h / 2 + '" r="' + (Math.min(w, h) / 2 - 1) + '" fill="#FFFDF7" stroke="#7F6040" stroke-width="2"/><circle cx="' + w / 2 + '" cy="' + h / 2 + '" r="' + (Math.min(w, h) / 5) + '" fill="#C8A67C"/>'; break;
+        case 'sofa': s = '<rect width="' + w + '" height="' + h + '" rx="14" fill="#7C8FA6"/><rect x="10" y="' + h * 0.38 + '" width="' + (w - 20) + '" height="' + (h * 0.52) + '" rx="8" fill="#A5B4C6"/><line x1="' + w / 2 + '" y1="' + h * 0.42 + '" x2="' + w / 2 + '" y2="' + h * 0.86 + '" stroke="#7C8FA6" stroke-width="2"/>'; break;
+        case 'armchair': s = '<rect width="' + w + '" height="' + h + '" rx="14" fill="#7C8FA6"/><rect x="' + w * 0.18 + '" y="' + h * 0.35 + '" width="' + w * 0.64 + '" height="' + h * 0.55 + '" rx="8" fill="#A5B4C6"/>'; break;
+        case 'plant':
+          var r = Math.min(w, h) / 2, cx = w / 2, cy = h / 2;
+          s = '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.55) + '" fill="#B08960"/>';
+          for (var i = 0; i < 6; i++) { var a = i * Math.PI / 3; s += '<ellipse cx="' + (cx + Math.cos(a) * r * 0.5) + '" cy="' + (cy + Math.sin(a) * r * 0.5) + '" rx="' + r * 0.42 + '" ry="' + r * 0.24 + '" transform="rotate(' + (a * 180 / Math.PI) + ' ' + (cx + Math.cos(a) * r * 0.5) + ' ' + (cy + Math.sin(a) * r * 0.5) + ')" fill="#4E9A62"/>'; }
+          s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r * 0.22 + '" fill="#2E7D4F"/>'; break;
+        case 'cashier': s = '<rect width="' + w + '" height="' + h + '" rx="8" fill="#FFFDF7" stroke="#2E7D4F" stroke-width="2"/><rect x="' + (w / 2 - 14) + '" y="8" width="28" height="18" rx="3" fill="#2E7D4F"/>' + lab('Касса', h - 14); break;
+        case 'kitchen': s = '<defs><pattern id="hk' + d.id + '" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#D9CFB9" stroke-width="3"/></pattern></defs><rect width="' + w + '" height="' + h + '" rx="6" fill="url(#hk' + d.id + ')" stroke="#9C927C" stroke-width="2"/>' + lab(d.text || 'Кухня'); break;
+        case 'wc': s = '<rect width="' + w + '" height="' + h + '" rx="6" fill="#EEF2F6" stroke="#8C9BAB" stroke-width="2"/>' + lab(d.text || 'WC'); break;
+        case 'stage': s = '<rect width="' + w + '" height="' + h + '" rx="6" fill="#4A443A"/><rect x="6" y="6" width="' + (w - 12) + '" height="' + (h - 12) + '" rx="4" fill="none" stroke="#7A7262" stroke-width="1.5"/><text x="' + w / 2 + '" y="' + h / 2 + '" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="600" fill="#F1ECDF">' + esc(d.text || 'Сцена') + '</text>'; break;
+        case 'stairs': s = '<rect width="' + w + '" height="' + h + '" fill="#FFFDF7" stroke="#5B5446" stroke-width="2"/>'; for (var y = 14; y < h; y += 14) s += '<line x1="0" y1="' + y + '" x2="' + w + '" y2="' + y + '" stroke="#9C927C" stroke-width="1.5"/>'; s += '<path d="M' + w / 2 + ' ' + (h - 10) + 'V12M' + (w / 2 - 6) + ' 18L' + w / 2 + ' 12l6 6" fill="none" stroke="#5B5446" stroke-width="2" stroke-linecap="round"/>'; break;
+        case 'zone': s = '<rect x="1" y="1" width="' + (w - 2) + '" height="' + (h - 2) + '" rx="12" fill="#2E7D4F" fill-opacity=".06" stroke="#2E7D4F" stroke-opacity=".45" stroke-width="2" stroke-dasharray="8 6"/><text x="14" y="24" font-size="13" font-weight="600" fill="#1F5C39">' + esc(d.text || 'Зона') + '</text>'; break;
+        case 'label': s = '<text x="' + w / 2 + '" y="' + h / 2 + '" text-anchor="middle" dominant-baseline="middle" font-size="' + Math.max(12, Math.min(28, h * 0.55)).toFixed(0) + '" font-weight="700" font-family="Bitter, Georgia, serif" fill="#4A443A">' + esc(d.text || 'Надпись') + '</text>'; break;
+      }
+      return '<svg viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">' + s + '</svg>';
+    }
+
+    function plural(n, a, b, c) { n = Math.abs(n) % 100; var n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
+
+    // ── Состояние ───────────────────────────────────────────────────────
+    var st = {
+      restaurantId: null, apiOk: false, hall: 'main', mode: 'edit', zoom: 1,
+      tables: [], decor: [], deleted: [], sel: null, past: [], future: [], dirty: false
+    };
+    try { st.hall = localStorage.getItem('ff_hd_hall') || 'main'; if (!HALLS[st.hall]) st.hall = 'main'; } catch (e) {}
+    var seq = 1;
+    function uid(p) { return p + Date.now().toString(36) + (seq++); }
+    function snap(v) { return Math.round(v / GRID) * GRID; }
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+    function decorKey() { return 'ff_hall_decor_' + (st.restaurantId || 'local'); }
+    function snapshot() { return JSON.stringify({ t: st.tables, d: st.decor, x: st.deleted }); }
+    function commit() {
+      // вызывается ПЕРЕД изменением: кладём текущее состояние в историю
+      st.past.push(snapshot()); if (st.past.length > 60) st.past.shift();
+      st.future = [];
+    }
+    function restore(json) { var o = JSON.parse(json); st.tables = o.t; st.decor = o.d; st.deleted = o.x; }
+    function undo() { if (!st.past.length) return; st.future.push(snapshot()); restore(st.past.pop()); st.sel = null; markDirty(); render(); }
+    function redo() { if (!st.future.length) return; st.past.push(snapshot()); restore(st.future.pop()); st.sel = null; markDirty(); render(); }
+    function markDirty() { st.dirty = true; $('hdDirty').classList.add('show'); $('hdSave').disabled = false; syncHistory(); }
+    function syncHistory() { $('hdUndo').disabled = !st.past.length; $('hdRedo').disabled = !st.future.length; }
+
+    function find(id) {
+      for (var i = 0; i < st.tables.length; i++) if (st.tables[i].id === id) return st.tables[i];
+      for (i = 0; i < st.decor.length; i++) if (st.decor[i].id === id) return st.decor[i];
+      return null;
+    }
+    function isTable(o) { return o && o.kind === 'table'; }
+    function inHall(o) { return (o.section || 'main') === st.hall; }
+
+    // ── Отрисовка плана ─────────────────────────────────────────────────
+    function render() {
+      var canvas = $('hdCanvas'), view = st.mode === 'view';
+      canvas.style.width = FLOOR.w + 'px'; canvas.style.height = FLOOR.h + 'px';
+      canvas.style.transform = 'scale(' + st.zoom + ')';
+      $('hdStage').classList.toggle('view', view);
+      document.querySelector('.hd-layout').classList.toggle('view', view);
+      $('hdSave').style.visibility = view ? 'hidden' : '';
+      canvas.querySelectorAll('.hd-item').forEach(function (n) { n.remove(); });
+      var items = st.decor.filter(inHall).concat(st.tables.filter(inHall));
+      var frag = document.createDocumentFragment();
+      items.forEach(function (o) {
+        var el = document.createElement('div');
+        el.className = 'hd-item ' + (isTable(o) ? 'table' : 'decor') + (st.sel === o.id ? ' sel' : '');
+        el.dataset.id = o.id;
+        el.tabIndex = 0;
+        el.setAttribute('role', 'button');
+        el.setAttribute('aria-label', isTable(o) ? 'Стол ' + o.number + ', ' + o.seats + ' ' + plural(o.seats, 'место', 'места', 'мест') + (view && STATUS[o.status] ? ', ' + STATUS[o.status].t.toLowerCase() : '') : DECOR[o.kind].label + (o.text ? ': ' + o.text : ''));
+        el.style.left = o.x + 'px'; el.style.top = o.y + 'px'; el.style.width = o.w + 'px'; el.style.height = o.h + 'px';
+        if (o.rot) el.style.transform = 'rotate(' + o.rot + 'deg)';
+        if (o.kind === 'zone' || o.kind === 'kitchen') el.style.zIndex = 1;
+        el.innerHTML = (isTable(o) ? tableSvg(o, view) : decorSvg(o)) + (view ? '' : '<div class="hd-handle" data-resize="1" aria-hidden="true"></div>');
+        frag.appendChild(el);
+      });
+      canvas.appendChild(frag);
+      // счётчики в табах залов
+      $('hdHalls').innerHTML = Object.keys(HALLS).map(function (k) {
+        var n = st.tables.filter(function (t) { return (t.section || 'main') === k; }).length;
+        return '<button type="button" data-hall="' + k + '" aria-pressed="' + (k === st.hall) + '">' + HALLS[k] + ' <span class="cnt">' + n + '</span></button>';
+      }).join('');
+      var hallTables = st.tables.filter(inHall);
+      var empty = $('hdEmpty');
+      if (!st.restaurantId && st.loaded) { empty.innerHTML = '<div><b>Нет ни одной точки</b>Столы привязаны к точке — сначала создайте её в «Настройках».</div>'; empty.classList.add('show'); }
+      else if (st.loaded && !hallTables.length && !st.decor.filter(inHall).length) { empty.innerHTML = '<div><b>' + HALLS[st.hall] + ' пока пустой</b>Перетащите стол или стену из панели слева.</div>'; empty.classList.add('show'); }
+      else empty.classList.remove('show');
+      $('hdZoomVal').textContent = Math.round(st.zoom * 100) + '%';
+      renderProps();
+      syncHistory();
+    }
+
+    function shapeIcon(shape) {
+      if (shape === 'circle') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/></svg>';
+      if (shape === 'square') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="10" rx="2"/></svg>';
+    }
+
+    function renderProps() {
+      var p = $('hdProps'), o = st.sel ? find(st.sel) : null, view = st.mode === 'view';
+      var hallTables = st.tables.filter(inHall);
+      var seats = hallTables.reduce(function (a, t) { return a + (t.seats | 0); }, 0);
+      if (view) {
+        var cnt = { free: 0, occupied: 0, reserved: 0 };
+        hallTables.forEach(function (t) { if (cnt[t.status] !== undefined) cnt[t.status]++; });
+        var html = '<h2>Занятость</h2><div class="hd-legend"><span><i style="background:#2E7D4F"></i>Свободен</span><span><i style="background:#D94F30"></i>Занят</span><span><i style="background:#C9971A"></i>Бронь</span></div>' +
+          '<div class="hd-stat"><div><b>' + cnt.free + '</b><span>свободно</span></div><div><b>' + cnt.occupied + '</b><span>занято</span></div><div><b>' + cnt.reserved + '</b><span>бронь</span></div></div>';
+        if (isTable(o)) {
+          html += '<h2>Стол ' + esc(o.number) + '</h2><p class="hd-hint">' + o.seats + ' ' + plural(o.seats, 'место', 'места', 'мест') + ' · ' + (STATUS[o.status] ? STATUS[o.status].t : o.status) + '</p>' +
+            '<div class="hd-actions"><a class="hd-btn" href="/admin-panel/tables.html">Открыть в «Столах»</a></div>';
+        } else html += '<p class="hd-hint">Статусы — на момент загрузки страницы. Чтобы обновить, нажмите «Занятость» ещё раз.</p>';
+        p.innerHTML = html; return;
+      }
+      if (!o) {
+        p.innerHTML = '<h2>' + HALLS[st.hall] + '</h2><div class="hd-stat"><div><b>' + hallTables.length + '</b><span>' + plural(hallTables.length, 'стол', 'стола', 'столов') + '</span></div>' +
+          '<div><b>' + seats + '</b><span>' + plural(seats, 'место', 'места', 'мест') + '</span></div><div><b>' + st.decor.filter(inHall).length + '</b><span>предметов</span></div></div>' +
+          '<p class="hd-hint">Выберите стол или предмет на плане, чтобы изменить номер, места, размер или повернуть.</p>' +
+          (st.apiOk ? '' : '<p class="hd-hint" style="color:#9E3420;margin-top:8px">Столы с сервера не загрузились — изменения столов сохранить нельзя.</p>') +
+          '<div class="hd-actions" style="margin-top:12px"><button type="button" class="hd-btn" data-act="export">Скачать схему</button><label class="hd-btn" style="cursor:pointer">Загрузить<input type="file" accept="application/json" data-act="import" class="visually-hidden"></label></div>';
+        return;
+      }
+      if (isTable(o)) {
+        p.innerHTML = '<h2>Стол</h2>' +
+          '<div class="row"><label class="hd-field">Номер<input data-f="number" value="' + esc(o.number) + '" maxlength="20" autocomplete="off"></label>' +
+          '<label class="hd-field">Мест<input data-f="seats" type="number" min="1" max="30" value="' + o.seats + '"></label></div>' +
+          '<div class="hd-field" style="margin-bottom:4px">Форма</div><div class="hd-shapes" role="group" aria-label="Форма стола">' +
+          [['circle', 'Круглый'], ['square', 'Квадрат'], ['rectangle', 'Прямоуг.']].map(function (s) {
+            return '<button type="button" data-shape="' + s[0] + '" aria-pressed="' + (o.shape === s[0]) + '">' + shapeIcon(s[0]) + s[1] + '</button>';
+          }).join('') + '</div>' +
+          '<div class="row"><label class="hd-field">Ширина, см<input data-f="w" type="number" min="60" max="600" step="10" value="' + o.w + '"></label>' +
+          '<label class="hd-field">Глубина, см<input data-f="h" type="number" min="60" max="600" step="10" value="' + o.h + '"></label></div>' +
+          '<label class="hd-field">Зал<select data-f="section">' + Object.keys(HALLS).map(function (k) { return '<option value="' + k + '"' + (k === (o.section || 'main') ? ' selected' : '') + '>' + HALLS[k] + '</option>'; }).join('') + '</select></label>' +
+          '<div class="hd-actions"><button type="button" class="hd-btn" data-act="rotate">Повернуть</button><button type="button" class="hd-btn" data-act="dup">Копия</button>' +
+          '<button type="button" class="hd-btn danger" data-act="del">Удалить</button></div>' +
+          (o._new ? '<p class="hd-hint" style="margin-top:10px">Новый стол — появится в «Столах» после сохранения.</p>' : '');
+      } else {
+        var meta = DECOR[o.kind], hasText = ['kitchen', 'wc', 'stage', 'zone', 'label'].indexOf(o.kind) !== -1;
+        p.innerHTML = '<h2>' + meta.label + '</h2>' +
+          (hasText ? '<label class="hd-field">Подпись<input data-f="text" value="' + esc(o.text || '') + '" maxlength="40" placeholder="' + meta.label + '"></label>' : '') +
+          '<div class="row"><label class="hd-field">Ширина<input data-f="w" type="number" min="10" max="1600" step="10" value="' + o.w + '"></label>' +
+          '<label class="hd-field">Высота<input data-f="h" type="number" min="6" max="1000" step="10" value="' + o.h + '"></label></div>' +
+          '<div class="hd-actions"><button type="button" class="hd-btn" data-act="rotate">Повернуть</button><button type="button" class="hd-btn" data-act="dup">Копия</button>' +
+          '<button type="button" class="hd-btn" data-act="back">Назад</button><button type="button" class="hd-btn danger" data-act="del">Удалить</button></div>';
+      }
+    }
+
+    // ── Создание ────────────────────────────────────────────────────────
+    function nextNumber() {
+      var max = 0;
+      st.tables.forEach(function (t) { var n = parseInt(t.number, 10); if (n > max) max = n; });
+      return String(max + 1);
+    }
+    function freeSpot(w, h, x0, y0, section) {
+      section = section || st.hall;
+      // ближайшее к точке место без пересечений со столами
+      var tries = [[0, 0]];
+      for (var r = 20; r < 600; r += 20) for (var a = 0; a < 8; a++) tries.push([Math.round(Math.cos(a * Math.PI / 4) * r), Math.round(Math.sin(a * Math.PI / 4) * r)]);
+      var others = st.tables.concat(st.decor.filter(function (d) { return d.kind !== 'zone' && d.kind !== 'label'; }))
+        .filter(function (o) { return (o.section || 'main') === section && o.x != null; });
+      for (var i = 0; i < tries.length; i++) {
+        var x = clamp(snap(x0 + tries[i][0]), 0, FLOOR.w - w), y = clamp(snap(y0 + tries[i][1]), 0, FLOOR.h - h);
+        var hit = others.some(function (t) { return x < t.x + t.w + 10 && x + w + 10 > t.x && y < t.y + t.h + 10 && y + h + 10 > t.y; });
+        if (!hit) return { x: x, y: y };
+      }
+      return { x: clamp(snap(x0), 0, FLOOR.w - w), y: clamp(snap(y0), 0, FLOOR.h - h) };
+    }
+    function addTable(preset, cx, cy) {
+      commit();
+      var spot = freeSpot(preset.w, preset.h, cx - preset.w / 2, cy - preset.h / 2);
+      var t = { id: uid('n'), kind: 'table', _new: true, number: nextNumber(), seats: preset.seats, shape: preset.shape,
+                w: preset.w, h: preset.h, x: spot.x, y: spot.y, section: st.hall, status: 'free' };
+      st.tables.push(t); st.sel = t.id; markDirty(); render();
+    }
+    function addDecor(kind, cx, cy) {
+      commit();
+      var m = DECOR[kind];
+      var d = { id: uid('d'), kind: kind, w: m.w, h: m.h, x: clamp(snap(cx - m.w / 2), 0, FLOOR.w - m.w), y: clamp(snap(cy - m.h / 2), 0, FLOOR.h - m.h), rot: 0, section: st.hall };
+      st.decor.push(d); st.sel = d.id; markDirty(); render();
+    }
+    function centerOfView() {
+      var s = $('hdStage');
+      return { x: (s.scrollLeft + s.clientWidth / 2) / st.zoom, y: (s.scrollTop + s.clientHeight / 2) / st.zoom };
+    }
+
+    function libIcon(html, w, h) { return html.replace('<svg viewBox="0 0 ' + w + ' ' + h + '"', '<svg viewBox="-4 -4 ' + (w + 8) + ' ' + (h + 8) + '" preserveAspectRatio="xMidYMid meet"'); }
+    function buildLibrary() {
+      $('hdLibTables').innerHTML = TABLE_PRESETS.map(function (p, i) {
+        var svg = libIcon(tableSvg({ shape: p.shape, seats: p.seats, w: p.w, h: p.h, number: '' }, false), p.w, p.h);
+        return '<button type="button" data-preset="' + i + '" aria-label="' + p.label + ' стол, ' + p.note + '">' + svg + '<span>' + p.label + '</span><small>' + p.note + '</small></button>';
+      }).join('');
+      $('hdLibDecor').innerHTML = Object.keys(DECOR).map(function (k) {
+        var m = DECOR[k], w = m.w, h = m.h;
+        // в иконке длинные предметы ужимаем, чтобы было видно форму
+        if (w / h > 4) { h = w / 4; } if (h / w > 3) { w = h / 3; }
+        var svg = libIcon(decorSvg({ kind: k, w: Math.round(w), h: Math.round(h), id: 'lib' + k }), Math.round(w), Math.round(h));
+        return '<button type="button" data-decor="' + k + '">' + svg + '<span>' + m.label + '</span></button>';
+      }).join('');
+    }
+
+    // ── Перетаскивание (мышь и палец) ───────────────────────────────────
+    var drag = null;
+    function toFloor(e) {
+      var r = $('hdCanvas').getBoundingClientRect();
+      return { x: (e.clientX - r.left) / st.zoom, y: (e.clientY - r.top) / st.zoom };
+    }
+    function showGuides(o) {
+      // направляющие при совпадении центров/краёв с другими столами
+      var gv = $('hdGuideV'), gh = $('hdGuideH'); gv.style.display = gh.style.display = 'none';
+      var cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+      st.tables.concat(st.decor).filter(inHall).forEach(function (t) {
+        if (t.id === o.id) return;
+        if (Math.abs(t.x + t.w / 2 - cx) < 1) { gv.style.display = 'block'; gv.style.left = cx + 'px'; gv.style.top = '0'; gv.style.width = '1px'; gv.style.height = FLOOR.h + 'px'; }
+        if (Math.abs(t.y + t.h / 2 - cy) < 1) { gh.style.display = 'block'; gh.style.top = cy + 'px'; gh.style.left = '0'; gh.style.height = '1px'; gh.style.width = FLOOR.w + 'px'; }
+      });
+    }
+
+    function onDown(e) {
+      if (e.button > 0) return;
+      var lib = e.target.closest('.hd-lib button');
+      if (lib && st.mode === 'edit') {
+        drag = { lib: lib, sx: e.clientX, sy: e.clientY, ghost: null };
+        e.preventDefault(); return;
+      }
+      var el = e.target.closest('.hd-item');
+      if (!el) {
+        if (e.target.closest('#hdStage')) { st.sel = null; render(); }
+        return;
+      }
+      var o = find(el.dataset.id); if (!o) return;
+      if (st.sel !== o.id) { st.sel = o.id; render(); el = $('hdCanvas').querySelector('[data-id="' + o.id + '"]'); }
+      if (st.mode !== 'edit') return;
+      var pt = toFloor(e);
+      drag = { id: o.id, resize: !!e.target.closest('[data-resize]'), ox: pt.x, oy: pt.y, x: o.x, y: o.y, w: o.w, h: o.h, moved: false, el: el };
+      el.setPointerCapture && el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!drag) return;
+      if (drag.lib) {
+        if (!drag.ghost && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) {
+          drag.ghost = drag.lib.cloneNode(true);
+          drag.ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:3000;opacity:.85;width:' + drag.lib.offsetWidth + 'px;box-shadow:0 10px 24px rgba(35,32,26,.2)';
+          document.body.appendChild(drag.ghost);
+        }
+        if (drag.ghost) { drag.ghost.style.left = (e.clientX - 30) + 'px'; drag.ghost.style.top = (e.clientY - 30) + 'px'; }
+        return;
+      }
+      var o = find(drag.id); if (!o) return;
+      var pt = toFloor(e), dx = pt.x - drag.ox, dy = pt.y - drag.oy;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+      if (!drag.moved) { commit(); drag.moved = true; }
+      if (drag.resize) {
+        var min = isTable(o) ? 60 : 6;
+        o.w = clamp(snap(drag.w + dx), Math.max(min, 10), FLOOR.w - o.x);
+        o.h = clamp(snap(drag.h + dy), min, FLOOR.h - o.y);
+        if (isTable(o) && o.shape !== 'rectangle') o.h = o.w = Math.max(o.w, o.h) === o.w ? o.w : o.h;
+        drag.el.style.width = o.w + 'px'; drag.el.style.height = o.h + 'px';
+        drag.el.innerHTML = (isTable(o) ? tableSvg(o, false) : decorSvg(o)) + '<div class="hd-handle" data-resize="1"></div>';
+      } else {
+        o.x = clamp(snap(drag.x + dx), 0, FLOOR.w - o.w);
+        o.y = clamp(snap(drag.y + dy), 0, FLOOR.h - o.h);
+        drag.el.style.left = o.x + 'px'; drag.el.style.top = o.y + 'px';
+        showGuides(o);
+      }
+    }
+    function onUp(e) {
+      if (!drag) return;
+      var d = drag; drag = null;
+      $('hdGuideV').style.display = $('hdGuideH').style.display = 'none';
+      if (d.lib) {
+        if (d.ghost) d.ghost.remove();
+        var r = $('hdStage').getBoundingClientRect(), pt;
+        if (d.ghost && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) pt = toFloor(e);
+        else if (!d.ghost) pt = centerOfView();
+        if (!pt) return;
+        if (d.lib.dataset.preset) addTable(TABLE_PRESETS[+d.lib.dataset.preset], pt.x, pt.y);
+        else addDecor(d.lib.dataset.decor, pt.x, pt.y);
+        return;
+      }
+      if (d.moved) { var o = find(d.id); if (o && isTable(o)) o._dirty = true; markDirty(); render(); }
+    }
+
+    // ── Правка свойств ──────────────────────────────────────────────────
+    function setProp(f, v) {
+      var o = find(st.sel); if (!o) return;
+      commit();
+      if (f === 'number') { v = String(v).trim(); if (!v) { st.past.pop(); render(); return; } o.number = v; }
+      else if (f === 'seats') o.seats = clamp(parseInt(v, 10) || 1, 1, 30);
+      else if (f === 'w' || f === 'h') {
+        var min = isTable(o) ? 60 : (f === 'h' ? 6 : 10);
+        o[f] = clamp(snap(parseInt(v, 10) || min), min, f === 'w' ? FLOOR.w : FLOOR.h);
+        if (isTable(o) && o.shape !== 'rectangle') o.w = o.h = o[f];
+        o.x = clamp(o.x, 0, FLOOR.w - o.w); o.y = clamp(o.y, 0, FLOOR.h - o.h);
+      }
+      else if (f === 'section') { o.section = v; st.hall = v; }
+      else if (f === 'text') o.text = String(v).slice(0, 40);
+      if (isTable(o)) o._dirty = true;
+      markDirty(); render();
+    }
+    function setShape(shape) {
+      var o = find(st.sel); if (!isTable(o) || o.shape === shape) return;
+      commit();
+      o.shape = shape;
+      if (shape !== 'rectangle') { var s = Math.max(o.w, o.h); o.w = o.h = s; }
+      else if (o.w === o.h) o.w = snap(o.w * 1.5);
+      o.x = clamp(o.x, 0, FLOOR.w - o.w); o.y = clamp(o.y, 0, FLOOR.h - o.h);
+      o._dirty = true; markDirty(); render();
+    }
+    function rotate() {
+      var o = find(st.sel); if (!o) return;
+      commit();
+      if (isTable(o)) {
+        // у стола в базе нет угла — поворот меняет ширину и глубину местами
+        var w = o.w; o.w = o.h; o.h = w; o._dirty = true;
+        o.x = clamp(o.x, 0, FLOOR.w - o.w); o.y = clamp(o.y, 0, FLOOR.h - o.h);
+      } else if (o.w / o.h > 2.5 || o.h / o.w > 2.5 || o.kind === 'door' || o.kind === 'stairs') {
+        o.rot = ((o.rot || 0) + 90) % 360;
+      } else { var t = o.w; o.w = o.h; o.h = t; }
+      markDirty(); render();
+    }
+    function duplicate() {
+      var o = find(st.sel); if (!o) return;
+      commit();
+      var c = JSON.parse(JSON.stringify(o));
+      c.id = uid(isTable(o) ? 'n' : 'd');
+      if (isTable(o)) { c._new = true; c._dirty = false; delete c.serverId; c.number = nextNumber(); c.status = 'free'; var s = freeSpot(c.w, c.h, o.x + o.w + 20, o.y); c.x = s.x; c.y = s.y; st.tables.push(c); }
+      else { c.x = clamp(o.x + 20, 0, FLOOR.w - c.w); c.y = clamp(o.y + 20, 0, FLOOR.h - c.h); st.decor.push(c); }
+      st.sel = c.id; markDirty(); render();
+    }
+    var delArmed = null;
+    function del(btn) {
+      var o = find(st.sel); if (!o) return;
+      // Стол с заказами удаляется из базы — подтверждаем вторым нажатием
+      // (confirm() во встроенных браузерах бывает заблокирован)
+      if (isTable(o) && !o._new && btn && delArmed !== o.id) {
+        delArmed = o.id; btn.classList.add('confirm'); btn.textContent = 'Точно удалить стол?';
+        setTimeout(function () { if (delArmed === o.id) { delArmed = null; renderProps(); } }, 4000);
+        return;
+      }
+      delArmed = null;
+      commit();
+      if (isTable(o)) { if (!o._new) st.deleted.push(o.id); st.tables = st.tables.filter(function (t) { return t.id !== o.id; }); }
+      else st.decor = st.decor.filter(function (t) { return t.id !== o.id; });
+      st.sel = null; markDirty(); render();
+    }
+    function sendBack() {
+      var o = find(st.sel); if (!o || isTable(o)) return;
+      commit(); st.decor = [o].concat(st.decor.filter(function (t) { return t !== o; })); markDirty(); render();
+    }
+
+    // ── Загрузка и сохранение ───────────────────────────────────────────
+    async function apiMsg(res) { try { var j = await res.json(); return j.message || j.error || ('HTTP ' + res.status); } catch (e) { return 'HTTP ' + res.status; } }
+
+    function autoPlace(list) {
+      // столы без позиции (созданы в «Столах») — ставим рядами по залам
+      list.forEach(function (t) {
+        if (t.x != null && t.y != null) return;
+        var s = freeSpot(t.w, t.h, 80, 80, t.section);
+        t.x = s.x; t.y = s.y; t._dirty = true;
+      });
+    }
+
+    async function load() {
+      st.loaded = false;
+      try {
+        var r = await AUTH.fetch('/api/restaurants');
+        if (!r.ok) throw new Error(await apiMsg(r));
+        var list = ((await r.json()).restaurants) || [];
+        st.restaurantId = list.length ? list[0].id : null;
+        if (st.restaurantId) {
+          var res = await AUTH.fetch('/api/tables?restaurantId=' + encodeURIComponent(st.restaurantId));
+          if (!res.ok) throw new Error(await apiMsg(res));
+          st.tables = (((await res.json()).tables) || []).map(function (t) {
+            var shape = ['circle', 'square', 'rectangle'].indexOf(t.shape) !== -1 ? t.shape : 'rectangle';
+            var seats = t.seats || 4;
+            var w = t.width >= 60 ? t.width : (shape === 'rectangle' ? (seats > 4 ? 170 : 110) : 110);
+            var h = t.height >= 60 ? t.height : (shape === 'rectangle' ? (seats > 4 ? 100 : 80) : w);
+            return { id: t.id, kind: 'table', number: String(t.table_number), seats: seats, shape: shape, w: w, h: h,
+                     x: t.pos_x != null && (t.pos_x || t.pos_y) ? t.pos_x : null, y: t.pos_x != null && (t.pos_x || t.pos_y) ? t.pos_y : null,
+                     section: HALLS[t.section] ? t.section : 'main', status: t.status || 'free' };
+          });
+          var before = st.tables.filter(function (t) { return t.x == null; }).length;
+          loadDecor();
+          autoPlace(st.tables);
+          st.apiOk = true;
+          if (before) { st.dirty = true; $('hdDirty').classList.add('show'); $('hdSave').disabled = false;
+            toast(before + ' ' + plural(before, 'стол', 'стола', 'столов') + ' ещё не стояли на схеме — расставили рядом, поправьте и сохраните.'); }
+        }
+      } catch (e) {
+        st.apiOk = false; st.tables = [];
+        toast('Не удалось загрузить столы: ' + e.message, true);
+      }
+      if (!st.decorLoaded) loadDecor();
+      st.loaded = true;
+      render(); fit();
+    }
+
+    function loadDecor() {
+      st.decorLoaded = true;
+      try { var raw = localStorage.getItem(decorKey()); st.decor = raw ? (JSON.parse(raw).decor || []) : []; } catch (e) { st.decor = []; }
+      // перенос старой схемы (до этой версии мебель лежала в hallLayouts)
+      if (!st.decor.length) migrateOld();
+    }
+
+    function migrateOld() {
+      try {
+        var old = JSON.parse(localStorage.getItem('hallLayouts') || '{}'), map = { '🚪': 'door', '🪟': 'window', '🌿': 'plant', '🖼️': 'label', '🍸': 'bar', '🎵': 'stage', '🚻': 'wc', '🧑‍🍳': 'kitchen' };
+        Object.keys(old).forEach(function (hall) {
+          ((old[hall] || {}).objects || []).forEach(function (ob) {
+            var k = map[ob.icon]; if (!k || !HALLS[hall]) return;
+            var m = DECOR[k];
+            st.decor.push({ id: uid('d'), kind: k, w: m.w, h: m.h, x: clamp(snap(ob.x || 0), 0, FLOOR.w - m.w), y: clamp(snap(ob.y || 0), 0, FLOOR.h - m.h), rot: 0, section: hall });
+          });
+        });
+      } catch (e) {}
+    }
+
+    async function save() {
+      if (!st.dirty) return;
+      var btn = $('hdSave'); btn.disabled = true; btn.textContent = 'Сохраняю…';
+      var errors = [];
+      try { localStorage.setItem(decorKey(), JSON.stringify({ v: 1, decor: st.decor })); } catch (e) { errors.push('мебель не сохранилась в браузере'); }
+      if (st.apiOk && st.restaurantId) {
+        for (var i = 0; i < st.deleted.length; i++) {
+          var r = await AUTH.fetch('/api/tables/' + encodeURIComponent(st.deleted[i]), { method: 'DELETE' });
+          if (r.ok || r.status === 404) { st.deleted.splice(i, 1); i--; } else errors.push('удаление: ' + await apiMsg(r));
+        }
+        for (i = 0; i < st.tables.length; i++) {
+          var t = st.tables[i];
+          if (!t._new && !t._dirty) continue;
+          var body = { tableNumber: t.number, seats: t.seats, shape: t.shape, section: t.section, posX: Math.round(t.x), posY: Math.round(t.y), width: Math.round(t.w), height: Math.round(t.h) };
+          var res = t._new
+            ? await AUTH.fetch('/api/tables', { method: 'POST', body: JSON.stringify(Object.assign({ restaurantId: st.restaurantId }, body)) })
+            : await AUTH.fetch('/api/tables/' + encodeURIComponent(t.id), { method: 'PUT', body: JSON.stringify(body) });
+          if (res.ok) {
+            if (t._new) { var j = await res.json(); if (j.table && j.table.id) { if (st.sel === t.id) st.sel = j.table.id; t.id = j.table.id; } }
+            t._new = false; t._dirty = false;
+          } else errors.push('стол ' + t.number + ': ' + await apiMsg(res));
+        }
+      }
+      btn.textContent = 'Сохранить';
+      if (errors.length) { btn.disabled = false; toast('Сохранено не всё — ' + errors.slice(0, 3).join('; '), true); }
+      else { st.dirty = false; $('hdDirty').classList.remove('show'); toast('Схема сохранена'); }
+      render();
+    }
+
+    function exportJson() {
+      var data = { v: 1, hall: 'foodflow', tables: st.tables.map(function (t) { return { number: t.number, seats: t.seats, shape: t.shape, x: t.x, y: t.y, w: t.w, h: t.h, section: t.section }; }), decor: st.decor };
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      a.download = 'schema-zala.json'; document.body.appendChild(a); a.click(); a.remove();
+    }
+    function importJson(file) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var data = JSON.parse(fr.result);
+          if (!Array.isArray(data.decor)) throw new Error('нет мебели');
+          commit();
+          st.decor = data.decor.filter(function (d) { return DECOR[d.kind]; }).map(function (d) {
+            return { id: uid('d'), kind: d.kind, text: d.text, w: +d.w || DECOR[d.kind].w, h: +d.h || DECOR[d.kind].h, x: +d.x || 0, y: +d.y || 0, rot: +d.rot || 0, section: HALLS[d.section] ? d.section : 'main' };
+          });
+          // столы из файла: совпадение по номеру — переносим позицию
+          (data.tables || []).forEach(function (ft) {
+            var t = st.tables.filter(function (x) { return String(x.number) === String(ft.number); })[0];
+            if (t) { t.x = +ft.x; t.y = +ft.y; t.w = +ft.w || t.w; t.h = +ft.h || t.h; t.shape = ft.shape || t.shape; t.section = HALLS[ft.section] ? ft.section : t.section; t._dirty = true; }
+          });
+          markDirty(); render(); toast('Схема загружена — проверьте и сохраните');
+        } catch (e) { toast('Файл не подходит: ' + e.message, true); }
       };
-      document.getElementById('canvasTitle').textContent = titles[hall];
-
-      // Load layout
-      loadLayout();
+      fr.readAsText(file);
     }
 
-    function saveCurrentLayout() {
-      const canvas = document.getElementById('canvas');
-      const elements = [];
+    // ── Зум ─────────────────────────────────────────────────────────────
+    function setZoom(z, keepCenter) {
+      var s = $('hdStage'), c = keepCenter !== false ? centerOfView() : null;
+      st.zoom = clamp(Math.round(z * 100) / 100, 0.3, 2);
+      $('hdCanvas').style.transform = 'scale(' + st.zoom + ')';
+      // размер прокручиваемой области следует за масштабом
+      $('hdCanvas').style.marginRight = (FLOOR.w * (st.zoom - 1)) + 'px';
+      $('hdCanvas').style.marginBottom = (FLOOR.h * (st.zoom - 1)) + 'px';
+      $('hdZoomVal').textContent = Math.round(st.zoom * 100) + '%';
+      if (c) { s.scrollLeft = c.x * st.zoom - s.clientWidth / 2; s.scrollTop = c.y * st.zoom - s.clientHeight / 2; }
+    }
+    function fit() {
+      var s = $('hdStage');
+      var items = st.tables.concat(st.decor).filter(inHall);
+      var bx = { x0: 0, y0: 0, x1: FLOOR.w, y1: FLOOR.h };
+      if (items.length) {
+        bx = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+        items.forEach(function (o) { bx.x0 = Math.min(bx.x0, o.x); bx.y0 = Math.min(bx.y0, o.y); bx.x1 = Math.max(bx.x1, o.x + o.w); bx.y1 = Math.max(bx.y1, o.y + o.h); });
+        bx.x0 = Math.max(0, bx.x0 - 60); bx.y0 = Math.max(0, bx.y0 - 60); bx.x1 = Math.min(FLOOR.w, bx.x1 + 60); bx.y1 = Math.min(FLOOR.h, bx.y1 + 60);
+      }
+      var z = Math.min(s.clientWidth / (bx.x1 - bx.x0), s.clientHeight / (bx.y1 - bx.y0));
+      setZoom(clamp(z, 0.3, 1.5), false);
+      s.scrollLeft = bx.x0 * st.zoom - (s.clientWidth - (bx.x1 - bx.x0) * st.zoom) / 2;
+      s.scrollTop = bx.y0 * st.zoom - (s.clientHeight - (bx.y1 - bx.y0) * st.zoom) / 2;
+    }
 
-      canvas.querySelectorAll('.table-element, .object-element').forEach(el => {
-        const isTable = el.classList.contains('table-element');
+    var toastTimer;
+    function toast(msg, err) {
+      var t = $('hdToast'); t.textContent = msg; t.className = 'hd-toast show' + (err ? ' err' : '');
+      clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = 'hd-toast'; }, err ? 7000 : 3500);
+    }
 
-        if (isTable) {
-          elements.push({
-            type: 'table',
-            id: el.id,
-            number: el.querySelector('.table-number').textContent,
-            seats: el.querySelector('.table-seats').textContent.match(/\d+/)[0],
-            shape: el.classList.contains('round') ? 'round' : el.classList.contains('square') ? 'square' : 'rect',
-            x: parseInt(el.style.left),
-            y: parseInt(el.style.top),
-            width: el.style.width,
-            height: el.style.height
-          });
-        } else {
-          const icon = el.textContent.replace('×', '').trim();
-          elements.push({
-            type: 'object',
-            id: el.id,
-            icon: icon,
-            x: parseInt(el.style.left),
-            y: parseInt(el.style.top)
-          });
+    // ── События ─────────────────────────────────────────────────────────
+    function bind() {
+      document.addEventListener('pointerdown', function (e) { if (e.target.closest('.hd-page')) onDown(e); });
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', function () { if (drag && drag.ghost) drag.ghost.remove(); drag = null; });
+
+      $('hdHalls').addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        st.hall = b.dataset.hall; st.sel = null;
+        try { localStorage.setItem('ff_hd_hall', st.hall); } catch (err) {}
+        render(); fit();
+      });
+      $('hdMode').addEventListener('click', async function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        st.mode = b.dataset.mode; st.sel = null;
+        $('hdMode').querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        if (st.mode === 'view' && st.apiOk && !st.dirty) {
+          // свежие статусы столов
+          try { var res = await AUTH.fetch('/api/tables?restaurantId=' + encodeURIComponent(st.restaurantId));
+            if (res.ok) { var map = {}; ((await res.json()).tables || []).forEach(function (t) { map[t.id] = t.status; });
+              st.tables.forEach(function (t) { if (map[t.id]) t.status = map[t.id]; }); } } catch (err) {}
         }
+        render();
+      });
+      $('hdUndo').addEventListener('click', undo);
+      $('hdRedo').addEventListener('click', redo);
+      $('hdZoomIn').addEventListener('click', function () { setZoom(st.zoom + 0.1); });
+      $('hdZoomOut').addEventListener('click', function () { setZoom(st.zoom - 0.1); });
+      $('hdFit').addEventListener('click', fit);
+      $('hdSave').addEventListener('click', save);
+      $('hdStage').addEventListener('wheel', function (e) {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault(); setZoom(st.zoom * (e.deltaY < 0 ? 1.1 : 0.9));
+      }, { passive: false });
+
+      var props = $('hdProps');
+      props.addEventListener('change', function (e) {
+        if (e.target.dataset.act === 'import') { if (e.target.files[0]) importJson(e.target.files[0]); return; }
+        if (e.target.dataset.f) setProp(e.target.dataset.f, e.target.value);
+      });
+      props.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.dataset.f) e.target.blur(); });
+      props.addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.shape) setShape(b.dataset.shape);
+        else if (b.dataset.act === 'rotate') rotate();
+        else if (b.dataset.act === 'dup') duplicate();
+        else if (b.dataset.act === 'del') del(b);
+        else if (b.dataset.act === 'back') sendBack();
+        else if (b.dataset.act === 'export') exportJson();
       });
 
-      layouts[currentHall] = elements;
-      localStorage.setItem('hallLayouts', JSON.stringify(layouts));
-    }
-
-    function loadLayout() {
-      const canvas = document.getElementById('canvas');
-      canvas.innerHTML = '';
-
-      const layout = layouts[currentHall] || [];
-      tableCounter = 0;
-
-      layout.forEach(item => {
-        if (item.type === 'table') {
-          tableCounter = Math.max(tableCounter, parseInt(item.number));
-          const table = document.createElement('div');
-          table.className = `table-element ${item.shape}`;
-          table.id = item.id;
-          table.style.left = `${item.x}px`;
-          table.style.top = `${item.y}px`;
-          if (item.width) table.style.width = item.width;
-          if (item.height) table.style.height = item.height;
-
-          table.innerHTML = `
-            <div class="table-number">${item.number}</div>
-            <div class="table-seats">👥 ${item.seats}</div>
-            <button class="delete-btn" onclick="deleteElement('${table.id}')">×</button>
-          `;
-
-          table.addEventListener('mousedown', startDrag);
-          table.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('delete-btn')) {
-              selectElement(table.id);
-            }
-          });
-
-          canvas.appendChild(table);
-        } else if (item.type === 'object') {
-          const obj = document.createElement('div');
-          obj.className = 'object-element';
-          obj.id = item.id;
-          obj.style.left = `${item.x}px`;
-          obj.style.top = `${item.y}px`;
-          obj.textContent = item.icon;
-
-          obj.innerHTML += `<button class="delete-btn" onclick="deleteElement('${obj.id}')">×</button>`;
-
-          obj.addEventListener('mousedown', startDrag);
-          obj.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('delete-btn')) {
-              selectElement(obj.id);
-            }
-          });
-
-          canvas.appendChild(obj);
+      document.addEventListener('keydown', function (e) {
+        var tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+        var mod = e.ctrlKey || e.metaKey;
+        if (mod && (e.key === 'z' || e.key === 'я')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+        if (mod && (e.key === 's' || e.key === 'ы')) { e.preventDefault(); save(); return; }
+        if (st.mode !== 'edit' || !st.sel) return;
+        var o = find(st.sel); if (!o) return;
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delArmed = o.id; del(null); }
+        else if (mod && (e.key === 'd' || e.key === 'в')) { e.preventDefault(); duplicate(); }
+        else if (e.key === 'r' || e.key === 'к') rotate();
+        else if (e.key === 'Escape') { st.sel = null; render(); }
+        else if (e.key.indexOf('Arrow') === 0) {
+          e.preventDefault(); commit();
+          var step = e.shiftKey ? 50 : GRID;
+          if (e.key === 'ArrowLeft') o.x -= step; if (e.key === 'ArrowRight') o.x += step;
+          if (e.key === 'ArrowUp') o.y -= step; if (e.key === 'ArrowDown') o.y += step;
+          o.x = clamp(o.x, 0, FLOOR.w - o.w); o.y = clamp(o.y, 0, FLOOR.h - o.h);
+          if (isTable(o)) o._dirty = true; markDirty(); render();
+          var el = $('hdCanvas').querySelector('[data-id="' + o.id + '"]'); if (el) el.focus();
         }
       });
+      $('hdCanvas').addEventListener('focusin', function (e) {
+        var el = e.target.closest('.hd-item'); if (el && st.sel !== el.dataset.id) { st.sel = el.dataset.id; renderProps(); el.classList.add('sel'); }
+      });
+      window.addEventListener('beforeunload', function (e) { if (st.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
-      document.getElementById('propertiesContent').innerHTML = `
-        <div style="color: var(--color-grey-5); text-align: center; padding: 40px 0;">
-          Выберите элемент<br>для редактирования
-        </div>
-      `;
-    }
-
-    function clearCanvas() {
-      if (confirm('Очистить весь зал? Это действие нельзя отменить.')) {
-        document.getElementById('canvas').innerHTML = '';
-        layouts[currentHall] = [];
-        localStorage.setItem('hallLayouts', JSON.stringify(layouts));
-        tableCounter = 0;
-        showNotification('🗑️ Зал очищен');
+      if (!canEdit) {
+        // официант: смотрит занятость, двигать столы не может
+        st.mode = 'view';
+        $('hdMode').style.display = 'none';
+        document.querySelector('.hd-libpanel').style.display = 'none';
+        $('hdSave').style.display = 'none';
+        $('hdSub').textContent = 'Занятость столов на схеме зала.';
       }
     }
 
-    function saveLayout() {
-      saveCurrentLayout();
-      showNotification('💾 Планировка сохранена');
-    }
-
-    function exportLayout() {
-      const data = JSON.stringify(layouts, null, 2);
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `hall-layouts-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showNotification('📤 Планировка экспортирована');
-    }
-
-    function showNotification(message) {
-      const notification = document.getElementById('notification');
-      const text = document.getElementById('notificationText');
-
-      text.textContent = message;
-      notification.classList.add('show');
-
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, 3000);
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      const selected = document.querySelector('.selected');
-      if (!selected) return;
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        deleteElement(selected.id);
-      }
-
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        const y = parseInt(selected.style.top) - (e.shiftKey ? 10 : 1);
-        selected.style.top = Math.max(0, y) + 'px';
-        saveCurrentLayout();
-      }
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const y = parseInt(selected.style.top) + (e.shiftKey ? 10 : 1);
-        selected.style.top = y + 'px';
-        saveCurrentLayout();
-      }
-
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        const x = parseInt(selected.style.left) - (e.shiftKey ? 10 : 1);
-        selected.style.left = Math.max(0, x) + 'px';
-        saveCurrentLayout();
-      }
-
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        const x = parseInt(selected.style.left) + (e.shiftKey ? 10 : 1);
-        selected.style.left = x + 'px';
-        saveCurrentLayout();
-      }
-    });
-
-    // Initialize
-    loadLayout();
+    function init() { buildLibrary(); bind(); render(); load(); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  })();
   </script>
 </div><!-- /main-wrapper -->
 
