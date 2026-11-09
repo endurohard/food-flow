@@ -53,7 +53,10 @@ export class KitchenDisplayService {
           o.special_instructions as "specialInstructions",
           o.estimated_delivery_time as "estimatedTime",
           u.first_name || ' ' || u.last_name as "customerName",
+          -- Тип берём из самого заказа: раньше он угадывался по адресу, и
+          -- заказ «в зале» после перезагрузки KDS становился «самовывозом»
           CASE
+            WHEN o.order_type IN ('delivery', 'pickup', 'dine_in') THEN o.order_type
             WHEN o.delivery_address_id IS NOT NULL THEN 'delivery'
             ELSE 'pickup'
           END as "orderType",
