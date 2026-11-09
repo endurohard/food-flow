@@ -290,6 +290,24 @@ AUTH.hasDelivery = function () {
   return !type || DELIVERY_TYPES.includes(type);
 };
 
+// Подписи типов заказа — одни на все экраны (аналитика, панель, KDS).
+// «Самовывоз» имеет смысл рядом с доставкой; в кофейне и кафе гость берёт
+// заказ у стойки — это «На вынос», а «Доставка» в каналах только путает.
+AUTH.orderTypeLabel = function (type) {
+  if (type === 'delivery') return 'Доставка';
+  if (type === 'dine_in' || type === 'dine-in' || type === 'dinein') return 'Зал';
+  if (type === 'pickup') return this.hasDelivery() ? 'Самовывоз' : 'На вынос';
+  return type || '—';
+};
+
+// Каналы продаж заведения в порядке показа. Доставку у заведения без неё
+// показываем, только если такие заказы в периоде всё же есть (агрегатор),
+// иначе их выручка молча пропала бы из итога.
+AUTH.salesChannels = function (hasDeliveryOrders) {
+  const list = ['dine_in', 'pickup'];
+  return (this.hasDelivery() || hasDeliveryOrders) ? ['delivery'].concat(list) : list;
+};
+
 AUTH.getFeatures = function () {
   try {
     const ent = JSON.parse(localStorage.getItem('ff_enterprise') || 'null');

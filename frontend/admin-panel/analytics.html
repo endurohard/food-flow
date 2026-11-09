@@ -1227,11 +1227,16 @@ AUTH.requireAuth();
       // Статусные цвета — только для «чем закончились», всегда с подписью
       done: '#2E7D4F', active: '#B3AA96', cancelled: '#D94F30'
     };
-    var CHANNELS = [
-      { key: 'delivery', label: 'Доставка' },
-      { key: 'dine_in', label: 'Зал' },
-      { key: 'pickup', label: 'Самовывоз' }
-    ];
+    // Набор и подписи каналов зависят от типа заведения: у кофейни —
+    // «Зал» и «На вынос» (см. AUTH.salesChannels / AUTH.orderTypeLabel)
+    var ALL_CHANNELS = ['delivery', 'dine_in', 'pickup'];
+    function channelsFor(list) {
+      var hasDeliveryOrders = list.some(function (o) { return !isCancel(o) && channelOf(o) === 'delivery'; });
+      var keys = (typeof AUTH !== 'undefined' && AUTH.salesChannels) ? AUTH.salesChannels(hasDeliveryOrders) : ALL_CHANNELS;
+      return keys.map(function (k) {
+        return { key: k, label: (typeof AUTH !== 'undefined' && AUTH.orderTypeLabel) ? AUTH.orderTypeLabel(k) : k };
+      });
+    }
     var PAY = { cash: 'Наличные', card: 'Карта', online: 'Онлайн', sbp: 'СБП', mixed: 'Смешанная', bonus: 'Бонусы' };
     var DONE = ['delivered', 'completed', 'closed', 'paid', 'served'];
     var CANCEL = ['cancelled', 'canceled', 'refunded'];
@@ -1261,7 +1266,7 @@ AUTH.requireAuth();
     function total(o) { return Number(o.total) || 0; }
     function isCancel(o) { return CANCEL.indexOf(o.status) !== -1; }
     function isDone(o) { return DONE.indexOf(o.status) !== -1; }
-    function channelOf(o) { var t = o.order_type || o.orderType || 'delivery'; return t === 'dinein' ? 'dine_in' : t; }
+    function channelOf(o) { var t = o.order_type || o.orderType || 'delivery'; return (t === 'dinein' || t === 'dine-in') ? 'dine_in' : t; }
 
     // Период: [from, to) по местному времени + такой же предыдущий
     function getRange() {
@@ -1513,6 +1518,7 @@ AUTH.requireAuth();
 
     // ── Каналы ──────────────────────────────────────────────────────────
     function drawChannels(list) {
+      var CHANNELS = channelsFor(list);
       var s = {};
       CHANNELS.forEach(function (c) { s[c.key] = { orders: 0, revenue: 0 }; });
       var count = 0, rev = 0;

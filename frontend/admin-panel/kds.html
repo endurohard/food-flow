@@ -1265,13 +1265,17 @@ AUTH.requireAuth();
         playSound('new-order');
       }
 
+      // Подпись — из AUTH.orderTypeLabel: у кофейни «На вынос», а не «Самовывоз».
+      // В базе зал хранится как dine_in; 'dine-in' оставлен для старых событий.
+      const label = t => (typeof AUTH !== 'undefined' && AUTH.orderTypeLabel) ? AUTH.orderTypeLabel(t) : t;
       const orderTypeMap = {
-        'delivery': { class: 'type-delivery', icon: '🚚', text: 'Доставка' },
-        'pickup': { class: 'type-pickup', icon: '🏃', text: 'Самовывоз' },
+        'delivery': { class: 'type-delivery', icon: '🚚', text: label('delivery') },
+        'pickup': { class: 'type-pickup', icon: '🏃', text: label('pickup') },
+        'dine_in': { class: 'type-dine-in', icon: '🍽️', text: 'В зале' },
         'dine-in': { class: 'type-dine-in', icon: '🍽️', text: 'В зале' }
       };
 
-      const typeInfo = orderTypeMap[order.orderType] || orderTypeMap['delivery'];
+      const typeInfo = orderTypeMap[order.orderType] || orderTypeMap['pickup'];
 
       return `
         <div class="order-card ${order.status}">

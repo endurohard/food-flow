@@ -1174,7 +1174,7 @@ AUTH.requireAuth();
           </div>
           <div class="pie-legend-item">
             <div class="pie-dot" style="background:var(--color-warning)"></div>
-            <span class="pie-legend-label">Самовывоз</span>
+            <span class="pie-legend-label" id="pieLabelPickup">Самовывоз</span>
             <span class="pie-legend-pct" id="piePctPickup">—</span>
           </div>
         </div>
@@ -1381,10 +1381,12 @@ AUTH.requireAuth();
     cancelled: { label: 'Отменён',   cls: 'badge-danger'  },
   };
 
+  // Подписи типов — общие (AUTH.orderTypeLabel): у кофейни «На вынос»
+  const typeLabel = t => (typeof AUTH !== 'undefined' && AUTH.orderTypeLabel) ? AUTH.orderTypeLabel(t) : t;
   const TYPE_MAP = {
-    delivery: 'Доставка',
-    dine_in:  'Зал',
-    pickup:   'Самовывоз',
+    get delivery() { return typeLabel('delivery'); },
+    get dine_in() { return typeLabel('dine_in'); },
+    get pickup() { return typeLabel('pickup'); },
   };
 
   async function loadRecentOrders() {
@@ -1460,6 +1462,8 @@ AUTH.requireAuth();
     const pd = document.getElementById('piePctDelivery');
     const pi = document.getElementById('piePctDineIn');
     const pp = document.getElementById('piePctPickup');
+    const pl = document.getElementById('pieLabelPickup');
+    if (pl) pl.textContent = TYPE_MAP.pickup;
     if (pd) pd.textContent = pct(counts.delivery);
     if (pi) pi.textContent = pct(counts.dine_in);
     if (pp) pp.textContent = pct(counts.pickup);
@@ -1470,7 +1474,7 @@ AUTH.requireAuth();
     new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: hasDelivery ? ['Доставка', 'Зал', 'Самовывоз'] : ['Зал', 'Самовывоз'],
+        labels: hasDelivery ? [TYPE_MAP.delivery, TYPE_MAP.dine_in, TYPE_MAP.pickup] : [TYPE_MAP.dine_in, TYPE_MAP.pickup],
         datasets: [{
           data: hasDelivery ? [counts.delivery, counts.dine_in, counts.pickup] : [counts.dine_in, counts.pickup],
           backgroundColor: hasDelivery ? [THEME.primary, THEME.danger, THEME.warning] : [THEME.danger, THEME.warning],
