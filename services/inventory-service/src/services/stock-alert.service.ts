@@ -143,6 +143,15 @@ export class StockAlertService {
     return sentGroups;
   }
 
+  async isPurchaser(enterpriseId: string, userId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `SELECT 1 FROM enterprise_users
+        WHERE enterprise_id = $1 AND user_id = $2 AND is_purchaser AND COALESCE(is_active, true)`,
+      [enterpriseId, userId]
+    );
+    return r.rows.length > 0;
+  }
+
   async listOpen(enterpriseId: string) {
     const r = await this.pool.query(
       `SELECT a.id, a.quantity AS alert_quantity, a.min_stock, a.created_at, a.telegram_sent_at, a.telegram_error,

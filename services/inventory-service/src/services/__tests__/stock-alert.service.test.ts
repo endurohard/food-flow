@@ -112,3 +112,13 @@ describe('StockAlertService.sendPending', () => {
     expect(pool.queries).toHaveLength(0);
   });
 });
+
+describe('StockAlertService.isPurchaser', () => {
+  it('ищет назначение в заданной организации и только у активного сотрудника', async () => {
+    const pool = fakePool();
+    expect(await new StockAlertService(pool).isPurchaser('e1', 'u1')).toBe(false);
+    const q = pool.queries[0];
+    expect(q.sql).toMatch(/enterprise_id = \$1 AND user_id = \$2 AND is_purchaser AND COALESCE\(is_active, true\)/);
+    expect(q.params).toEqual(['e1', 'u1']);
+  });
+});

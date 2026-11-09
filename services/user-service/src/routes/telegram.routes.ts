@@ -72,12 +72,37 @@ export function createTelegramRoutes(deps?: { pool?: any; enterpriseService?: an
     } catch (e) { return fail(res, e, 'Не удалось отключить бота'); }
   });
 
-  // Ссылка для привязки СВОЕГО Telegram (владелец/админ привязывает себя сам)
+  // Ссылка для привязки Telegram. Без userId — свой Telegram (владелец/админ).
+  // С userId — для ответственного за закуп: админ пересылает ему ссылку,
+  // и тот жмёт «Start» у себя; доступа к настройкам закупщику не нужно.
   router.post('/link', authenticateUser, async (req: any, res) => {
     try {
+      const { error, value } = Joi.object({ userId: Joi.string().uuid().optional() }).validate(req.body || {});
+      if (error) return res.status(400).json({ error: 'Некорректный id сотрудника', message: 'Некорректный id сотрудника' });
       if (!(await ownerOrAdmin(req, res))) return;
-      return res.json(await tg.createLink(req.params.id, req.userId));
+      const target = value.userId || req.userId;
+      if (value.userId && !(await tg.isRecipient(req.params.id, target))) {
+        return res.status(400).json({
+          error: 'Сотрудник не получает уведомления',
+          message: 'Сначала назначьте сотрудника ответственным за закуп'
+        });
+      }
+      return res.json(await tg.createLink(req.params.id, target));
     } catch (e) { return fail(res, e, 'Не удалось создать ссылку'); }
+  });
+
+  // Назначить / снять ответственного за закуп
+  router.put('/purchasers/:userId', authenticateUser, async (req: any, res) => {
+    try {
+      if (Joi.string().uuid().validate(req.params.userId).error) {
+        return res.status(400).json({ error: 'Некорректный id', message: 'Некорректный id' });
+      }
+      const { error, value } = Joi.object({ purchaser: Joi.boolean().required() }).validate(req.body);
+      if (error) return res.status(400).json({ error: 'Укажите purchaser: true или false', message: 'Укажите purchaser: true или false' });
+      if (!(await ownerOrAdmin(req, res))) return;
+      await tg.setPurchaser(req.params.id, req.params.userId, value.purchaser);
+      return res.json({ success: true, ...(await tg.getStatus(req.params.id, req.userId)) });
+    } catch (e) { return fail(res, e, 'Не удалось сохранить ответственного за закуп'); }
   });
 
   // Страница опрашивает это, пока человек нажимает «Start» в боте

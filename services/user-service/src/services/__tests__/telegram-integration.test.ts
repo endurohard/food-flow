@@ -90,3 +90,83 @@ describe('notify', () => {
     expect(await new TelegramIntegrationService(pool).notify('e1', 'x')).toMatchObject({ skipped: 'no_recipients' });
   });
 });
+
+describe('ответственные за закуп', () => {
+  it('notify шлёт и закупщикам: условие (роль ИЛИ is_purchaser) и только активным в организации', async () => {
+    tg.mockResolvedValue({});
+    const pool = fakePool((sql) => botRow(sql) || (/FROM enterprise_telegram_recipients r/.test(sql)
+      ? [{ chat_id: 555, subdomain: 'coffee104' }, { chat_id: 556, subdomain: 'coffee104' }] : []));
+    const r = await new TelegramIntegrationService(pool).notify('e1', 'Пора заказать');
+    expect(r).toMatchObject({ sent: 2 });
+    const sel = pool.queries.find((q) => /FROM enterprise_telegram_recipients r/.test(q.sql))!;
+    expect(sel.sql).toMatch(/\(eu\.role = ANY\(\$2\) OR eu\.is_purchaser\)/);
+    expect(sel.sql).toMatch(/COALESCE\(eu\.is_active, true\)/);
+    expect(sel.sql).toMatch(/r\.enterprise_id = \$1/);
+    expect(sel.params[0]).toBe('e1');
+  });
+
+  it('есть неистёкшая ссылка — перед рассылкой дочитывает /start (закупщик нажал после ухода админа)', async () => {
+    tg.mockImplementation(async (_t: string, method: string) => method === 'getUpdates' ? [
+      { update_id: 20, message: { chat: { id: 900, type: 'private' }, from: { username: 'buyer' }, text: '/start code1' } }
+    ] : {});
+    const calls: string[] = [];
+    const pool = fakePool((sql) => {
+      if (/link_code IS NOT NULL AND link_expires_at > NOW\(\)/.test(sql)) return [{ '?column?': 1 }];
+      if (/UPDATE enterprise_telegram_recipients/.test(sql)) { calls.push('link'); return [{ user_id: 'u9' }]; }
+      if (/FROM enterprise_telegram_recipients r/.test(sql)) { calls.push('select'); return [{ chat_id: 900, subdomain: 's' }]; }
+      return botRow(sql) || [];
+    });
+    await new TelegramIntegrationService(pool).notify('e1', 'x');
+    expect(calls).toEqual(['link', 'select']); // привязка — до выборки получателей
+    const pend = pool.queries.find((q) => /link_code IS NOT NULL/.test(q.sql))!;
+    expect(pend.sql).toMatch(/enterprise_id = \$1/);
+  });
+
+  it('нет ожидающих ссылок — getUpdates не дёргается', async () => {
+    tg.mockResolvedValue({});
+    const pool = fakePool((sql) => botRow(sql) || (/FROM enterprise_telegram_recipients r/.test(sql) ? [{ chat_id: 1, subdomain: 's' }] : []));
+    await new TelegramIntegrationService(pool).notify('e1', 'x');
+    expect(tg.mock.calls.map((c) => c[1])).toEqual(['sendMessage']);
+  });
+
+  it('setPurchaser: сотрудник не из организации — 404; правка только в своей организации', async () => {
+    const pool = fakePool(() => []);
+    await expect(new TelegramIntegrationService(pool).setPurchaser('e1', 'u2', true)).rejects.toMatchObject({ status: 404 });
+    const upd = pool.queries.find((q) => /UPDATE enterprise_users SET is_purchaser/.test(q.sql))!;
+    expect(upd.sql).toMatch(/WHERE enterprise_id = \$1 AND user_id = \$2/);
+    expect(upd.params).toEqual(['e1', 'u2', true]);
+  });
+
+  it('снятый закупщик-сотрудник отвязывается, снятый админ — нет', async () => {
+    const del = (role: string) => {
+      const pool = fakePool((sql) => /UPDATE enterprise_users/.test(sql) ? [{ role }] : []);
+      return new TelegramIntegrationService(pool).setPurchaser('e1', 'u2', false)
+        .then(() => pool.queries.filter((q) => /DELETE FROM enterprise_telegram_recipients/.test(q.sql)));
+    };
+    const emp = await del('employee');
+    expect(emp).toHaveLength(1);
+    expect(emp[0].params).toEqual(['e1', 'u2']);
+    expect(await del('admin')).toHaveLength(0);
+  });
+
+  it('getStatus: получатели (с меткой закупа) отдельно от остальных сотрудников', async () => {
+    const pool = fakePool((sql) => /FROM enterprise_users eu/.test(sql) ? [
+      { user_id: 'o', first_name: 'Ольга', role: 'owner', is_purchaser: false, recipient: true, linked: true },
+      { user_id: 'b', first_name: 'Борис', role: 'employee', is_purchaser: true, recipient: true, linked: false },
+      { user_id: 'c', first_name: 'Вера', role: 'cashier', is_purchaser: false, recipient: false, linked: false }
+    ] : []);
+    const st = await new TelegramIntegrationService(pool).getStatus('e1', 'o');
+    expect(st.recipients.map((r: any) => [r.userId, r.purchaser])).toEqual([['o', false], ['b', true]]);
+    expect(st.staff).toEqual([{ userId: 'c', name: 'Вера', role: 'cashier' }]);
+    const sel = pool.queries.find((q) => /FROM enterprise_users eu/.test(q.sql))!;
+    expect(sel.sql).toMatch(/WHERE eu\.enterprise_id = \$1/);
+  });
+
+  it('isRecipient: ссылку можно выдать только владельцу/админу/закупщику этой организации', async () => {
+    const pool = fakePool(() => []);
+    expect(await new TelegramIntegrationService(pool).isRecipient('e1', 'u2')).toBe(false);
+    const q = pool.queries[0];
+    expect(q.sql).toMatch(/eu\.enterprise_id = \$1 AND \(eu\.role = ANY\(\$2\) OR eu\.is_purchaser\) AND eu\.user_id = \$3/);
+    expect(q.params).toEqual(['e1', ['owner', 'admin'], 'u2']);
+  });
+});

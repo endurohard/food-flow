@@ -7,8 +7,13 @@ export interface Queryable {
   query(sql: string, params?: any[]): Promise<{ rows: any[]; rowCount?: number | null }>;
 }
 
-/** Кому слать уведомления организации: только её владелец и админы. */
+/**
+ * Кому слать уведомления организации: владелец и админы по роли плюс
+ * сотрудники, назначенные ответственными за закуп (enterprise_users.is_purchaser).
+ */
 const RECIPIENT_ROLES = ['owner', 'admin'];
+/** Условие «получатель» по строке enterprise_users eu; $2 — RECIPIENT_ROLES */
+const RECIPIENT_COND = '(eu.role = ANY($2) OR eu.is_purchaser)';
 const TOKEN_RE = /^\d{5,12}:[A-Za-z0-9_-]{30,}$/;
 const LINK_TTL_MIN = 30;
 
@@ -37,28 +42,62 @@ export class TelegramIntegrationService {
   async getStatus(enterpriseId: string, userId: string) {
     const bot = await this.bot(enterpriseId);
     const people = await this.pool.query(
-      `SELECT u.id AS user_id, u.first_name, u.last_name, u.email, eu.role,
+      `SELECT u.id AS user_id, u.first_name, u.last_name, u.email, eu.role, eu.is_purchaser,
+              eu.role = ANY($2) OR eu.is_purchaser AS recipient,
               r.chat_id IS NOT NULL AS linked, r.telegram_username, r.linked_at
          FROM enterprise_users eu
          JOIN users u ON u.id = eu.user_id
          LEFT JOIN enterprise_telegram_recipients r ON r.enterprise_id = eu.enterprise_id AND r.user_id = eu.user_id
-        WHERE eu.enterprise_id = $1 AND eu.role = ANY($2) AND u.is_active = true
-        ORDER BY (eu.role = 'owner') DESC, u.first_name`,
+        WHERE eu.enterprise_id = $1 AND COALESCE(eu.is_active, true) AND u.is_active = true
+        ORDER BY (eu.role = 'owner') DESC, (eu.role = 'admin') DESC, u.first_name`,
       [enterpriseId, RECIPIENT_ROLES]
     );
+    const name = (p: any) => [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email;
     return {
       connected: !!bot,
       botUsername: bot?.bot_username || null,
       botName: bot?.bot_name || null,
-      recipients: people.rows.map((p: any) => ({
+      recipients: people.rows.filter((p: any) => p.recipient).map((p: any) => ({
         userId: p.user_id,
-        name: [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email,
+        name: name(p),
         role: p.role,
+        purchaser: !!p.is_purchaser,
         linked: !!p.linked,
         telegramUsername: p.telegram_username,
         isMe: p.user_id === userId
+      })),
+      // Кого ещё можно назначить ответственным за закуп
+      staff: people.rows.filter((p: any) => !p.recipient).map((p: any) => ({
+        userId: p.user_id, name: name(p), role: p.role
       }))
     };
+  }
+
+  /** Назначить / снять ответственного за закуп (только сотрудник этой организации). */
+  async setPurchaser(enterpriseId: string, userId: string, on: boolean) {
+    const r = await this.pool.query(
+      `UPDATE enterprise_users SET is_purchaser = $3
+        WHERE enterprise_id = $1 AND user_id = $2 AND COALESCE(is_active, true)
+        RETURNING role`,
+      [enterpriseId, userId, on]
+    );
+    if (!r.rows.length) throw new TelegramIntegrationError('Сотрудник не найден в организации', 404);
+    // Снятый закупщик без роли владельца/админа больше не получатель —
+    // убираем привязку, чтобы в списке не висел «привязанный» посторонний
+    if (!on && !RECIPIENT_ROLES.includes(r.rows[0].role)) {
+      await this.unlink(enterpriseId, userId);
+    }
+  }
+
+  /** Привязку можно выдать только получателю уведомлений этой организации. */
+  async isRecipient(enterpriseId: string, userId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `SELECT 1 FROM enterprise_users eu JOIN users u ON u.id = eu.user_id
+        WHERE eu.enterprise_id = $1 AND ${RECIPIENT_COND} AND eu.user_id = $3
+          AND COALESCE(eu.is_active, true) AND u.is_active = true`,
+      [enterpriseId, RECIPIENT_ROLES, userId]
+    );
+    return r.rows.length > 0;
   }
 
   /** Проверяет токен у Telegram и сохраняет (зашифрованным). */
@@ -171,13 +210,23 @@ export class TelegramIntegrationService {
   }
 
   /**
-   * Рассылка владельцу и админам. Роль проверяется в момент отправки:
-   * разжалованный админ перестаёт получать сразу, без ручной отвязки.
+   * Рассылка владельцу, админам и ответственным за закуп. Роль и назначение
+   * проверяются в момент отправки: разжалованный перестаёт получать сразу,
+   * без ручной отвязки.
    */
   async notify(enterpriseId: string, text: string, linkPath?: string):
       Promise<{ sent: number; failed: number; skipped?: 'no_bot' | 'no_recipients'; errors: string[] }> {
     const bot = await this.bot(enterpriseId);
     if (!bot) return { sent: 0, failed: 0, skipped: 'no_bot', errors: [] };
+    // Закупщик жмёт «Start» по ссылке, которую ему переслал админ, — часто
+    // уже после того, как админ закрыл страницу настроек и опрос остановился.
+    // Дочитываем такие привязки перед рассылкой, иначе он её не получит.
+    const pending = await this.pool.query(
+      `SELECT 1 FROM enterprise_telegram_recipients
+        WHERE enterprise_id = $1 AND link_code IS NOT NULL AND link_expires_at > NOW() LIMIT 1`,
+      [enterpriseId]
+    );
+    if (pending.rows.length) await this.pollLinks(enterpriseId).catch(() => 0);
     const r = await this.pool.query(
       `SELECT r.chat_id, e.subdomain
          FROM enterprise_telegram_recipients r
@@ -185,7 +234,7 @@ export class TelegramIntegrationService {
          JOIN users u ON u.id = r.user_id
          JOIN enterprises e ON e.id = r.enterprise_id
         WHERE r.enterprise_id = $1 AND r.chat_id IS NOT NULL
-          AND eu.role = ANY($2) AND u.is_active = true`,
+          AND ${RECIPIENT_COND} AND COALESCE(eu.is_active, true) AND u.is_active = true`,
       [enterpriseId, RECIPIENT_ROLES]
     );
     if (!r.rows.length) return { sent: 0, failed: 0, skipped: 'no_recipients', errors: [] };

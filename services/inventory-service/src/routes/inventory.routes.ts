@@ -11,9 +11,18 @@ const inventoryService = new InventoryService(config.database.url);
 // ========== «ПОРА ЗАКАЗАТЬ» ==========
 // Колокольчик в админке: позиции, у которых остаток на складе дошёл до минимума
 
-router.get('/stock-alerts', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
+const STOCK_ALERT_ROLES = ['admin', 'owner', 'manager', 'operator'];
+
+// Видят руководящие роли и ответственные за закуп (enterprise_users.is_purchaser)
+// с любой ролью: предупреждение адресовано в первую очередь закупщику.
+router.get('/stock-alerts', authenticateUser, async (req: Request, res: Response) => {
   try {
     if (!req.enterpriseId) return res.json({ alerts: [] });
+    const byRole = ['admin', 'restaurant_owner'].includes(req.userRole || '')
+      || STOCK_ALERT_ROLES.includes(req.enterpriseRole || '') || STOCK_ALERT_ROLES.includes(req.userRole || '');
+    if (!byRole && !(req.userId && await stockAlerts.isPurchaser(req.enterpriseId, req.userId))) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient role' });
+    }
     return res.json({ alerts: await stockAlerts.listOpen(req.enterpriseId) });
   } catch (error) {
     console.error('List stock alerts error:', error);
