@@ -386,7 +386,7 @@
         if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Точно удалить?'; return; }
         try {
           await posApi('/api/pos/checks/' + encodeURIComponent(b.dataset.del), { method: 'DELETE' });
-          if (state.openCheckId === b.dataset.del) { state.cart = []; setOpenCheck(null); renderGrid(); renderCart(); }
+          if (state.openCheckId === b.dataset.del) { state.cart = []; setOpenCheck(null); setTable(null); setCustomer(null); renderGrid(); renderCart(); }
           await loadChecks();
         } catch (err) { $('checks-error').textContent = 'Не удалён: ' + err.message; }
       });
@@ -407,6 +407,10 @@
       if (it) state.cart.push({ item: it, qty: r.quantity }); else missing++;
     });
     setOpenCheck(c);
+    // Стол и клиент в отложенном чеке не хранятся: выбор от другого гостя
+    // не должен уехать в этот чек — кассир выберет заново при оплате
+    setTable(null);
+    setCustomer(null);
     pendingSaleId = null;
     $('checks-panel').style.display = 'none';
     renderGrid();
@@ -445,7 +449,9 @@
       }
       state.cart = [];
       setOpenCheck(null);
+      // Чек отложен — следующий гость начинает с чистого выбора стола и клиента
       setTable(null);
+      setCustomer(null);
       pendingSaleId = null;
       renderGrid();
       renderCart();
