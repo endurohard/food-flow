@@ -49,6 +49,20 @@ export class OrderService {
     this.rabbitmq = rabbitmq;
     this.outbox = new OutboxService(this.pool, rabbitmq);
   }
+  /**
+   * Профиль лояльности → users.id для orders.customer_id. Только профиль
+   * своего предприятия: иначе по чужому id кассир начислил бы баллы
+   * клиенту другой организации.
+   */
+  async resolveLoyaltyCustomer(profileId: string, enterpriseId: string): Promise<string> {
+    const r = await this.pool.query(
+      'SELECT user_id FROM customer_profiles WHERE id = $1 AND enterprise_id = $2',
+      [profileId, enterpriseId]
+    );
+    if (!r.rows[0]) throw new OrderError('Клиент не найден в этом предприятии — выберите его заново', 400);
+    return r.rows[0].user_id;
+  }
+
 
   private generateOrderNumber(): string {
     const date = new Date();

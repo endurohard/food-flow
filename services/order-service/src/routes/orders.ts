@@ -17,6 +17,9 @@ rabbitmq.connect().catch(err => console.warn('RabbitMQ not available:', err.mess
 const createOrderSchema = Joi.object({
   restaurantId: Joi.string().uuid().required(),
   customerId: Joi.string().uuid().optional(),
+  // Клиент лояльности, выбранный кассиром (customer_profiles.id). Баллы
+  // начисляет crm-service, когда заказ закрывается (order.completed).
+  customerProfileId: Joi.string().uuid().allow(null).optional(),
   deliveryAddressId: Joi.string().uuid().allow(null).optional(),
   orderType: Joi.string().valid('delivery', 'pickup', 'dine_in').optional(),
   tableId: Joi.string().uuid().allow(null).optional(),
@@ -94,6 +97,16 @@ router.post('/', optionalAuth, idempotencyCheck, async (req: Request, res: Respo
     if (error) {
       return res.status(400).json({ success: false, error: error.details[0].message });
     }
+
+    // Кассир выбрал клиента лояльности: клиентом заказа становится он, а не
+    // сам кассир. Профиль ищется только в предприятии из токена.
+    if (value.customerProfileId) {
+      if (!req.enterpriseId) {
+        return res.status(403).json({ success: false, error: 'Клиента лояльности выбирает только сотрудник предприятия' });
+      }
+      value.customerId = await orderService.resolveLoyaltyCustomer(value.customerProfileId, req.enterpriseId);
+    }
+    delete value.customerProfileId;
 
     // Set customerId from JWT if not provided
     if (!value.customerId) {

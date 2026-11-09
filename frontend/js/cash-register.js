@@ -109,6 +109,11 @@
     setOpenCheck(null);
     $('checks-panel').style.display = 'none';
     $('receipts-panel').style.display = 'none';
+    // Следующий кассир не должен пробить чек на клиента или стол предыдущего
+    setCustomer(null);
+    setTable(null);
+    $('customer-panel').style.display = 'none';
+    $('table-panel').style.display = 'none';
     rc.pending = null;
     openPin();
     if (msg) $('pin-error').textContent = msg;
@@ -424,8 +429,10 @@
     state.busy = true;
     btn.disabled = true;
     $('till-error').textContent = '';
+    // Отложенный чек на стол подписываем номером стола, если подпись не ввели
+    var label = $('check-label').value.trim() || (state.table ? 'Стол ' + state.table.table_number : '');
     var body = {
-      label: $('check-label').value.trim(),
+      label: label,
       items: state.cart.map(function (r) { return { menuItemId: r.item.id, quantity: r.qty }; }),
     };
     try {
@@ -438,6 +445,7 @@
       }
       state.cart = [];
       setOpenCheck(null);
+      setTable(null);
       pendingSaleId = null;
       renderGrid();
       renderCart();
@@ -532,6 +540,131 @@
     });
   });
 
+  // ── стол чека ──
+  // Без стола чек «на вынос», со столом — «в зале» с привязкой к столу.
+  // Столы заводят в админке («Столы» или «Схема зала»).
+  var HALL_NAMES = { main: 'Основной зал', vip: 'VIP зал', terrace: 'Терраса' };
+  var TABLE_STATUS = { free: 'свободен', occupied: 'занят', reserved: 'бронь' };
+
+  function setTable(t) {
+    state.table = t || null;
+    pendingSaleId = null; // стол входит в тело продажи — это уже другая продажа
+    var btn = $('btn-table');
+    btn.classList.toggle('set', !!t);
+    btn.textContent = t ? '🍽 Стол ' + t.table_number + ' · в зале' : '🍽 Без стола · на вынос';
+    $('btn-table-clear').style.display = t ? '' : 'none';
+  }
+
+  async function loadTables() {
+    $('tbl-error').textContent = '';
+    $('tbl-list').innerHTML = '<p class="muted">Загрузка…</p>';
+    try {
+      var d = await api('/api/tables?restaurantId=' + encodeURIComponent(state.restaurant.id));
+      var list = d.tables || [];
+      if (!list.length) {
+        $('tbl-list').innerHTML = '<p class="muted">В этой точке нет столов. Их заводит владелец в админке: «Столы» или «Схема зала».</p>';
+        return;
+      }
+      var halls = {};
+      list.forEach(function (t) { var h = HALL_NAMES[t.section] ? t.section : 'main'; (halls[h] = halls[h] || []).push(t); });
+      var html = '';
+      Object.keys(HALL_NAMES).forEach(function (h) {
+        if (!halls[h]) return;
+        halls[h].sort(function (a, b) { return String(a.table_number).localeCompare(String(b.table_number), 'ru', { numeric: true }); });
+        html += '<div class="tbl-hall">' + esc(HALL_NAMES[h]) + '</div><div class="tbl-grid">' +
+          halls[h].map(function (t) {
+            var cur = state.table && state.table.id === t.id;
+            return '<button class="tbl-item ' + esc(t.status || 'free') + (cur ? ' cur' : '') + '" data-id="' + esc(t.id) + '">' +
+              '<span class="n">' + esc(t.table_number) + '</span>' +
+              '<span class="s">' + (t.seats || '') + ' мест · ' + esc(TABLE_STATUS[t.status] || t.status || '') + '</span></button>';
+          }).join('') + '</div>';
+      });
+      $('tbl-list').innerHTML = html;
+      $('tbl-list').querySelectorAll('.tbl-item').forEach(function (b) {
+        b.addEventListener('click', function () {
+          setTable(list.filter(function (t) { return t.id === b.dataset.id; })[0]);
+          $('table-panel').style.display = 'none';
+        });
+      });
+    } catch (err) {
+      $('tbl-list').innerHTML = '';
+      if (err.status === 403 && /PIN|сесси/i.test(err.message)) return lockScreen(err.message);
+      $('tbl-error').textContent = 'Столы не загрузились: ' + err.message;
+    }
+  }
+
+  $('btn-table').addEventListener('click', function () {
+    $('checks-panel').style.display = 'none';
+    $('receipts-panel').style.display = 'none';
+    $('customer-panel').style.display = 'none';
+    $('table-panel').style.display = '';
+    loadTables();
+  });
+  $('btn-table-close').addEventListener('click', function () { $('table-panel').style.display = 'none'; });
+  $('btn-table-clear').addEventListener('click', function () { setTable(null); });
+
+  // ── клиент чека (лояльность) ──
+  // Кассир выбирает клиента из списка предприятия; баллы начисляет сервер
+  // (crm-service) по закрытому заказу. Список отдаёт только имя, 4 последние
+  // цифры телефона и баллы — полный номер кассе не нужен.
+  function setCustomer(c) {
+    state.customer = c || null;
+    // Клиент входит в тело продажи — это уже другая продажа для идемпотентности
+    pendingSaleId = null;
+    var btn = $('btn-customer');
+    btn.classList.toggle('set', !!c);
+    btn.textContent = c
+      ? '👤 ' + c.name + (c.phoneTail ? ' · …' + c.phoneTail : '') + ' · ' + c.points + ' б.'
+      : '👤 Клиент: без клиента';
+    $('btn-customer-clear').style.display = c ? '' : 'none';
+  }
+
+  var custTimer = null;
+  var custSeq = 0;
+  async function loadCustomers() {
+    var seq = ++custSeq;
+    var q = $('cust-search').value.trim();
+    $('cust-error').textContent = '';
+    try {
+      var d = await api('/api/crm/customers/lookup' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      if (seq !== custSeq) return; // пришёл ответ на устаревший ввод
+      var list = d.customers || [];
+      if (!list.length) {
+        $('cust-list').innerHTML = '<p class="muted">' + (q ? 'Никого не нашли.' : 'Клиентов пока нет — их заводят в админке, раздел «Лояльность».') + '</p>';
+        return;
+      }
+      $('cust-list').innerHTML = list.map(function (c, i) {
+        return '<button class="cust-item" data-i="' + i + '"><span class="nm">' + esc(c.name) + '</span>' +
+          (c.phoneTail ? '<span class="ph">…' + esc(c.phoneTail) + '</span>' : '') +
+          '<span class="pt">' + c.points + ' баллов</span></button>';
+      }).join('');
+      $('cust-list').querySelectorAll('.cust-item').forEach(function (b) {
+        b.addEventListener('click', function () {
+          setCustomer(list[Number(b.dataset.i)]);
+          $('customer-panel').style.display = 'none';
+        });
+      });
+    } catch (err) {
+      if (seq !== custSeq) return;
+      $('cust-list').innerHTML = '';
+      $('cust-error').textContent = 'Список клиентов не загрузился: ' + err.message;
+    }
+  }
+
+  $('btn-customer').addEventListener('click', function () {
+    $('checks-panel').style.display = 'none';
+    $('receipts-panel').style.display = 'none';
+    $('table-panel').style.display = 'none';
+    $('customer-panel').style.display = '';
+    $('cust-search').value = '';
+    $('cust-list').innerHTML = '<p class="muted">Загрузка…</p>';
+    loadCustomers();
+    setTimeout(function () { $('cust-search').focus(); }, 50);
+  });
+  $('btn-customer-close').addEventListener('click', function () { $('customer-panel').style.display = 'none'; });
+  $('btn-customer-clear').addEventListener('click', function () { setCustomer(null); });
+  $('cust-search').addEventListener('input', function () { clearTimeout(custTimer); custTimer = setTimeout(loadCustomers, 300); });
+
   $('btn-checkout').addEventListener('click', async function () {
     if (!state.cart.length || state.busy) return;
     var btn = this;
@@ -547,13 +680,18 @@
           saleId: pendingSaleId,
           restaurantId: state.restaurant.id,
           registerId: state.register.id,
-          orderType: 'pickup',
+          orderType: state.table ? 'dine_in' : 'pickup',
+          tableId: state.table ? state.table.id : null,
           paymentMethod: state.method,
           openCheckId: state.openCheckId,
+          customerProfileId: state.customer ? state.customer.id : null,
           items: state.cart.map(function (r) { return { menuItemId: r.item.id, quantity: r.qty }; }),
         }),
       });
       pendingSaleId = null;
+      var paidFor = state.customer;
+      setCustomer(null);
+      setTable(null);
       state.cart = [];
       var paidCheck = state.openCheckId;
       setOpenCheck(null);
@@ -562,7 +700,9 @@
       if (paidCheck) loadChecks();
       var sale = d.sale || {};
       $('till-ok').innerHTML = '<div class="ok-msg">✅ Оплачено ' + money(sale.total) +
-        (sale.orderNumber ? ' · чек ' + esc(sale.orderNumber) : '') + '</div>';
+        (sale.orderNumber ? ' · чек ' + esc(sale.orderNumber) : '') +
+        (sale.tableNumber ? ' · стол ' + esc(sale.tableNumber) : '') +
+        (paidFor ? '<br>Баллы клиенту ' + esc(paidFor.name) + ' начисляются автоматически' : '') + '</div>';
     } catch (err) {
       if (err.status === 403 && /PIN|сесси/i.test(err.message)) {
         lockScreen(err.message);

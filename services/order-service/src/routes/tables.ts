@@ -52,7 +52,8 @@ function sendError(res: Response, error: unknown, what: string) {
 /**
  * GET /api/tables?restaurantId=
  */
-router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter'), async (req: Request, res: Response) => {
+// Кассир читает столы, чтобы пробить чек на стол в режиме кассы; менять их ему нельзя
+router.get('/', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {

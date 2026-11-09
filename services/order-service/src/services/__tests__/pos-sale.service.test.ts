@@ -36,6 +36,10 @@ function makeClient(
     itemAvailable?: boolean;
     modifierAvailable?: boolean;
     checkOpen?: boolean;
+    /** Профили лояльности: id профиля → { enterprise, user } */
+    profiles?: Record<string, { enterprise: string; user: string; name?: string }>;
+    /** Столы: id → { restaurant, enterprise, number, active } */
+    tables?: Record<string, { restaurant: string; enterprise: string; number: string; active?: boolean }>;
   } = {}
 ) {
   const queries: Array<{ sql: string; params: any[] }> = [];
@@ -57,6 +61,23 @@ function makeClient(
       if (/UPDATE pos_open_checks/.test(sql)) {
         const ok = options.checkOpen !== false;
         return { rows: ok ? [{ id: 'check-1' }] : [], rowCount: ok ? 1 : 0 };
+      }
+      if (/FROM restaurant_tables/.test(sql)) {
+        // Мок уважает все условия отбора стола: точка, предприятие, активность
+        const t = (options.tables || {})[params[0]];
+        const ok = t
+          && (!/restaurant_id = \$2/.test(sql) || t.restaurant === params[1])
+          && (!/enterprise_id = \$3/.test(sql) || t.enterprise === params[2])
+          && (!/is_active = true/.test(sql) || t.active !== false);
+        return ok ? { rows: [{ table_number: t.number }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      if (/FROM customer_profiles cp/.test(sql)) {
+        // Мок уважает условие тенанта: без него в SQL профиль чужого
+        // предприятия нашёлся бы, и тест это поймает
+        const p = (options.profiles || {})[params[0]];
+        const tenantChecked = /cp\.enterprise_id = \$2/.test(sql);
+        const ok = p && (!tenantChecked || p.enterprise === params[1]);
+        return ok ? { rows: [{ user_id: p.user, name: p.name || 'Анна' }], rowCount: 1 } : { rows: [], rowCount: 0 };
       }
       if (/FROM restaurants/.test(sql)) {
         return { rows: [{ id: IDS.restaurant, name: 'Точка' }], rowCount: 1 };
@@ -292,5 +313,98 @@ describe('PosSaleService — атомарная продажа', () => {
       statusCode: 409,
     });
     expect(client.queries.some((q: any) => /INSERT INTO orders/.test(q.sql))).toBe(false);
+  });
+});
+
+describe('PosSaleService — клиент чека и лояльность', () => {
+  const PROFILE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const CUSTOMER_USER = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const OTHER_ENT = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+  function orderValue(client: any, col: string) {
+    const q = client.queries.find((x: any) => /INSERT INTO orders/.test(x.sql))!;
+    const cols = /INSERT INTO orders\s*\(([^)]*)\)/.exec(q.sql)![1].split(',').map((c: string) => c.trim());
+    const raw = q.sql.slice(q.sql.indexOf('VALUES') + 6, q.sql.indexOf('RETURNING')).trim();
+    const vals = raw.slice(1, -1).split(',').map((v: string) => v.trim());
+    expect(vals).toHaveLength(cols.length);
+    const v = vals[cols.indexOf(col)];
+    return /^\$\d+$/.test(v) ? q.params[Number(v.slice(1)) - 1] : v;
+  }
+
+  it('клиент своего предприятия: в заказ пишется его users.id — по нему crm-service начислит баллы', async () => {
+    const client = makeClient({ profiles: { [PROFILE]: { enterprise: IDS.enterprise, user: CUSTOMER_USER, name: 'Анна ТЕСТ' } } });
+    const { service } = makeService(client);
+    const res = await service.create({ ...request, customerProfileId: PROFILE }, IDS.enterprise, IDS.user);
+    expect(orderValue(client, 'customer_id')).toBe(CUSTOMER_USER);
+    expect(res.customerName).toBe('Анна ТЕСТ');
+  });
+
+  it('клиент чужого предприятия — 400 и откат, заказ не создаётся', async () => {
+    const client = makeClient({ profiles: { [PROFILE]: { enterprise: OTHER_ENT, user: CUSTOMER_USER } } });
+    const { service } = makeService(client);
+    await expect(service.create({ ...request, customerProfileId: PROFILE }, IDS.enterprise, IDS.user))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(client.queries.some((q: any) => /INSERT INTO orders/.test(q.sql))).toBe(false);
+    expect(client.queries.at(-1)?.sql).toBe('ROLLBACK');
+  });
+
+  it('без клиента заказ гостевой: customer_id = NULL, профили не запрашиваются', async () => {
+    const client = makeClient();
+    const { service } = makeService(client);
+    await service.create(request, IDS.enterprise, IDS.user);
+    expect(orderValue(client, 'customer_id')).toBeNull();
+    expect(client.queries.some((q: any) => /customer_profiles/.test(q.sql))).toBe(false);
+  });
+});
+
+describe('PosSaleService — чек на стол', () => {
+  const TABLE = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+  function orderValue(client: any, col: string) {
+    const q = client.queries.find((x: any) => /INSERT INTO orders/.test(x.sql))!;
+    const cols = /INSERT INTO orders\s*\(([^)]*)\)/.exec(q.sql)![1].split(',').map((c: string) => c.trim());
+    const raw = q.sql.slice(q.sql.indexOf('VALUES') + 6, q.sql.indexOf('RETURNING')).trim();
+    const vals = raw.slice(1, -1).split(',').map((v: string) => v.trim());
+    expect(vals).toHaveLength(cols.length);
+    const v = vals[cols.indexOf(col)];
+    return /^\$\d+$/.test(v) ? q.params[Number(v.slice(1)) - 1] : v;
+  }
+  const own = { restaurant: IDS.restaurant, enterprise: IDS.enterprise, number: '5' };
+
+  it('стол своей точки: заказ привязан к столу и всегда «в зале»', async () => {
+    const client = makeClient({ tables: { [TABLE]: own } });
+    const { service } = makeService(client);
+    const res = await service.create({ ...request, orderType: 'pickup', tableId: TABLE }, IDS.enterprise, IDS.user);
+    expect(orderValue(client, 'table_id')).toBe(TABLE);
+    expect(orderValue(client, 'order_type')).toBe('dine_in');
+    expect(res.tableNumber).toBe('5');
+  });
+
+  it('стол другой точки — 400, заказ не создаётся', async () => {
+    const client = makeClient({ tables: { [TABLE]: { ...own, restaurant: OTHER } } });
+    const { service } = makeService(client);
+    await expect(service.create({ ...request, tableId: TABLE }, IDS.enterprise, IDS.user)).rejects.toMatchObject({ statusCode: 400 });
+    expect(client.queries.some((q: any) => /INSERT INTO orders/.test(q.sql))).toBe(false);
+  });
+
+  it('стол чужого предприятия — 400', async () => {
+    const client = makeClient({ tables: { [TABLE]: { ...own, enterprise: OTHER } } });
+    const { service } = makeService(client);
+    await expect(service.create({ ...request, tableId: TABLE }, IDS.enterprise, IDS.user)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('удалённый стол — 400', async () => {
+    const client = makeClient({ tables: { [TABLE]: { ...own, active: false } } });
+    const { service } = makeService(client);
+    await expect(service.create({ ...request, tableId: TABLE }, IDS.enterprise, IDS.user)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('без стола: table_id = NULL, тип заказа как прислала касса', async () => {
+    const client = makeClient();
+    const { service } = makeService(client);
+    await service.create(request, IDS.enterprise, IDS.user);
+    expect(orderValue(client, 'table_id')).toBeNull();
+    expect(orderValue(client, 'order_type')).toBe('pickup');
   });
 });

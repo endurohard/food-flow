@@ -169,6 +169,27 @@
     .approve-box { margin-top: 16px; border: 2px solid var(--color-primary, #1f8f5f); border-radius: 14px; padding: 16px; max-width: 360px; }
     .approve-box h3 { margin: 0 0 4px; font-size: 17px; }
 
+    /* ── Клиент чека (лояльность) ── */
+    .cust-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .cust-row .cust-btn { flex: 1; text-align: left; padding: 10px 12px; font-size: 15px; background: #fff;
+                          border: 1px dashed var(--admin-panel-border, #d6d9de); color: inherit; }
+    .cust-row .cust-btn.set { border-style: solid; border-color: var(--color-primary, #1f8f5f); background: #eef8f2; }
+    .cust-row .cust-clear { width: 40px; height: 40px; background: #f4f5f7; font-size: 18px; color: inherit; }
+    .tbl-hall { margin: 4px 0 8px; font-weight: 700; font-size: 15px; }
+    .tbl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; max-width: 900px; margin-bottom: 14px; }
+    .tbl-item { background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8); border-radius: 12px; padding: 14px 10px;
+                display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 16px; color: inherit; }
+    .tbl-item .n { font-size: 20px; font-weight: 700; }
+    .tbl-item .s { font-size: 13px; color: var(--color-text-secondary, #6b7280); }
+    .tbl-item.occupied { border-color: #e2a29b; background: #fdf3f2; }
+    .tbl-item.reserved { border-color: #f0c97a; background: #fff8e8; }
+    .tbl-item.cur { border: 2px solid var(--color-primary, #1f8f5f); }
+    .cust-list { display: flex; flex-direction: column; gap: 8px; max-width: 720px; }
+    .cust-item { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--admin-panel-border, #e3e5e8);
+                 border-radius: 12px; padding: 14px; text-align: left; width: 100%; font-size: 16px; color: inherit; }
+    .cust-item .nm { flex: 1; font-weight: 600; }
+    .cust-item .ph, .cust-item .pt { color: var(--color-text-secondary, #6b7280); font-size: 14px; }
+
     @media (max-width: 760px) {
       .till-main { flex-direction: column; }
       .cart-col { width: 100%; max-height: 45%; border-left: none; border-top: 1px solid var(--admin-panel-border, #e3e5e8); }
@@ -257,6 +278,27 @@
       </div>
       <p class="error" id="rc-error"></p>
     </div>
+    <!-- Выбор клиента: баллы лояльности начисляются за оплаченный чек -->
+    <div id="customer-panel" class="checks-panel" style="display:none">
+      <div class="checks-head">
+        <h2 style="margin:0">Клиент для начисления баллов</h2>
+        <button class="btn-secondary" id="btn-customer-close">Закрыть</button>
+      </div>
+      <div class="rc-tools" style="max-width:720px">
+        <input id="cust-search" type="text" inputmode="search" placeholder="Имя или последние цифры телефона" autocomplete="off">
+      </div>
+      <div id="cust-list" class="cust-list"></div>
+      <p class="error" id="cust-error"></p>
+    </div>
+    <!-- Выбор стола: чек уходит «в зал» на этот стол -->
+    <div id="table-panel" class="checks-panel" style="display:none">
+      <div class="checks-head">
+        <h2 style="margin:0">Стол</h2>
+        <button class="btn-secondary" id="btn-table-close">Закрыть</button>
+      </div>
+      <div id="tbl-list"></div>
+      <p class="error" id="tbl-error"></p>
+    </div>
     <div class="till-main">
       <div class="menu-col">
         <div class="cats" id="cats"></div>
@@ -265,6 +307,14 @@
       <div class="cart-col">
         <div class="cart-list" id="cart"></div>
         <div class="cart-foot">
+          <div class="cust-row">
+            <button class="cust-btn" id="btn-table">🍽 Без стола · на вынос</button>
+            <button class="cust-clear" id="btn-table-clear" style="display:none" aria-label="Убрать стол">✕</button>
+          </div>
+          <div class="cust-row">
+            <button class="cust-btn" id="btn-customer">👤 Клиент: без клиента</button>
+            <button class="cust-clear" id="btn-customer-clear" style="display:none" aria-label="Убрать клиента">✕</button>
+          </div>
           <div class="total"><span>Итого</span><span id="total">0 ₽</span></div>
           <div class="pay" id="pay">
             <button data-method="cash" class="active">Наличные</button>

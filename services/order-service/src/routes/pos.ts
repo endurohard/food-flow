@@ -42,6 +42,11 @@ export const posSaleSchema = Joi.object({
   orderType: Joi.string().valid('pickup', 'dine_in').required(),
   paymentMethod: Joi.string().valid('cash', 'card').required(),
   openCheckId: Joi.string().uuid().allow(null).optional(),
+  // Профиль лояльности клиента (customer_profiles.id): баллы начислит
+  // crm-service по событию order.completed
+  customerProfileId: Joi.string().uuid().allow(null).optional(),
+  // Стол чека: заказ «в зале» на этот стол (restaurant_tables.id)
+  tableId: Joi.string().uuid().allow(null).optional(),
   items: Joi.array()
     .items(
       Joi.object({

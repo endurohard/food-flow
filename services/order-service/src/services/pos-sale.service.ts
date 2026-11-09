@@ -16,6 +16,10 @@ export interface PosSaleRequest {
   paymentMethod: PosPaymentMethod;
   /** Отложенный чек, который закрывается этой продажей */
   openCheckId?: string | null;
+  /** Профиль лояльности (customer_profiles.id), кому начислить баллы */
+  customerProfileId?: string | null;
+  /** Стол (restaurant_tables.id): заказ «в зале» на этот стол */
+  tableId?: string | null;
   items: Array<{
     menuItemId: string;
     quantity: number;
@@ -32,6 +36,8 @@ export interface PosSaleResponse {
   total: number;
   subtotal?: number;
   discountAmount?: number;
+  customerName?: string | null;
+  tableNumber?: string | null;
   replayed: boolean;
 }
 
@@ -165,6 +171,45 @@ export class PosSaleService {
         }
       }
 
+      // Клиент чека: профиль обязан принадлежать этому же предприятию, иначе
+      // кассир мог бы начислить баллы клиенту чужой организации по его id.
+      // В orders.customer_id кладём users.id — по нему crm-service находит
+      // профиль и начисляет баллы за закрытый заказ.
+      let customerUserId: string | null = null;
+      let customerName: string | null = null;
+      if (data.customerProfileId) {
+        const cust = await client.query(
+          `SELECT cp.user_id, concat_ws(' ', u.first_name, u.last_name) AS name
+             FROM customer_profiles cp
+             JOIN users u ON u.id = cp.user_id
+            WHERE cp.id = $1 AND cp.enterprise_id = $2`,
+          [data.customerProfileId, enterpriseId]
+        );
+        if (!cust.rows[0]) {
+          throw new PosSaleError('Клиент не найден в этом предприятии — выберите его заново', 400);
+        }
+        customerUserId = cust.rows[0].user_id;
+        customerName = cust.rows[0].name || null;
+      }
+
+      // Стол обязан быть активным столом этой же точки и предприятия: иначе
+      // чек «повис» бы на столе чужой точки или удалённом столе
+      let tableNumber: string | null = null;
+      if (data.tableId) {
+        const tbl = await client.query(
+          `SELECT table_number
+             FROM restaurant_tables
+            WHERE id = $1 AND restaurant_id = $2 AND enterprise_id = $3 AND is_active = true`,
+          [data.tableId, data.restaurantId, enterpriseId]
+        );
+        if (!tbl.rows[0]) {
+          throw new PosSaleError('Стол не найден в этой точке — выберите его заново', 400);
+        }
+        tableNumber = tbl.rows[0].table_number;
+      }
+      // Чек на стол — всегда «в зале», даже если касса прислала другой тип
+      const orderType = data.tableId ? 'dine_in' : data.orderType;
+
       const itemIds = [...new Set(data.items.map((item) => item.menuItemId))];
       const menuResult = await client.query(
         `SELECT mi.id, mi.name, mi.price, mi.category_id
@@ -256,9 +301,9 @@ export class PosSaleService {
         `INSERT INTO orders
            (order_number, restaurant_id, status, subtotal, delivery_fee, tax, total,
             payment_status, payment_method, order_type, waiter_id, enterprise_id,
-            discount_amount, applied_discounts, confirmed_at, closed_at)
+            discount_amount, applied_discounts, customer_id, table_id, confirmed_at, closed_at)
          VALUES ($1, $2, 'completed', $3, 0, 0, $4,
-                 'completed', $5, $6, $7, $8, $9, $10, NOW(), NOW())
+                 'completed', $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
          RETURNING *`,
         [
           number,
@@ -266,11 +311,13 @@ export class PosSaleService {
           subtotal,
           total,
           data.paymentMethod,
-          data.orderType,
+          orderType,
           cashierId,
           enterpriseId,
           discounts.totalDiscount,
           JSON.stringify(discounts.appliedDiscounts),
+          customerUserId,
+          data.tableId || null,
         ]
       );
       const order = orderResult.rows[0];
@@ -342,6 +389,8 @@ export class PosSaleService {
         subtotal,
         discountAmount: discounts.totalDiscount,
         total,
+        customerName,
+        tableNumber,
       };
       response = { ...stored, replayed: false };
 

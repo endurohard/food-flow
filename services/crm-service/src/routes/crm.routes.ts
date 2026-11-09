@@ -23,6 +23,17 @@ router.get('/customers', authenticateUser, requireRole('admin', 'owner', 'manage
   } catch (error) { console.error('List customers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
+// Объявлен до /customers/:userId — иначе «lookup» уйдёт туда как userId.
+// Доступен кассиру: выбрать клиента в чеке, чтобы ему начислились баллы.
+router.get('/customers/lookup', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), async (req: Request, res: Response) => {
+  try {
+    if (!req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 100) : '';
+    const customers = await crmService.lookupCustomers(req.enterpriseId, q);
+    return res.json({ customers });
+  } catch (error) { console.error('Lookup customers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
 router.get('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';

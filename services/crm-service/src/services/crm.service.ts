@@ -26,6 +26,51 @@ export class CRMService {
     return result.rows;
   }
 
+  /**
+   * Поиск клиента для кассы: кассир выбирает, кому начислить баллы за чек.
+   * Отдаём минимум: имя, последние 4 цифры телефона, баллы и уровень — кассе
+   * не нужен ни e-mail, ни полный номер (это персональные данные, а список
+   * видит любой кассир). Только своё предприятие, всегда.
+   */
+  async lookupCustomers(enterpriseId: string, query?: string, limit = 20): Promise<any[]> {
+    const q = (query || '').trim();
+    const values: any[] = [enterpriseId];
+    let filter = '';
+    if (q) {
+      // % и _ из ввода — буквальные символы, а не шаблон LIKE
+      const like = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+      values.push(like);
+      const nameCond = `concat_ws(' ', u.first_name, u.last_name) ILIKE $${values.length}`;
+      const digits = q.replace(/\D/g, '');
+      if (digits.length >= 3) {
+        values.push('%' + digits + '%');
+        filter = ` AND (${nameCond} OR regexp_replace(coalesce(u.phone, ''), '\\D', '', 'g') LIKE $${values.length})`;
+      } else {
+        filter = ` AND ${nameCond}`;
+      }
+    }
+    values.push(Math.min(Math.max(limit, 1), 50));
+    const result = await this.pool.query(
+      `SELECT cp.id, u.first_name, u.last_name, u.phone, cp.loyalty_points, cp.loyalty_tier
+         FROM customer_profiles cp
+         JOIN users u ON u.id = cp.user_id
+        WHERE cp.enterprise_id = $1${filter}
+        ORDER BY cp.last_order_date DESC NULLS LAST, u.first_name ASC
+        LIMIT $${values.length}`,
+      values
+    );
+    return result.rows.map((r: any) => {
+      const digits = String(r.phone || '').replace(/\D/g, '');
+      return {
+        id: r.id,
+        name: [r.first_name, r.last_name].filter(Boolean).join(' ') || 'Без имени',
+        phoneTail: digits.length >= 4 ? digits.slice(-4) : null,
+        points: Number(r.loyalty_points) || 0,
+        tier: r.loyalty_tier
+      };
+    });
+  }
+
   async getCustomerProfile(userId: string, enterpriseId?: string): Promise<any> {
     const whereConds = ['cp.user_id = $1'];
     const values: any[] = [userId];
