@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { tgCall, TelegramError } from '../utils/telegram';
+import { tgCall, tgDownload, TelegramError } from '../utils/telegram';
 import { encryptSecret, decryptSecret } from '../utils/secrets';
 import { TENANT_BASE_DOMAIN } from './tenant-domain.service';
 
@@ -36,6 +36,23 @@ export interface ActiveBot {
 const idReply = (chatId: number | string) =>
   `Ваш Telegram ID: ${chatId}\n\nПередайте его администратору вашего заведения в FoodFlow — ` +
   'он добавит вас в уведомления (например, «пора заказать», когда на складе заканчивается товар).';
+const NOT_ALLOWED_PHOTO = 'Накладные по фото принимаются только от владельца, администратора или ответственного за закуп, привязанных к этому боту.';
+const MAX_INVOICE_FILE = 10 * 1024 * 1024;
+const DOC_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
+
+/** Файл накладной в сообщении: фото (берём самый крупный размер) или документ-картинка/PDF. */
+export function invoiceFile(msg: any): { fileId: string; uniqueId: string; mime: string; size?: number } | null {
+  if (Array.isArray(msg?.photo) && msg.photo.length) {
+    const p = msg.photo[msg.photo.length - 1];
+    return { fileId: p.file_id, uniqueId: p.file_unique_id, mime: 'image/jpeg', size: p.file_size };
+  }
+  const d = msg?.document;
+  if (d && DOC_MIME.includes(d.mime_type)) {
+    return { fileId: d.file_id, uniqueId: d.file_unique_id, mime: d.mime_type, size: d.file_size };
+  }
+  return null;
+}
+
 const LINKED_REPLY = '✅ Готово. Сюда будут приходить уведомления FoodFlow: например, когда на складе заканчивается товар.';
 
 /**
@@ -300,13 +317,20 @@ export class TelegramIntegrationService {
    * возвращает true, если код подошёл.
    */
   private async handleUpdates(token: string, updates: any[],
-      linkFn: (code: string, msg: any) => Promise<boolean>): Promise<{ linked: number; maxId: number }> {
+      linkFn: (code: string, msg: any) => Promise<boolean>,
+      photoFn?: (msg: any) => Promise<string>): Promise<{ linked: number; maxId: number }> {
     let linked = 0;
     let maxId = -1;
     for (const u of updates) {
       maxId = Math.max(maxId, u.update_id);
       const msg = u.message;
       if (!msg || msg.chat?.type !== 'private') continue;
+      // Фото накладной (или PDF) — черновик накладной на складе
+      if (photoFn && invoiceFile(msg)) {
+        const reply = await photoFn(msg).catch((e: any) => '❌ Не удалось сохранить накладную: ' + (e?.message || e));
+        await tgCall(token, 'sendMessage', { chat_id: msg.chat.id, text: reply }).catch(() => {});
+        continue;
+      }
       const text: string = msg.text || '';
       const code = text.startsWith('/start') ? (text.split(/\s+/)[1] || '') : '';
       const ok = code ? await linkFn(code, msg) : false;
@@ -322,7 +346,25 @@ export class TelegramIntegrationService {
    * Общий бот здесь не читается — его читает один фоновый цикл на всю
    * платформу (pollPlatform), иначе два читателя getUpdates мешают друг другу.
    */
+  private polling = new Set<string>();
+
+  /** Организации со своим ботом — для фонового опроса. */
+  async ownBotEnterprises(): Promise<string[]> {
+    const r = await this.pool.query('SELECT enterprise_id FROM enterprise_telegram_bots');
+    return r.rows.map((x: any) => x.enterprise_id);
+  }
+
   async pollLinks(enterpriseId: string): Promise<number> {
+    if (this.polling.has(enterpriseId)) return 0;
+    this.polling.add(enterpriseId);
+    try {
+      return await this.pollLinksOnce(enterpriseId);
+    } finally {
+      this.polling.delete(enterpriseId);
+    }
+  }
+
+  private async pollLinksOnce(enterpriseId: string): Promise<number> {
     const bot = await this.ownBot(enterpriseId);
     if (!bot) return 0;
     const updates: any[] = await tgCall(bot.token, 'getUpdates', {
@@ -338,6 +380,18 @@ export class TelegramIntegrationService {
         [enterpriseId, code, msg.chat.id, msg.from?.username || null, bot.bot_username]
       );
       return r.rows.length > 0;
+    }, async (msg) => {
+      const who = await this.pool.query(
+        `SELECT r.user_id FROM enterprise_telegram_recipients r
+           JOIN enterprise_users eu ON eu.enterprise_id = r.enterprise_id AND eu.user_id = r.user_id
+           JOIN users u ON u.id = r.user_id
+          WHERE r.enterprise_id = $1 AND r.chat_id = $3 AND r.bot_username = $4
+            AND ${RECIPIENT_COND} AND COALESCE(eu.is_active, true) AND u.is_active = true
+          LIMIT 1`,
+        [enterpriseId, RECIPIENT_ROLES, msg.chat.id, bot.bot_username]
+      );
+      if (!who.rows[0]) return NOT_ALLOWED_PHOTO;
+      return this.photoToInvoice(bot.token, enterpriseId, who.rows[0].user_id, msg);
     });
     if (maxId >= 0) {
       await this.pool.query(
@@ -370,6 +424,21 @@ export class TelegramIntegrationService {
         [code, msg.chat.id, msg.from?.username || null, bot.bot_username]
       );
       return r.rows.length > 0;
+    }, async (msg) => {
+      // Через общий бот человек может быть привязан к нескольким организациям —
+      // берём последнюю привязку (у организаций без своего бота)
+      const who = await this.pool.query(
+        `SELECT r.enterprise_id, r.user_id FROM enterprise_telegram_recipients r
+           JOIN enterprise_users eu ON eu.enterprise_id = r.enterprise_id AND eu.user_id = r.user_id
+           JOIN users u ON u.id = r.user_id
+          WHERE r.chat_id = $1 AND r.bot_username = $3
+            AND ${RECIPIENT_COND} AND COALESCE(eu.is_active, true) AND u.is_active = true
+            AND NOT EXISTS (SELECT 1 FROM enterprise_telegram_bots b WHERE b.enterprise_id = r.enterprise_id)
+          ORDER BY r.linked_at DESC NULLS LAST LIMIT 1`,
+        [msg.chat.id, RECIPIENT_ROLES, bot.bot_username]
+      );
+      if (!who.rows[0]) return NOT_ALLOWED_PHOTO;
+      return this.photoToInvoice(bot.token, who.rows[0].enterprise_id, who.rows[0].user_id, msg);
     });
     if (maxId >= 0) {
       // Токен могли сменить, пока шёл long polling: offset чужого бота не пишем
@@ -379,6 +448,34 @@ export class TelegramIntegrationService {
       );
     }
     return linked;
+  }
+
+  /**
+   * Фото из чата → файл с серверов Telegram → черновик накладной на складе.
+   * Ответ — текст для человека в чате.
+   */
+  async photoToInvoice(token: string, enterpriseId: string, userId: string, msg: any): Promise<string> {
+    const f = invoiceFile(msg)!;
+    if (f.size && f.size > MAX_INVOICE_FILE) return '❌ Файл больше 10 МБ — пришлите фото поменьше.';
+    const base = process.env.INVENTORY_SERVICE_URL || '';
+    const internal = process.env.INTERNAL_TOKEN || '';
+    if (!base || !internal) return '❌ Приём накладных не настроен на сервере (нет связи со складом).';
+    const file: any = await tgCall(token, 'getFile', { file_id: f.fileId });
+    if (!file?.file_path) return '❌ Telegram не отдал файл, попробуйте ещё раз.';
+    const body = await tgDownload(token, file.file_path, MAX_INVOICE_FILE);
+    const q = new URLSearchParams({ enterpriseId, userId, fileId: f.uniqueId });
+    if (msg.caption) q.set('caption', String(msg.caption).slice(0, 500));
+    const res = await fetch(`${base}/api/suppliers/invoices/from-photo?${q.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': f.mime, 'X-Internal-Token': internal },
+      body
+    });
+    const data: any = await res.json().catch(() => ({}));
+    if (!res.ok) return '❌ Склад не принял файл: ' + (data.message || data.error || res.status);
+    const n = data.invoice?.invoice_number || '';
+    return data.duplicate
+      ? `Эта накладная уже сохранена: черновик ${n}.`
+      : `✅ Накладная сохранена: черновик ${n}.\nОткройте «Склад → Накладные», внесите позиции по фото и нажмите «Принять».`;
   }
 
   async unlink(enterpriseId: string, userId: string) {
@@ -445,6 +542,32 @@ export class TelegramIntegrationService {
  * Telegram ID сразу, а привязка по ссылке проходила без открытой страницы.
  * Один на процесс; при сбое — пауза и снова.
  */
+/**
+ * Фоновый опрос своих ботов организаций — чтобы фото накладной обрабатывалось
+ * без открытой страницы настроек. Раньше свой бот читался только по кнопке.
+ * Один проход по всем ботам раз в intervalMs; параллельно с /poll не идёт
+ * (защита в pollLinks), дубль черновика отсекается на складе.
+ */
+export function startOwnBotsPoller(tg: TelegramIntegrationService,
+    log: (m: string) => void = console.error, intervalMs = 15_000) {
+  let stopped = false;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  (async () => {
+    while (!stopped) {
+      try {
+        for (const enterpriseId of await tg.ownBotEnterprises()) {
+          if (stopped) break;
+          await tg.pollLinks(enterpriseId).catch((e: any) => log('own telegram bot poll failed: ' + (e?.message || e)));
+        }
+      } catch (e: any) {
+        log('own telegram bots poll failed: ' + (e?.message || e));
+      }
+      await sleep(intervalMs);
+    }
+  })();
+  return () => { stopped = true; };
+}
+
 export function startPlatformBotPoller(tg: TelegramIntegrationService, log: (m: string) => void = console.error) {
   let stopped = false;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

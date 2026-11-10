@@ -1719,6 +1719,25 @@ AUTH.requireAuth();
         <button class="close-btn" onclick="closeInvoiceItemsModal()">&times;</button>
       </div>
 
+      <!-- Шапка черновика и фото накладной (из Telegram) -->
+      <div id="invoiceHeaderBox" style="display:none;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;">
+          <div class="form-group" style="margin:0;"><label class="form-label" for="invHdrSupplier">Поставщик</label>
+            <select class="form-select" id="invHdrSupplier" onchange="saveInvoiceHeader('supplierId', this.value)"></select></div>
+          <div class="form-group" style="margin:0;"><label class="form-label" for="invHdrWarehouse">Склад</label>
+            <select class="form-select" id="invHdrWarehouse" onchange="saveInvoiceHeader('warehouseId', this.value)"></select></div>
+          <div class="form-group" style="margin:0;"><label class="form-label" for="invHdrDate">Дата</label>
+            <input type="date" class="form-input" id="invHdrDate" onchange="saveInvoiceHeader('invoiceDate', this.value)"></div>
+        </div>
+        <div id="invHdrStatus" style="font-size:12px;color:var(--color-text-secondary);margin-top:6px;min-height:16px;"></div>
+      </div>
+      <div id="invoicePhotoBox" style="display:none;margin-bottom:14px;">
+        <a id="invoicePhotoLink" href="#" target="_blank" rel="noopener" style="display:inline-block;">
+          <img id="invoicePhotoImg" alt="Фото накладной" style="max-width:100%;max-height:320px;border-radius:10px;border:1px solid var(--admin-border);display:block;">
+        </a>
+        <div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">Фото из Telegram — нажмите, чтобы открыть целиком. Внесите позиции по нему.</div>
+      </div>
+
       <div class="table-wrapper" style="margin-bottom:16px;">
         <table class="data-table">
           <thead>
@@ -3352,7 +3371,7 @@ AUTH.requireAuth();
             ? '<strong style="color:var(--color-danger);">' + money(debt) + ' ₽</strong>'
             : '<span style="color:var(--color-success);">оплачена</span>';
         return `<tr${isReceived ? '' : ' style="opacity:.85"'}>
-          <td><strong>${esc(inv.invoice_number || '—')}</strong></td>
+          <td><strong>${esc(inv.invoice_number || '—')}</strong>${inv.source === 'telegram' ? ' <span class="mv-chip mv-adj" title="Прислано фото в Telegram">фото</span>' : ''}${!inv.supplier_id && inv.status !== 'received' ? '<div style="font-size:12px;color:#9E3420;">нет поставщика</div>' : ''}</td>
           <td>${dateText}</td>
           <td>${esc(inv.supplier_name || '—')}</td>
           <td>${esc(inv.warehouse_name || '—')}</td>
@@ -3476,6 +3495,8 @@ AUTH.requireAuth();
       document.getElementById('invoiceConfirmBtn').style.display = isReceived ? 'none' : 'inline-block';
 
       document.getElementById('invoiceItemsModal').classList.add('active');
+      renderInvoiceHeader(isReceived);
+      showInvoicePhoto();
 
       if (!isReceived) await loadInvoiceProductOptions();
       await loadInvoiceItems(invoiceId);
@@ -3483,7 +3504,70 @@ AUTH.requireAuth();
 
     function closeInvoiceItemsModal() {
       document.getElementById('invoiceItemsModal').classList.remove('active');
+      const img = document.getElementById('invoicePhotoImg');
+      if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); img.dataset.url = ''; img.removeAttribute('src'); }
       currentInvoice = null;
+    }
+
+    // Шапка черновика: черновик из фото приходит без поставщика — без него
+    // приёмка не запишет долг. У принятой накладной шапка не показывается.
+    async function renderInvoiceHeader(isReceived) {
+      const box = document.getElementById('invoiceHeaderBox');
+      box.style.display = isReceived ? 'none' : 'block';
+      document.getElementById('invHdrStatus').textContent = '';
+      if (isReceived) return;
+      const inv = currentInvoice;
+      document.getElementById('invHdrSupplier').innerHTML = '<option value="">— не выбран —</option>'
+        + suppliers.map(s => `<option value="${esc(s.id)}"${s.id === inv.supplier_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+      let whs = warehouses;
+      if (!whs.length) {
+        try { const r = await AUTH.fetch('/api/inventory/warehouses'); if (r.ok) whs = (await r.json()).warehouses || []; } catch (e) {}
+      }
+      document.getElementById('invHdrWarehouse').innerHTML = '<option value="">— не выбран —</option>'
+        + whs.map(w => `<option value="${esc(w.id)}"${w.id === inv.warehouse_id ? ' selected' : ''}>${esc(w.name)}</option>`).join('');
+      document.getElementById('invHdrDate').value = inv.invoice_date ? String(inv.invoice_date).slice(0, 10) : '';
+      if (!inv.supplier_id) document.getElementById('invHdrStatus').textContent = 'Выберите поставщика — иначе долг по этой накладной не запишется.';
+    }
+
+    async function saveInvoiceHeader(field, value) {
+      if (!currentInvoice) return;
+      const st = document.getElementById('invHdrStatus');
+      st.style.color = 'var(--color-text-secondary)'; st.textContent = 'Сохраняю…';
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + encodeURIComponent(currentInvoice.id), {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: value || null })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        const inv = (await res.json()).invoice || {};
+        Object.assign(currentInvoice, inv);
+        const i = supplierInvoices.findIndex(x => x.id === currentInvoice.id);
+        if (i >= 0) Object.assign(supplierInvoices[i], inv);
+        st.textContent = 'Сохранено';
+        if (!currentInvoice.supplier_id) st.textContent = 'Сохранено. Поставщик не выбран — долг не запишется.';
+      } catch (e) {
+        st.style.color = '#9E3420'; st.textContent = 'Не сохранено: ' + e.message;
+      }
+    }
+    window.saveInvoiceHeader = saveInvoiceHeader;
+
+    // Фото отдаётся по токену — грузим через AUTH.fetch и показываем как blob
+    async function showInvoicePhoto() {
+      const box = document.getElementById('invoicePhotoBox');
+      const img = document.getElementById('invoicePhotoImg');
+      const link = document.getElementById('invoicePhotoLink');
+      box.style.display = 'none';
+      if (!currentInvoice || !currentInvoice.photo_url) return;
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + encodeURIComponent(currentInvoice.id) + '/photo');
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        img.dataset.url = url;
+        if (blob.type === 'application/pdf') { img.style.display = 'none'; link.textContent = 'Открыть PDF накладной'; }
+        else { img.style.display = 'block'; img.src = url; }
+        link.href = url;
+        box.style.display = 'block';
+      } catch (e) { /* фото не критично */ }
     }
 
     // Товары для выбора в позиции накладной

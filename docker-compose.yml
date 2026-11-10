@@ -93,6 +93,8 @@ services:
       TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-}
       # Склад шлёт «пора заказать» через /internal/telegram-notify с этим токеном
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      # Фото накладной из бота уходит на склад черновиком
+      INVENTORY_SERVICE_URL: http://inventory-service:3006
     expose:
       - "3001"
     networks:
@@ -239,6 +241,10 @@ services:
       # Уведомления «пора заказать» уходят в Telegram через user-service
       USER_SERVICE_URL: http://user-service:3001
       STOCK_ALERT_INTERVAL_MS: ${STOCK_ALERT_INTERVAL_MS:-300000}
+      INVOICE_UPLOAD_DIR: /app/uploads/invoices
+    volumes:
+      # Фото накладных, присланные боту
+      - invoice_uploads:/app/uploads/invoices
     expose:
       - "3006"
     networks:
@@ -593,6 +599,7 @@ volumes:
   elasticsearch_data:
   telegram_uploads:
   menu_uploads:
+  invoice_uploads:
   whatsapp_session:
 
 networks:

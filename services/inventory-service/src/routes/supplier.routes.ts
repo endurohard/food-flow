@@ -2,7 +2,9 @@ import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { SupplierService } from '../services/supplier.service';
 import { InventoryService } from '../services/inventory.service';
-import { authenticateUser } from '../middleware/auth.middleware';
+import express from 'express';
+import { authenticateUser, authenticateInternal } from '../middleware/auth.middleware';
+import { PHOTO_MIME } from '../services/supplier.service';
 import { config } from '../config';
 
 const router = Router();
@@ -22,6 +24,55 @@ router.get('/reports/settlements', authenticateUser, async (req: Request, res: R
     return res.json({ settlements });
   } catch (error) {
     console.error('Settlements report error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ========== ФОТО НАКЛАДНЫХ (Telegram) ==========
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Черновик накладной из фото. Только для user-service (бот организации):
+ * тело — сам файл, сведения — в query. Не JSON: общий express.json()
+ * ограничен 100 КБ, а фото весит мегабайты.
+ */
+router.post('/invoices/from-photo',
+  authenticateInternal,
+  express.raw({ type: PHOTO_MIME, limit: '10mb' }),
+  async (req: Request, res: Response) => {
+    if (!req.isInternal) return res.status(403).json({ error: 'Forbidden' });
+    try {
+      const enterpriseId = String(req.query.enterpriseId || '');
+      const userId = req.query.userId ? String(req.query.userId) : undefined;
+      const fileId = String(req.query.fileId || '').slice(0, 128);
+      if (!UUID_RE.test(enterpriseId)) return res.status(400).json({ error: 'enterpriseId required' });
+      if (userId && !UUID_RE.test(userId)) return res.status(400).json({ error: 'bad userId' });
+      if (!fileId) return res.status(400).json({ error: 'fileId required' });
+      const mime = String(req.headers['content-type'] || '').split(';')[0].trim();
+      const result = await supplierService.createDraftFromPhoto({
+        enterpriseId, userId, fileId, mime, body: req.body as Buffer,
+        caption: req.query.caption ? String(req.query.caption) : undefined
+      }, config.invoiceUploadDir);
+      return res.status(result.duplicate ? 200 : 201).json(result);
+    } catch (error: any) {
+      if (error.name === 'InvoiceError') return res.status(400).json({ error: error.message, message: error.message });
+      console.error('Invoice from photo error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+// Фото накладной для админки (по токену пользователя, только своя организация)
+router.get('/invoices/:id/photo', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+    const isSuper = req.userRole === 'super_admin';
+    const file = await supplierService.getInvoicePhotoPath(req.params.id, config.invoiceUploadDir, isSuper ? undefined : req.enterpriseId);
+    if (!file) return res.status(404).json({ error: 'Фото нет' });
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    return res.sendFile(file, (err) => { if (err && !res.headersSent) res.status(404).json({ error: 'Фото нет' }); });
+  } catch (error) {
+    console.error('Invoice photo error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -134,6 +185,41 @@ router.post('/invoices', authenticateUser, async (req: Request, res: Response) =
     return res.status(201).json({ invoice });
   } catch (error) {
     console.error('Create invoice error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const draftHeaderSchema = Joi.object({
+  supplierId: Joi.string().uuid().allow(null, '').optional(),
+  warehouseId: Joi.string().uuid().allow(null, '').optional(),
+  invoiceNumber: Joi.string().trim().max(100).optional(),
+  invoiceDate: Joi.date().iso().allow(null, '').optional(),
+  notes: Joi.string().max(1000).allow(null, '').optional()
+}).min(1);
+
+router.put('/invoices/:id', authenticateUser, async (req: Request, res: Response) => {
+  try {
+    const isSuper = req.userRole === 'super_admin';
+    if (!isSuper && !req.enterpriseId) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    }
+    const { error, value } = draftHeaderSchema.validate(req.body);
+    if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
+    if (!isSuper) {
+      if (value.warehouseId && !(await inventoryService.warehouseBelongsTo(value.warehouseId, req.enterpriseId!))) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Склад не принадлежит предприятию' });
+      }
+      if (value.supplierId && !(await supplierService.supplierBelongsTo(value.supplierId, req.enterpriseId!))) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Поставщик не принадлежит предприятию' });
+      }
+    }
+    if (value.invoiceDate instanceof Date) value.invoiceDate = value.invoiceDate.toISOString().slice(0, 10);
+    const invoice = await supplierService.updateDraftHeader(req.params.id, value, isSuper ? undefined : req.enterpriseId);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    return res.json({ invoice });
+  } catch (error: any) {
+    if (error.name === 'InvoiceError') return res.status(400).json({ error: error.message, message: error.message });
+    console.error('Update invoice error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

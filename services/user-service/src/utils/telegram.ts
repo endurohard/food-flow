@@ -37,6 +37,34 @@ function tunnel(proxyUrl: string): Promise<tls.TLSSocket> {
   });
 }
 
+/**
+ * Скачать файл, который прислали боту (getFile → file_path). Тем же путём,
+ * что и tgCall: через TELEGRAM_PROXY_URL, если задан. Больше maxBytes — ошибка.
+ */
+export async function tgDownload(token: string, filePath: string, maxBytes = 10 * 1024 * 1024): Promise<Buffer> {
+  const proxy = process.env.TELEGRAM_PROXY_URL || '';
+  const socket = proxy ? await tunnel(proxy) : undefined;
+  return new Promise<Buffer>((resolve, reject) => {
+    const req = https.request({
+      host: 'api.telegram.org', path: `/file/bot${token}/${filePath}`, method: 'GET', timeout: 30_000,
+      ...(socket ? { createConnection: () => socket } : {})
+    }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); return reject(new TelegramError('файл не скачался: ' + res.statusCode)); }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on('data', (c: Buffer) => {
+        size += c.length;
+        if (size > maxBytes) { req.destroy(new TelegramError('файл слишком большой')); return; }
+        chunks.push(c);
+      });
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('timeout', () => req.destroy(new TelegramError('Telegram не отдал файл')));
+    req.on('error', (e: any) => reject(e instanceof TelegramError ? e : new TelegramError('нет связи с Telegram: ' + (e.code || e.message))));
+    req.end();
+  });
+}
+
 export async function tgCall<T = any>(token: string, method: string, params: Record<string, any> = {}): Promise<T> {
   const body = JSON.stringify(params);
   const proxy = process.env.TELEGRAM_PROXY_URL || '';

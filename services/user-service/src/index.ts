@@ -12,7 +12,7 @@ import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import enterpriseRoutes from './routes/enterprise.routes';
 import { createTelegramRoutes, createInternalNotifyRoute, createPlatformBotRoutes } from './routes/telegram.routes';
-import { startPlatformBotPoller } from './services/telegram-integration.service';
+import { startPlatformBotPoller, startOwnBotsPoller } from './services/telegram-integration.service';
 
 const app = express();
 const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
@@ -104,11 +104,14 @@ const server = app.listen(PORT, () => {
 
 // Общий Telegram-бот платформы читается одним фоновым циклом на процесс
 const stopPlatformBot = startPlatformBotPoller(telegram.tg, (m) => logger.warn(m));
+// Свои боты организаций — фото накладных принимаются без открытой страницы
+const stopOwnBots = startOwnBotsPoller(telegram.tg, (m) => logger.warn(m));
 
 // Graceful shutdown: stop accepting → drain → close pools → exit
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
   stopPlatformBot();
+  stopOwnBots();
   server.close(async () => {
     logger.info('HTTP server closed');
     await healthPool.end().catch(() => {});

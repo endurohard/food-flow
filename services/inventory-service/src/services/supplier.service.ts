@@ -1,3 +1,6 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as crypto from 'crypto';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { config } from '../config';
@@ -7,6 +10,11 @@ import { logger } from '../utils/logger';
 export class InvoiceError extends Error {
   constructor(message: string) { super(message); this.name = 'InvoiceError'; }
 }
+
+const PHOTO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/heic': '.heic', 'application/pdf': '.pdf'
+};
+export const PHOTO_MIME = Object.keys(PHOTO_EXT);
 
 export class SupplierService {
   private pool: InstanceType<typeof Pool>;
@@ -180,6 +188,104 @@ export class SupplierService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Черновик накладной из фото (бот Telegram). Склад — основной склад
+   * организации, поставщик и позиции вносятся по фото в админке. Повторное
+   * то же фото (тот же file_unique_id) черновик не дублирует.
+   */
+  async createDraftFromPhoto(data: {
+    enterpriseId: string; userId?: string; fileId: string; mime: string; body: Buffer; caption?: string;
+  }, uploadDir: string): Promise<{ invoice: any; duplicate: boolean }> {
+    const ext = PHOTO_EXT[data.mime];
+    if (!ext) throw new InvoiceError('Нужна фотография (jpg, png, webp, heic) или PDF');
+    if (!data.body || !data.body.length) throw new InvoiceError('Пустой файл');
+
+    const existing = await this.pool.query(
+      'SELECT * FROM supply_invoices WHERE enterprise_id = $1 AND telegram_file_id = $2',
+      [data.enterpriseId, data.fileId]
+    );
+    if (existing.rows[0]) return { invoice: existing.rows[0], duplicate: true };
+
+    const wh = await this.pool.query(
+      `SELECT id FROM warehouses WHERE enterprise_id = $1 AND COALESCE(is_active, true)
+        ORDER BY (warehouse_type = 'main') DESC, created_at ASC LIMIT 1`,
+      [data.enterpriseId]
+    );
+    const number = await this.nextInvoiceNumber(data.enterpriseId);
+
+    // Имя файла — случайное, папка — по организации; путь в базе относительный
+    const rel = path.join(data.enterpriseId, crypto.randomUUID() + ext);
+    const abs = path.join(uploadDir, rel);
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    await fs.writeFile(abs, data.body);
+
+    const caption = (data.caption || '').trim().slice(0, 500);
+    const r = await this.pool.query(
+      `INSERT INTO supply_invoices (enterprise_id, warehouse_id, invoice_number, invoice_date, status,
+          photo_url, source, telegram_file_id, created_by, notes)
+       VALUES ($1, $2, $3, CURRENT_DATE, 'draft', $4, 'telegram', $5, $6, $7)
+       ON CONFLICT (enterprise_id, telegram_file_id) WHERE telegram_file_id IS NOT NULL DO NOTHING
+       RETURNING *`,
+      [data.enterpriseId, wh.rows[0]?.id || null, number, rel, data.fileId, data.userId || null,
+       caption ? 'Из Telegram: ' + caption : 'Фото из Telegram']
+    );
+    if (!r.rows[0]) {
+      // Параллельный повтор успел раньше — свой файл не нужен
+      await fs.unlink(abs).catch(() => undefined);
+      const again = await this.pool.query(
+        'SELECT * FROM supply_invoices WHERE enterprise_id = $1 AND telegram_file_id = $2',
+        [data.enterpriseId, data.fileId]
+      );
+      return { invoice: again.rows[0], duplicate: true };
+    }
+    return { invoice: r.rows[0], duplicate: false };
+  }
+
+  /** Путь к фото накладной на диске — только внутри хранилища. */
+  async getInvoicePhotoPath(invoiceId: string, uploadDir: string, enterpriseId?: string): Promise<string | null> {
+    const r = await this.pool.query(
+      `SELECT photo_url FROM supply_invoices WHERE id = $1${enterpriseId ? ' AND enterprise_id = $2' : ''}`,
+      enterpriseId ? [invoiceId, enterpriseId] : [invoiceId]
+    );
+    const rel = r.rows[0]?.photo_url;
+    if (!rel || /^https?:/i.test(rel)) return null;
+    const base = path.resolve(uploadDir);
+    const abs = path.resolve(base, rel);
+    if (!abs.startsWith(base + path.sep)) return null;
+    return abs;
+  }
+
+  /**
+   * Шапка черновика: поставщик, склад, номер поставщика, дата. Черновик из
+   * фото приходит без поставщика — без него приёмка не увеличила бы долг.
+   * Принятую накладную не меняем.
+   */
+  async updateDraftHeader(invoiceId: string, data: {
+    supplierId?: string | null; warehouseId?: string | null; invoiceNumber?: string; invoiceDate?: string | null; notes?: string | null;
+  }, enterpriseId?: string): Promise<any | null> {
+    const map: Record<string, string> = {
+      supplierId: 'supplier_id', warehouseId: 'warehouse_id', invoiceNumber: 'invoice_number', invoiceDate: 'invoice_date', notes: 'notes'
+    };
+    const sets: string[] = [];
+    const vals: any[] = [];
+    for (const [k, col] of Object.entries(map)) {
+      if ((data as any)[k] !== undefined) { vals.push((data as any)[k] === '' ? null : (data as any)[k]); sets.push(`${col} = $${vals.length}`); }
+    }
+    if (!sets.length) throw new InvoiceError('Нечего сохранять');
+    vals.push(invoiceId);
+    let where = `id = $${vals.length} AND status <> 'received'`;
+    if (enterpriseId) { vals.push(enterpriseId); where += ` AND enterprise_id = $${vals.length}`; }
+    const r = await this.pool.query(
+      `UPDATE supply_invoices SET ${sets.join(', ')}, updated_at = NOW() WHERE ${where} RETURNING *`, vals
+    );
+    if (!r.rows[0]) {
+      const ex = await this.pool.query('SELECT status FROM supply_invoices WHERE id = $1', [invoiceId]);
+      if (ex.rows[0]?.status === 'received') throw new InvoiceError('Накладная уже принята — шапку изменить нельзя');
+      return null;
+    }
+    return r.rows[0];
   }
 
   async getInvoiceItems(invoiceId: string): Promise<any[]> {

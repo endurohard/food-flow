@@ -27,6 +27,7 @@ jest.mock('../../middleware/auth.middleware', () => ({
     req.enterpriseId = 'ent-own';
     next();
   },
+  authenticateInternal: (_req: any, _res: any, next: any) => next(),
   requireRole: () => (_req: any, _res: any, next: any) => next(),
   ROLES: { OWNER: 'owner', ADMIN: 'admin', MANAGER: 'manager', OPERATOR: 'operator' }
 }));
@@ -43,6 +44,7 @@ function tenantError(name: string) {
 let confirmImpl: () => Promise<any>;
 
 jest.mock('../../services/supplier.service', () => ({
+  PHOTO_MIME: ['image/jpeg'],
   SupplierService: class {
     confirmInvoice() { return confirmImpl(); }
     invoiceBelongsTo() { return Promise.resolve(true); }

@@ -26,6 +26,8 @@ export const config = {
   },
   financeServiceUrl: process.env.FINANCE_SERVICE_URL || 'http://finance-service:3012',
   internalToken: process.env.INTERNAL_TOKEN || '',
+  // Фото накладных (из Telegram). В docker — том invoice_uploads
+  invoiceUploadDir: process.env.INVOICE_UPLOAD_DIR || '/app/uploads/invoices',
   // Через user-service уходят уведомления в Telegram-бот организации
   userServiceUrl: process.env.USER_SERVICE_URL || '',
   // Как часто перепроверять остатки против минимума, мс (0 — не проверять)
