@@ -812,6 +812,32 @@
     .po-items { min-width: 0 !important; width: 100%; font-size: 14px; }
     .po-items td, .po-items th { padding: 8px 10px !important; }
     .po-num { white-space: nowrap; }
+    /* Фасовка в позиции накладной */
+    .inv-mode { display: inline-flex; border: 1px solid var(--admin-border, #ddd); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+    .inv-mode label { padding: 8px 14px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--color-text-secondary); }
+    .inv-mode input { position: absolute; opacity: 0; pointer-events: none; }
+    .inv-mode label:has(input:checked) { background: var(--color-primary, #2E6B47); color: #fff; }
+    .inv-mode label:has(input:focus-visible) { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+    .inv-pack-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .inv-pack-grid .form-group { margin-bottom: 0; }
+    .inv-calc { margin: 10px 0 4px; font-size: 14px; color: var(--color-text-secondary); min-height: 20px; }
+    .inv-calc b { color: var(--color-text-primary); }
+    .inv-pack-note { display: block; font-size: 12px; color: var(--color-text-secondary); }
+    .inv-row-btns { display: flex; gap: 6px; justify-content: flex-end; }
+    .inv-lines-wrap { padding: 0; overflow-x: auto; }
+    .inv-lines { min-width: 0 !important; width: 100%; font-size: 14px; }
+    .inv-lines td, .inv-lines th { padding: 8px 10px !important; }
+    @media (max-width: 760px) {
+      .inv-lines thead { display: none; }
+      .inv-lines, .inv-lines tbody { display: block; }
+      .inv-lines tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--admin-border, #e5e5e5); }
+      .inv-lines td { display: block; padding: 0 !important; border: 0 !important; }
+      .inv-lines td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--color-text-secondary); }
+      .inv-lines td.inv-line-name { grid-column: 1 / 3; }
+      .inv-lines td.inv-line-btns { grid-row: 1; grid-column: 3; }
+      .inv-lines td[colspan] { grid-column: 1 / -1; }
+    }
+    @media (max-width: 760px) { .inv-pack-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
     .po-diff-minus { color: #9E3420; font-weight: 600; }
     .po-diff-plus { color: #1D4E89; font-weight: 600; }
     .po-diff-ok { color: #1F5C39; }
@@ -1828,14 +1854,15 @@ AUTH.requireAuth();
         <div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">Фото из Telegram — нажмите, чтобы открыть целиком. Внесите позиции по нему.</div>
       </div>
 
-      <div class="table-wrapper" style="margin-bottom:16px;">
-        <table class="data-table">
+      <div class="table-wrapper inv-lines-wrap" style="margin-bottom:16px;">
+        <table class="data-table inv-lines">
           <thead>
             <tr>
               <th>Товар</th>
               <th>Количество</th>
               <th>Цена за ед.</th>
               <th>Сумма</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="invoiceItemsBody">
@@ -1850,26 +1877,51 @@ AUTH.requireAuth();
 
       <!-- Форма добавления позиции: скрыта для принятой накладной -->
       <form id="invoiceItemForm" onsubmit="submitInvoiceItem(event)" style="border-top:1px solid var(--admin-border);padding-top:16px;">
-        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;">Добавить позицию</h3>
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;" id="invoiceItemFormTitle">Добавить позицию</h3>
         <div class="form-group">
           <label class="form-label">Товар:</label>
           <select class="form-select" id="invoiceItemProduct" required onchange="prefillInvoiceItemPrice()">
             <option value="">Загрузка...</option>
           </select>
         </div>
-        <div class="form-row">
+        <div class="inv-mode" id="invPackMode" role="radiogroup" aria-label="Как указано в накладной">
+          <label><input type="radio" name="invMode" value="unit" checked onchange="setInvoiceItemMode(this.value)"><span id="invModeUnitLabel">В единицах склада</span></label>
+          <label><input type="radio" name="invMode" value="pack" onchange="setInvoiceItemMode(this.value)">Упаковками</label>
+        </div>
+        <div class="form-row" id="invUnitFields">
           <div class="form-group">
-            <label class="form-label">Количество:</label>
-            <input type="number" class="form-input" id="invoiceItemQty" step="0.001" min="0.001" required>
+            <label class="form-label" for="invoiceItemQty" id="invoiceItemQtyLabel">Количество:</label>
+            <input type="number" class="form-input" id="invoiceItemQty" step="0.001" min="0.001" oninput="updateInvoiceCalc()">
           </div>
           <div class="form-group">
-            <label class="form-label">Цена за единицу, ₽:</label>
-            <input type="number" class="form-input" id="invoiceItemPrice" step="0.01" min="0" required>
+            <label class="form-label" for="invoiceItemPrice">Цена за единицу, ₽:</label>
+            <input type="number" class="form-input" id="invoiceItemPrice" step="0.01" min="0" oninput="updateInvoiceCalc()">
           </div>
         </div>
+        <div class="inv-pack-grid" id="invPackFields" style="display:none;">
+          <div class="form-group">
+            <label class="form-label" for="invPackName">Упаковка</label>
+            <input type="text" class="form-input" id="invPackName" list="invPackList" maxlength="60" placeholder="мешок, коробка…" oninput="packNamePicked()">
+            <datalist id="invPackList"></datalist>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="invPackSize" id="invPackSizeLabel">В упаковке</label>
+            <input type="number" class="form-input" id="invPackSize" step="0.001" min="0.001" oninput="updateInvoiceCalc()">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="invPackCount">Упаковок</label>
+            <input type="number" class="form-input" id="invPackCount" step="0.001" min="0.001" oninput="updateInvoiceCalc()">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="invPackPrice">Цена упаковки, ₽</label>
+            <input type="number" class="form-input" id="invPackPrice" step="0.01" min="0" oninput="updateInvoiceCalc()">
+          </div>
+        </div>
+        <div class="inv-calc" id="invCalc" aria-live="polite"></div>
         <div id="invoiceItemError" style="color:var(--color-danger);font-size:13px;margin-bottom:10px;"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button type="submit" class="btn btn-secondary">Добавить позицию</button>
+          <button type="button" class="btn" id="invoiceItemCancelEdit" style="display:none;" onclick="cancelInvoiceItemEdit()">Отмена</button>
+          <button type="submit" class="btn btn-secondary" id="invoiceItemSubmit">Добавить позицию</button>
         </div>
       </form>
 
@@ -3669,7 +3721,7 @@ AUTH.requireAuth();
       const isReceived = currentInvoice.status === 'received';
 
       document.getElementById('invoiceItemError').textContent = '';
-      document.getElementById('invoiceItemForm').reset();
+      resetInvoiceItemForm();
       document.getElementById('invoiceItemsTitle').textContent =
         'Позиции накладной' + (currentInvoice.invoice_number ? ' № ' + currentInvoice.invoice_number : '')
         + (isReceived ? ' (принята)' : '');
@@ -3772,15 +3824,153 @@ AUTH.requireAuth();
       }
     }
 
-    // Подставляем последнюю закупочную цену товара как подсказку
-    function prefillInvoiceItemPrice() {
-      const id = document.getElementById('invoiceItemProduct').value;
-      const item = invoiceInventoryItems.find(i => i.id === id);
+    // ── Фасовки ──
+    // Поставщик пишет «3 мешка по 2 400 ₽», склад ведётся в кг: вводим как в
+    // документе, количество и цену за кг считает сервер. Фасовка запоминается
+    // за товаром и поставщиком и подставляется в следующий раз.
+    let invoicePackages = [];
+    let editingInvoiceRow = null;
+
+    const invMode = () => (document.querySelector('input[name="invMode"]:checked') || {}).value || 'unit';
+    const selectedInvoiceItem = () => invoiceInventoryItems.find(i => i.id === document.getElementById('invoiceItemProduct').value);
+    const numVal = (id) => { const v = document.getElementById(id).value; return v === '' ? NaN : parseFloat(v); };
+
+    function setInvoiceItemMode(mode) {
+      document.querySelector(`input[name="invMode"][value="${mode}"]`).checked = true;
+      document.getElementById('invUnitFields').style.display = mode === 'pack' ? 'none' : '';
+      document.getElementById('invPackFields').style.display = mode === 'pack' ? 'grid' : 'none';
+      updateInvoiceCalc();
+    }
+
+    function updateInvoiceUnitLabels() {
+      const it = selectedInvoiceItem();
+      const u = it && it.unit ? it.unit : '';
+      document.getElementById('invModeUnitLabel').textContent = u ? 'В ' + u : 'В единицах склада';
+      document.getElementById('invoiceItemQtyLabel').textContent = 'Количество' + (u ? ', ' + u : '') + ':';
+      document.getElementById('invPackSizeLabel').textContent = 'В упаковке' + (u ? ', ' + u : '');
+    }
+
+    // Подставляем последнюю закупочную цену и фасовки товара
+    async function prefillInvoiceItemPrice() {
+      const item = selectedInvoiceItem();
+      updateInvoiceUnitLabels();
       const priceEl = document.getElementById('invoiceItemPrice');
       if (item && !priceEl.value) {
         const cost = parseFloat(item.cost_price);
         if (cost > 0) priceEl.value = cost;
       }
+      invoicePackages = [];
+      document.getElementById('invPackList').innerHTML = '';
+      if (item) {
+        try {
+          const qs = new URLSearchParams({ itemId: item.id });
+          if (currentInvoice && currentInvoice.supplier_id) qs.set('supplierId', currentInvoice.supplier_id);
+          const res = await AUTH.fetch('/api/suppliers/packages?' + qs);
+          if (res.ok) invoicePackages = (await res.json()).packages || [];
+        } catch (e) { /* без подсказок фасовок форма работает */ }
+        if (selectedInvoiceItem() !== item) return;   // успели выбрать другой товар
+        document.getElementById('invPackList').innerHTML = invoicePackages
+          .map(p => `<option value="${esc(p.name)}">${esc(qtyText(p.unitsPerPack, item.unit))}${p.supplierName ? ' · ' + esc(p.supplierName) : ''}</option>`).join('');
+        // Товар обычно приходит упаковками — сразу так и предлагаем
+        if (invoicePackages.length && !editingInvoiceRow) {
+          const p = invoicePackages[0];
+          document.getElementById('invPackName').value = p.name;
+          document.getElementById('invPackSize').value = p.unitsPerPack;
+          if (p.lastPackPrice !== null) document.getElementById('invPackPrice').value = p.lastPackPrice;
+          setInvoiceItemMode('pack');
+          document.getElementById('invPackCount').focus();
+        }
+      }
+      updateInvoiceCalc();
+    }
+
+    function packNamePicked() {
+      const name = document.getElementById('invPackName').value.trim().toLowerCase();
+      const p = invoicePackages.find(x => x.name.toLowerCase() === name);
+      if (p) {
+        document.getElementById('invPackSize').value = p.unitsPerPack;
+        if (p.lastPackPrice !== null && !document.getElementById('invPackPrice').value) document.getElementById('invPackPrice').value = p.lastPackPrice;
+      }
+      updateInvoiceCalc();
+    }
+
+    // Тот же расчёт, что на сервере (computeLine): сумма — из документа
+    function invoiceLine() {
+      if (invMode() === 'pack') {
+        const size = numVal('invPackSize'), count = numVal('invPackCount'), price = numVal('invPackPrice');
+        if (!(size > 0) || !(count > 0) || !(price >= 0)) return null;
+        return { qty: Math.round(count * size * 1000) / 1000, unitPrice: Math.round(price / size * 100) / 100, total: Math.round(count * price * 100) / 100 };
+      }
+      const q = numVal('invoiceItemQty'), p = numVal('invoiceItemPrice');
+      if (!(q > 0) || !(p >= 0)) return null;
+      return { qty: q, unitPrice: p, total: Math.round(q * p * 100) / 100 };
+    }
+
+    function updateInvoiceCalc() {
+      const el = document.getElementById('invCalc');
+      const it = selectedInvoiceItem();
+      const line = invoiceLine();
+      if (!line || !it) { el.textContent = ''; return; }
+      const last = parseFloat(it.cost_price);
+      const jump = last > 0 && Math.abs(line.unitPrice - last) / last > 0.3;
+      el.innerHTML = (invMode() === 'pack' ? 'На склад: <b>' + esc(qtyText(line.qty, it.unit)) + '</b> по <b>' + money(line.unitPrice) + '</b> за ' + esc(it.unit || 'ед.') + ' · ' : '')
+        + 'сумма <b>' + money(line.total) + '</b>'
+        + (jump ? ` <span style="color:#9E3420">· прошлая цена ${money(last)} — проверьте вложение упаковки</span>` : '');
+    }
+
+    function resetInvoiceItemForm() {
+      editingInvoiceRow = null;
+      document.getElementById('invoiceItemForm').reset();
+      document.getElementById('invoiceItemProduct').disabled = false;
+      document.getElementById('invoiceItemFormTitle').textContent = 'Добавить позицию';
+      document.getElementById('invoiceItemSubmit').textContent = 'Добавить позицию';
+      document.getElementById('invoiceItemCancelEdit').style.display = 'none';
+      invoicePackages = [];
+      document.getElementById('invPackList').innerHTML = '';
+      setInvoiceItemMode('unit');
+      updateInvoiceUnitLabels();
+    }
+    function cancelInvoiceItemEdit() { resetInvoiceItemForm(); document.getElementById('invoiceItemError').textContent = ''; }
+
+    function editInvoiceItem(rowId) {
+      const it = invoiceItemsCache.find(x => x.id === rowId);
+      if (!it) return;
+      resetInvoiceItemForm();
+      editingInvoiceRow = it;
+      const sel = document.getElementById('invoiceItemProduct');
+      sel.value = it.inventory_item_id || '';
+      updateInvoiceUnitLabels();
+      if (it.pack_size) {
+        document.getElementById('invPackName').value = it.pack_name || '';
+        document.getElementById('invPackSize').value = parseFloat(it.pack_size);
+        document.getElementById('invPackCount').value = parseFloat(it.pack_count);
+        document.getElementById('invPackPrice').value = parseFloat(it.pack_price);
+        setInvoiceItemMode('pack');
+      } else {
+        document.getElementById('invoiceItemQty').value = parseFloat(it.quantity) || '';
+        document.getElementById('invoiceItemPrice').value = parseFloat(it.price_per_unit) || '';
+        setInvoiceItemMode('unit');
+      }
+      document.getElementById('invoiceItemFormTitle').textContent = 'Изменить позицию: ' + (it.inventory_item_name || it.name || '');
+      document.getElementById('invoiceItemSubmit').textContent = 'Сохранить';
+      document.getElementById('invoiceItemCancelEdit').style.display = '';
+      document.getElementById('invoiceItemForm').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    async function deleteInvoiceItem(rowId, btn) {
+      // Подтверждение вторым нажатием: confirm() во встроенных браузерах заблокирован
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.textContent = 'Удалить?';
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = '✕'; } }, 3000);
+        return;
+      }
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + currentInvoice.id + '/items/' + encodeURIComponent(rowId), { method: 'DELETE' });
+        if (!res.ok) throw await invoiceApiError(res);
+        if (editingInvoiceRow && editingInvoiceRow.id === rowId) resetInvoiceItemForm();
+        await loadInvoiceItems(currentInvoice.id);
+        await loadSupplierInvoices();
+      } catch (e) { document.getElementById('invoiceItemError').textContent = e.message; }
     }
 
     async function loadInvoiceItems(invoiceId) {
@@ -3793,7 +3983,7 @@ AUTH.requireAuth();
         renderInvoiceItems();
       } catch (e) {
         invoiceItemsCache = [];
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--color-danger);">Ошибка загрузки позиций: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-danger);">Ошибка загрузки позиций: ' + e.message + '</td></tr>';
         document.getElementById('invoiceItemsTotal').textContent = '0 ₽';
       }
     }
@@ -3801,7 +3991,7 @@ AUTH.requireAuth();
     function renderInvoiceItems() {
       const tbody = document.getElementById('invoiceItemsBody');
       if (!invoiceItemsCache.length) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Позиций пока нет — добавьте товары из накладной</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--color-grey-5);">Позиций пока нет — добавьте товары из накладной</td></tr>';
         document.getElementById('invoiceItemsTotal').textContent = '0 ₽';
         return;
       }
@@ -3814,11 +4004,21 @@ AUTH.requireAuth();
           ? (parseFloat(it.total_price) || 0)
           : qty * price;
         total += sum;
+        const draft = currentInvoice && currentInvoice.status !== 'received';
+        const pack = it.pack_size
+          ? `<span class="inv-pack-note">${esc((parseFloat(it.pack_count) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 3}))} × ${esc(it.pack_name || 'уп.')} по ${esc(qtyText(it.pack_size, it.unit))}, ${money(it.pack_price)} за уп.</span>`
+          : '';
+        const unlinked = !it.inventory_item_id
+          ? '<span class="inv-pack-note" style="color:#9E3420">не связана с товаром склада — нажмите ✎</span>' : '';
         return `<tr>
-          <td><strong>${esc(it.inventory_item_name || it.name || '—')}</strong></td>
-          <td>${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${esc(it.unit || '')}</td>
-          <td>${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
-          <td>${sum.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
+          <td class="inv-line-name"><strong>${esc(it.inventory_item_name || it.name || '—')}</strong>${unlinked}</td>
+          <td data-label="Количество">${esc(qtyText(qty, it.unit))}${pack}</td>
+          <td style="white-space:nowrap" data-label="Цена за ед.">${money(price)}</td>
+          <td style="white-space:nowrap" data-label="Сумма">${money(sum)}</td>
+          <td class="inv-line-btns">${draft ? `<div class="inv-row-btns">
+            <button type="button" class="btn btn-small btn-secondary" title="Изменить" aria-label="Изменить позицию" onclick="editInvoiceItem(${jsArg(it.id)})">✎</button>
+            <button type="button" class="btn btn-small btn-danger" title="Удалить" aria-label="Удалить позицию" onclick="deleteInvoiceItem(${jsArg(it.id)}, this)">✕</button>
+          </div>` : ''}</td>
         </tr>`;
       }).join('');
 
@@ -3856,27 +4056,29 @@ AUTH.requireAuth();
       const item = invoiceInventoryItems.find(i => i.id === itemId);
       if (!item) { errEl.textContent = 'Выберите товар из списка'; return; }
 
-      const qty = parseFloat(document.getElementById('invoiceItemQty').value);
-      const price = parseFloat(document.getElementById('invoiceItemPrice').value);
-      if (!(qty > 0)) { errEl.textContent = 'Количество должно быть больше нуля'; return; }
-      if (!(price >= 0)) { errEl.textContent = 'Укажите корректную цену за единицу'; return; }
+      const payload = { inventoryItemId: item.id, name: item.name, unit: item.unit || undefined };
+      if (invMode() === 'pack') {
+        const pack = { name: document.getElementById('invPackName').value.trim(), size: numVal('invPackSize'), count: numVal('invPackCount'), price: numVal('invPackPrice') };
+        if (!pack.name) { errEl.textContent = 'Назовите упаковку: мешок, коробка…'; return; }
+        if (!(pack.size > 0)) { errEl.textContent = 'Укажите, сколько ' + (item.unit || 'единиц') + ' в одной упаковке'; return; }
+        if (!(pack.count > 0)) { errEl.textContent = 'Укажите количество упаковок'; return; }
+        if (!(pack.price >= 0)) { errEl.textContent = 'Укажите цену упаковки'; return; }
+        payload.pack = pack;
+      } else {
+        const qty = numVal('invoiceItemQty'), price = numVal('invoiceItemPrice');
+        if (!(qty > 0)) { errEl.textContent = 'Количество должно быть больше нуля'; return; }
+        if (!(price >= 0)) { errEl.textContent = 'Укажите корректную цену за единицу'; return; }
+        payload.quantity = qty; payload.pricePerUnit = price; payload.pack = null;
+      }
 
       try {
-        // Имена полей — по addInvoiceItem в supplier.service.ts (name обязателен в БД)
-        const res = await AUTH.fetch('/api/suppliers/invoices/' + currentInvoice.id + '/items', {
-          method: 'POST',
-          body: JSON.stringify({
-            inventoryItemId: item.id,
-            name: item.name,
-            quantity: qty,
-            unit: item.unit || undefined,
-            pricePerUnit: price,
-            totalPrice: Math.round(qty * price * 100) / 100
-          })
-        });
+        // Количество в единицах склада и сумму считает сервер
+        const editing = editingInvoiceRow;
+        const url = '/api/suppliers/invoices/' + currentInvoice.id + '/items' + (editing ? '/' + encodeURIComponent(editing.id) : '');
+        const res = await AUTH.fetch(url, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw await invoiceApiError(res);
-        document.getElementById('invoiceItemForm').reset();
-        showNotification('➕ Позиция добавлена в накладную');
+        resetInvoiceItemForm();
+        showNotification(editing ? '✅ Позиция изменена' : '➕ Позиция добавлена в накладную');
         await loadInvoiceItems(currentInvoice.id);
         await loadSupplierInvoices();
       } catch (e) {

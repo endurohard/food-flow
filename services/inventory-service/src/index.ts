@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import inventoryRoutes from './routes/inventory.routes';
 import supplierRoutes from './routes/supplier.routes';
 import purchaseOrderRoutes from './routes/purchase-order.routes';
+import invoiceItemRoutes from './routes/invoice-item.routes';
 import techCardRoutes from './routes/techcard.routes';
 import productionRoutes from './routes/production.routes';
 import nomenclatureRoutes from './routes/nomenclature.routes';
@@ -56,6 +57,7 @@ app.use('/api/inventory', productionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 // Заказы поставщикам — раньше маршрутов поставщиков (у тех есть GET /:id)
 app.use('/api/suppliers', purchaseOrderRoutes);
+app.use('/api/suppliers', invoiceItemRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/tech-cards', techCardRoutes);
 app.use('/api/nomenclature', nomenclatureRoutes);

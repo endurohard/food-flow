@@ -241,25 +241,7 @@ router.get('/invoices/:id/items', authenticateUser, async (req: Request, res: Re
   }
 });
 
-router.post('/invoices/:id/items', authenticateUser, async (req: Request, res: Response) => {
-  try {
-    const isSuper = req.userRole === 'super_admin';
-    if (!isSuper && !req.enterpriseId) {
-      return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
-    }
-    if (!isSuper && !(await supplierService.invoiceBelongsTo(req.params.id, req.enterpriseId!))) {
-      return res.status(404).json({ error: 'Invoice not found' });
-    }
-    const item = await supplierService.addInvoiceItem(req.params.id, req.body);
-    return res.status(201).json({ item });
-  } catch (error: any) {
-    if (error.message && (error.message.includes('already confirmed') || error.message.includes('not found'))) {
-      return res.status(400).json({ error: error.message });
-    }
-    console.error('Add invoice item error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// POST /invoices/:id/items — в invoice-item.routes.ts (фасовки, сумма считается сервером)
 
 router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res: Response) => {
   try {
