@@ -4340,8 +4340,19 @@ AUTH.requireAuth();
       if (d) { await openPurchaseOrder(currentPo.id); loadPurchaseOrders(); }
     }
 
+    // Подтверждение вторым нажатием вместо confirm(): во встроенном браузере
+    // VS Code системные диалоги заблокированы, и кнопка выглядела мёртвой
+    let poCancelArmed = false;
     async function cancelPo() {
-      if (!confirm('Отменить заказ ' + currentPo.order_number + '?')) return;
+      const btn = document.getElementById('poCancelBtn');
+      if (!poCancelArmed) {
+        poCancelArmed = true;
+        btn.textContent = 'Точно отменить ' + currentPo.order_number + '?';
+        setTimeout(() => { poCancelArmed = false; btn.textContent = 'Отменить заказ'; }, 5000);
+        return;
+      }
+      poCancelArmed = false;
+      btn.textContent = 'Отменить заказ';
       const d = await poCall(poUrl('/cancel'), jsonOpts('POST'), 'Заказ отменён');
       if (d) { closePoModal(); loadPurchaseOrders(); }
     }
