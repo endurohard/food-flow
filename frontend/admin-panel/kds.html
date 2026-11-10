@@ -1168,6 +1168,9 @@ AUTH.requireAuth();
     const API_BASE_URL = '/api';
     let orders = [];
     let timers = {};
+    // Точка, чью кухню показываем: ?restaurantId=… в адресе или первая точка организации
+    let kdsRestaurantId = new URLSearchParams(location.search).get('restaurantId') || null;
+    const kdsEsc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     // Sidebar functions
     function toggleSidebar() {
@@ -1206,30 +1209,50 @@ AUTH.requireAuth();
       if (clock) clock.textContent = `${hours}:${minutes}:${seconds}`;
     }
 
-    // Load orders
+    async function kdsRestaurant() {
+      if (kdsRestaurantId) return kdsRestaurantId;
+      const res = await AUTH.fetch('/api/restaurants');
+      if (!res.ok) throw new Error('точки не загрузились: HTTP ' + res.status);
+      const list = (await res.json()).restaurants || [];
+      if (!list.length) throw new Error('у организации нет ни одной точки');
+      kdsRestaurantId = list[0].id;
+      return kdsRestaurantId;
+    }
+
+    function showLoadError(msg) {
+      document.getElementById('ordersGrid').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div>
+          <div class="empty-text">Заказы не загрузились</div>
+          <div class="empty-subtext">${kdsEsc(msg)} — пробую снова каждые 3 секунды</div>
+        </div>`;
+    }
+
+    // Заказы кухни — из kitchen-service: там позиции, номер, тип и стол.
+    // Раньше экран читал /api/orders (позиций нет, ответ в поле orders, а не
+    // data) и поэтому всегда показывал «Нет активных заказов».
     async function loadOrders() {
       try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders`);
-        if (response.ok) {
-          const data = await response.json();
-          const allOrders = data.data || [];
-
-          // Filter only preparing and ready orders
-          orders = allOrders.filter(o => o.status === 'preparing' || o.status === 'ready');
-
-          updateStats();
-          renderOrders();
-        } else {
-          console.error('Не удалось загрузить заказы: HTTP', response.status);
+        const rid = await kdsRestaurant();
+        const response = await AUTH.fetch('/api/kitchen/orders?restaurantId=' + encodeURIComponent(rid));
+        if (!response.ok) {
+          const d = await response.json().catch(() => ({}));
+          throw new Error(d.message || d.error || 'HTTP ' + response.status);
         }
+        const list = await response.json();
+        // confirmed — новый заказ с кассы, кухня его ещё не взяла
+        orders = (Array.isArray(list) ? list : []).filter(o => ['confirmed', 'preparing', 'ready'].includes(o.status));
+        updateStats();
+        renderOrders();
       } catch (error) {
         console.error('Error loading orders:', error);
+        showLoadError(error.message);
       }
     }
 
     // Update statistics
     function updateStats() {
-      const preparing = orders.filter(o => o.status === 'preparing').length;
+      const preparing = orders.filter(o => o.status === 'preparing' || o.status === 'confirmed').length;
       const ready = orders.filter(o => o.status === 'ready').length;
 
       document.getElementById('preparingCount').textContent = preparing;
@@ -1279,10 +1302,10 @@ AUTH.requireAuth();
 
       return `
         <div class="order-card ${order.status}">
-          ${order.status === 'preparing' && elapsed < 1 ? '<div class="badge-new">НОВЫЙ</div>' : ''}
+          ${order.status === 'confirmed' ? '<div class="badge-new">НОВЫЙ</div>' : ''}
 
           <div class="order-header">
-            <div class="order-number">#${order.id}</div>
+            <div class="order-number">#${kdsEsc(order.orderNumber || String(order.id).slice(0, 8))}</div>
             <div class="order-time">
               <div class="timer ${elapsedClass}" id="timer-${order.id}">${formatTime(elapsed)}</div>
               <div class="time-label" id="timer-label-${order.id}">${timerLabel(order, elapsed)}</div>
@@ -1290,19 +1313,19 @@ AUTH.requireAuth();
           </div>
 
           <div class="order-type ${typeInfo.class}">
-            ${typeInfo.icon} ${typeInfo.text}
+            ${typeInfo.icon} ${kdsEsc(typeInfo.text)}${order.tableNumber ? ' · стол ' + kdsEsc(order.tableNumber) : ''}
           </div>
 
           <div class="order-items">
-            ${order.items.map(item => `
+            ${(order.items || []).map(item => `
               <div class="item">
                 <div>
-                  <div class="item-name">${item.name}</div>
+                  <div class="item-name">${kdsEsc(item.name)}</div>
                   ${item.specialInstructions ? `
-                    <div class="item-notes">💬 ${item.specialInstructions}</div>
+                    <div class="item-notes">💬 ${kdsEsc(item.specialInstructions)}</div>
                   ` : ''}
                 </div>
-                <div class="item-qty">×${item.quantity}</div>
+                <div class="item-qty">×${kdsEsc(item.quantity)}</div>
               </div>
             `).join('')}
           </div>
@@ -1310,17 +1333,24 @@ AUTH.requireAuth();
           ${order.specialInstructions ? `
             <div class="order-special-instructions">
               <div class="special-instructions-label">💬 Комментарий к заказу:</div>
-              <div class="special-instructions-text">${order.specialInstructions}</div>
+              <div class="special-instructions-text">${kdsEsc(order.specialInstructions)}</div>
             </div>
           ` : ''}
 
           <div class="order-actions">
-            ${order.status === 'preparing' ? `
-              <button class="btn btn-ready" onclick="markReady(${order.id})">
+            ${order.status === 'confirmed' ? `
+              <button class="btn btn-ready" onclick="setKitchenStatus('${kdsEsc(order.id)}', 'preparing')">
+                👨‍🍳 Начать
+              </button>
+            ` : order.status === 'preparing' ? `
+              <button class="btn btn-ready" onclick="setKitchenStatus('${kdsEsc(order.id)}', 'ready')">
                 ✅ Готов
               </button>
             ` : `
-              <button class="btn btn-recall" onclick="recallOrder(${order.id})">
+              <button class="btn btn-ready" onclick="setKitchenStatus('${kdsEsc(order.id)}', 'completed')">
+                🤝 Выдан
+              </button>
+              <button class="btn btn-recall" onclick="setKitchenStatus('${kdsEsc(order.id)}', 'preparing')">
                 ↩️ Вернуть
               </button>
             `}
@@ -1339,7 +1369,7 @@ AUTH.requireAuth();
     // Цвет таймера считаем от цели, а не от абсолютных 10/20 минут.
     // Готовый заказ кухню уже не касается — его таймер не подсвечиваем.
     function timerClass(order, elapsed) {
-      if (order.status !== 'preparing') return '';
+      if (order.status === 'ready') return '';
       const target = getTargetMinutes();
       if (elapsed > target) return 'urgent';
       if (elapsed >= Math.ceil(target * 0.8)) return 'warning';
@@ -1347,7 +1377,7 @@ AUTH.requireAuth();
     }
 
     function timerLabel(order, elapsed) {
-      if (order.status !== 'preparing') return 'Готов';
+      if (order.status === 'ready') return 'Готов';
       const target = getTargetMinutes();
       return elapsed > target ? `Дольше на ${elapsed - target} мин` : `Цель ${target} мин`;
     }
@@ -1386,41 +1416,41 @@ AUTH.requireAuth();
       });
     }
 
-    // Mark order as ready
-    async function markReady(orderId) {
+    // Смена статуса — через order-service: статус и событие order.<статус>
+    // пишутся одной транзакцией, поэтому «Выдан» (completed) закрывает заказ,
+    // освобождает стол и начисляет баллы клиенту лояльности.
+    // (Раньше кнопки шли на PUT /api/orders/:id и не работали вовсе:
+    // UUID без кавычек в onclick давал синтаксическую ошибку.)
+    async function setKitchenStatus(orderId, status) {
       try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
+        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/status`, {
           method: 'PUT',
-          body: JSON.stringify({ status: 'ready' })
+          body: JSON.stringify({ status })
         });
-
-        if (response.ok) {
-          playSound('ready');
-          await loadOrders();
-        } else {
-          console.error('Не удалось отметить заказ готовым: HTTP', response.status);
+        if (!response.ok) {
+          const d = await response.json().catch(() => ({}));
+          throw new Error(d.error || d.message || 'HTTP ' + response.status);
         }
+        if (status === 'ready') playSound('ready');
+        await loadOrders();
       } catch (error) {
-        console.error('Error marking order as ready:', error);
+        console.error('Error updating order status:', error);
+        kdsToast('Статус не изменён: ' + error.message);
       }
     }
 
-    // Recall order (back to preparing)
-    async function recallOrder(orderId) {
-      try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status: 'preparing' })
-        });
-
-        if (response.ok) {
-          await loadOrders();
-        } else {
-          console.error('Не удалось вернуть заказ в готовку: HTTP', response.status);
-        }
-      } catch (error) {
-        console.error('Error recalling order:', error);
+    function kdsToast(msg) {
+      let t = document.getElementById('kdsToast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'kdsToast';
+        t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#B23A20;color:#fff;padding:12px 18px;border-radius:10px;z-index:1000;font-size:15px;';
+        document.body.appendChild(t);
       }
+      t.textContent = msg;
+      t.style.display = 'block';
+      clearTimeout(t._h);
+      t._h = setTimeout(() => { t.style.display = 'none'; }, 5000);
     }
 
     // Play sound

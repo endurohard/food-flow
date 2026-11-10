@@ -6,7 +6,8 @@ import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 const router = Router();
 
 router.use(authenticateUser);
-router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef'));
+// waiter — как в меню админки: официанту открыт раздел KDS
+router.use(requireRole('admin', 'owner', 'manager', 'operator', 'chef', 'waiter'));
 const db = new Pool({ connectionString: config.database.url });
 
 /**
@@ -53,6 +54,13 @@ router.get('/orders', async (req: Request, res: Response) => {
         o.created_at as "createdAt",
         o.special_instructions as "specialInstructions",
         u.first_name || ' ' || u.last_name as "customerName",
+        -- Тип — из самого заказа: «в зале» не должен превращаться в самовывоз
+        CASE
+          WHEN o.order_type IN ('delivery', 'pickup', 'dine_in') THEN o.order_type
+          WHEN o.delivery_address_id IS NOT NULL THEN 'delivery'
+          ELSE 'pickup'
+        END as "orderType",
+        t.table_number as "tableNumber",
         json_agg(
           json_build_object(
             'name', mi.name,
@@ -61,12 +69,14 @@ router.get('/orders', async (req: Request, res: Response) => {
           )
         ) as items
       FROM orders o
-      JOIN users u ON o.customer_id = u.id
+      -- LEFT: заказ без клиента (продажа с кассы) тоже должен попасть на кухню
+      LEFT JOIN users u ON o.customer_id = u.id
+      LEFT JOIN restaurant_tables t ON t.id = o.table_id
       JOIN order_items oi ON o.id = oi.order_id
       JOIN menu_items mi ON oi.menu_item_id = mi.id
       WHERE ${conds.join(' AND ')}
       GROUP BY o.id, o.order_number, o.status, o.created_at,
-               o.special_instructions, u.first_name, u.last_name
+               o.special_instructions, u.first_name, u.last_name, t.table_number
       ORDER BY o.created_at ASC`,
       vals
     );
