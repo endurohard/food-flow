@@ -185,6 +185,7 @@
       </div>
       <label>Поддомен (пусто — без своего адреса)</label>
       <input id="editSubdomain" placeholder="jezva">
+      <div class="alert" id="editAlert"></div>
       <div class="modal-actions">
         <button class="btn" onclick="saveEdit()">Сохранить</button>
         <button class="btn sec" onclick="closeEdit()">Отмена</button>
@@ -222,8 +223,25 @@
           <button class="btn" onclick="createStaff()">Создать</button>
         </div>
       </details>
+      <div class="alert" id="membersAlert"></div>
       <div class="modal-actions">
         <button class="btn sec" onclick="closeMembers()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модалка: сброс пароля (владельца организации или пользователя).
+       Обычная форма вместо prompt()/alert(): во встроенном браузере VS Code
+       системные диалоги заблокированы, и кнопка выглядела мёртвой. -->
+  <div id="pwModal" class="modal-ovl" style="z-index:600;">
+    <div class="modal-box">
+      <h3 id="pwTitle">Сброс пароля</h3>
+      <label for="pwNew">Новый пароль (пусто — сгенерировать, минимум 8 символов)</label>
+      <input id="pwNew" type="text" autocomplete="new-password" spellcheck="false">
+      <div class="alert" id="pwAlert"></div>
+      <div class="modal-actions">
+        <button class="btn" id="pwSubmit" onclick="submitPw()">Сбросить пароль</button>
+        <button class="btn sec" onclick="closePw()">Закрыть</button>
       </div>
     </div>
   </div>
@@ -240,6 +258,12 @@
     const BT = { restaurant: 'Ресторан', cafe: 'Кафе', coffee_shop: 'Кофейня', delivery: 'Доставка', production: 'Производство' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+    // Сообщение в указанном блоке страницы/модалки — вместо alert()
+    function boxAlert(id, msg, ok) {
+      const a = document.getElementById(id);
+      a.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
+      a.innerHTML = msg; a.style.display = msg ? 'block' : 'none';
+    }
     function showAlert(msg, ok) {
       const a = document.getElementById('alert');
       a.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
@@ -352,7 +376,7 @@
           <td>${esc(o.tax_id || '—')}</td>
           <td>${o.created_at ? new Date(o.created_at).toLocaleDateString('ru-RU') : '—'}</td>
           <td style="text-align:right;white-space:nowrap;">
-            <button class="rowbtn primary" onclick="impersonate('${o.id}')">Войти</button>
+            <button class="rowbtn primary" data-imp="${esc(o.id)}" onclick="impersonate('${o.id}')">Войти</button>
             <button class="rowbtn" onclick="openEdit('${o.id}')">Изменить</button>
             <button class="rowbtn" onclick="openMembers('${o.id}')">Пользователи</button>
             <button class="rowbtn" onclick="resetOwnerPw('${o.id}')">Пароль владельца</button>
@@ -364,8 +388,17 @@
     }
 
     // ── Войти в организацию (impersonation) ──
+    let impArmed = null;
     async function impersonate(id) {
-      if (!confirm('Войти в «' + (orgsCache[id]?.name || '') + '» как её администратор? Текущая супер-админ-сессия заменится.')) return;
+      // Подтверждение вторым нажатием вместо confirm(): сессия супер-админа заменится
+      const btn = document.querySelector('[data-imp="' + id + '"]');
+      if (impArmed !== id) {
+        impArmed = id;
+        if (btn) btn.textContent = 'Точно войти? Сессия супер-админа заменится';
+        setTimeout(() => { if (impArmed === id) { impArmed = null; if (btn) btn.textContent = 'Войти'; } }, 6000);
+        return;
+      }
+      impArmed = null;
       try {
         const res = await AUTH.fetch('/api/enterprises/' + id + '/impersonate', { method: 'POST' });
         const d = await res.json();
@@ -381,18 +414,41 @@
     }
 
     // ── Сброс пароля владельцу ──
-    async function resetOwnerPw(id) {
-      const np = prompt('Новый пароль владельца «' + (orgsCache[id]?.name || '') + '» (пусто = сгенерировать, мин. 8 символов):', '');
-      if (np === null) return;
-      const body = np.trim() ? JSON.stringify({ newPassword: np.trim() }) : '{}';
+    // Куда отправить сброс: { url, title } — владелец организации или пользователь
+    let pwTarget = null;
+    function openPw(url, title) {
+      pwTarget = { url };
+      document.getElementById('pwTitle').textContent = title;
+      document.getElementById('pwNew').value = '';
+      document.getElementById('pwSubmit').style.display = '';
+      boxAlert('pwAlert', '');
+      document.getElementById('pwModal').style.display = 'flex';
+      document.getElementById('pwNew').focus();
+    }
+    function closePw() { document.getElementById('pwModal').style.display = 'none'; pwTarget = null; }
+    async function submitPw() {
+      if (!pwTarget) return;
+      const np = document.getElementById('pwNew').value.trim();
+      if (np && np.length < 8) return boxAlert('pwAlert', 'Пароль — минимум 8 символов (или оставьте пустым, чтобы сгенерировать)', false);
+      const btn = document.getElementById('pwSubmit');
+      btn.disabled = true;
       try {
-        const res = await AUTH.fetch('/api/enterprises/' + id + '/reset-owner-password', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+        const res = await AUTH.fetch(pwTarget.url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: np ? JSON.stringify({ newPassword: np }) : '{}'
         });
         const d = await res.json();
-        if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-        showAlert('✅ Пароль владельца сброшен.<div class="creds">' + esc(d.ownerEmail) + ' / ' + esc(d.newPassword) + '</div>Передай владельцу и сохрани — повторно не покажется.', true);
-      } catch (e) { showAlert('Ошибка: ' + esc(e.message), false); }
+        if (!res.ok) throw new Error(d.message || d.error || 'HTTP ' + res.status);
+        document.getElementById('pwNew').value = '';
+        btn.style.display = 'none';
+        boxAlert('pwAlert', '✅ Пароль сброшен.<div class="creds">' + (d.ownerEmail ? esc(d.ownerEmail) + ' / ' : '') +
+          esc(d.newPassword) + '</div>Передай пользователю и сохрани — повторно не покажется.', true);
+      } catch (e) {
+        boxAlert('pwAlert', 'Ошибка: ' + esc(e.message), false);
+      } finally { btn.disabled = false; }
+    }
+    function resetOwnerPw(id) {
+      openPw('/api/enterprises/' + id + '/reset-owner-password', 'Пароль владельца — ' + (orgsCache[id]?.name || ''));
     }
 
     // ── Редактирование организации ──
@@ -404,12 +460,13 @@
       document.getElementById('editType').value = o.business_type || 'restaurant';
       document.getElementById('editTax').value = o.tax_id || '';
       document.getElementById('editSubdomain').value = o.subdomain || '';
+      boxAlert('editAlert', '');
       document.getElementById('editModal').style.display = 'flex';
     }
     function closeEdit() { document.getElementById('editModal').style.display = 'none'; }
     async function saveEdit() {
       const name = document.getElementById('editName').value.trim();
-      if (!name) return alert('Укажите название');
+      if (!name) return boxAlert('editAlert', 'Укажите название', false);
       try {
         const res = await AUTH.fetch('/api/enterprises/' + editId, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -424,7 +481,7 @@
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
         closeEdit(); loadOrgs(); showAlert('✅ Организация обновлена', true);
-      } catch (e) { alert('Ошибка: ' + e.message); }
+      } catch (e) { boxAlert('editAlert', 'Не сохранено: ' + esc(e.message), false); }
     }
 
     // ── Пользователи организации ──
@@ -434,6 +491,7 @@
       document.getElementById('membersTitle').textContent = 'Пользователи — ' + (orgsCache[id]?.name || '');
       document.getElementById('membersBody').innerHTML = '<tr><td colspan="4" style="padding:16px;text-align:center;">Загрузка…</td></tr>';
       document.getElementById('membersModal').style.display = 'flex';
+      boxAlert('membersAlert', '');
       try {
         const res = await AUTH.fetch('/api/enterprises/' + id + '/members');
         const d = await res.json();
@@ -460,8 +518,8 @@
         role: document.getElementById('stRole').value
       };
       if (!body.lastName) delete body.lastName;
-      if (!body.email || !body.password || !body.firstName) { alert('Нужны email, пароль и имя'); return; }
-      if (body.password.length < 8) { alert('Пароль минимум 8 символов'); return; }
+      if (!body.email || !body.password || !body.firstName) { boxAlert('membersAlert', 'Нужны email, пароль и имя', false); return; }
+      if (body.password.length < 8) { boxAlert('membersAlert', 'Пароль минимум 8 символов', false); return; }
       try {
         const res = await AUTH.fetch('/api/enterprises/' + membersId + '/staff', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -469,19 +527,12 @@
         const d = await res.json();
         if (!res.ok) throw new Error(d.message || d.error || 'HTTP ' + res.status);
         ['stEmail','stPass','stFirst','stLast'].forEach(id => document.getElementById(id).value = '');
-        openMembers(membersId);
-      } catch (e) { alert('Ошибка: ' + e.message); }
+        await openMembers(membersId);
+        boxAlert('membersAlert', '✅ Сотрудник создан: ' + esc(body.email), true);
+      } catch (e) { boxAlert('membersAlert', 'Не создан: ' + esc(e.message), false); }
     }
-    async function resetMemberPw(userId) {
-      const np = prompt('Новый пароль пользователя (пусто = сгенерировать, мин. 8):', '');
-      if (np === null) return;
-      const body = np.trim() ? JSON.stringify({ newPassword: np.trim() }) : '{}';
-      try {
-        const res = await AUTH.fetch('/api/enterprises/' + membersId + '/members/' + userId + '/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
-        alert('Новый пароль: ' + d.newPassword + '\nСохрани — повторно не покажется.');
-      } catch (e) { alert('Ошибка: ' + e.message); }
+    function resetMemberPw(userId) {
+      openPw('/api/enterprises/' + membersId + '/members/' + userId + '/reset-password', 'Пароль пользователя');
     }
     async function toggleMember(userId, active) {
       try {
@@ -489,7 +540,7 @@
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || 'HTTP ' + res.status);
         openMembers(membersId);
-      } catch (e) { alert('Ошибка: ' + e.message); }
+      } catch (e) { boxAlert('membersAlert', 'Не изменено: ' + esc(e.message), false); }
     }
 
     // Предпросмотр адреса под полем поддомена
