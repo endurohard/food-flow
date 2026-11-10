@@ -1628,6 +1628,9 @@ AUTH.requireAuth();
                 <div class="card-body">
                     <div id="tgLoading" style="color:var(--color-text-secondary);">Загрузка…</div>
                     <div id="tgDisconnected" style="display:none;">
+                        <p id="tgNoPlatformHint" style="margin:0 0 12px 0;font-size:14px;color:var(--color-text-secondary);">
+                            Общий бот FoodFlow ещё не подключён администратором платформы — можно подключить своего бота.
+                        </p>
                         <ol style="margin:0 0 16px 18px;padding:0;font-size:14px;line-height:1.7;color:var(--color-text-secondary);">
                             <li>В Telegram откройте <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, отправьте <b>/newbot</b> и придумайте имя боту.</li>
                             <li>BotFather пришлёт токен вида <code>1234567890:AAH…</code> — вставьте его сюда.</li>
@@ -1644,7 +1647,11 @@ AUTH.requireAuth();
                         </div>
                     </div>
                     <div id="tgConnected" style="display:none;">
-                        <p style="margin:0 0 12px 0;">Подключён бот <a id="tgBotLink" href="#" target="_blank" rel="noopener"></a></p>
+                        <p style="margin:0 0 4px 0;"><span id="tgBotLabel">Подключён бот</span> <a id="tgBotLink" href="#" target="_blank" rel="noopener"></a></p>
+                        <p id="tgBotHint" style="margin:0 0 12px 0;font-size:13px;color:var(--color-text-secondary);">
+                            Получатель открывает бота и нажимает «Start» — бот присылает ему Telegram ID. Впишите этот ID
+                            напротив сотрудника или отправьте ему ссылку для привязки.
+                        </p>
                         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
                             <thead><tr style="text-align:left;color:var(--color-text-secondary);">
                                 <th style="padding:6px 8px;">Кому приходят уведомления</th><th style="padding:6px 8px;">Роль</th><th style="padding:6px 8px;">Telegram</th><th></th>
@@ -1659,7 +1666,7 @@ AUTH.requireAuth();
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" class="btn btn-primary" id="tgLinkBtn" onclick="tgLink()">Привязать мой Telegram</button>
                             <button type="button" class="btn btn-secondary" onclick="tgTest()">Отправить проверку</button>
-                            <button type="button" class="btn btn-secondary" onclick="tgChangeBot()">Сменить бота</button>
+                            <button type="button" class="btn btn-secondary" id="tgChangeBtn" onclick="tgChangeBot()">Сменить бота</button>
                             <button type="button" class="btn btn-secondary" id="tgRemoveBtn" onclick="tgRemove()">Отключить</button>
                         </div>
                     </div>
@@ -1670,7 +1677,7 @@ AUTH.requireAuth();
                         <h3 style="margin:0 0 6px 0;font-size:16px;">Ответственные за закуп</h3>
                         <p style="margin:0 0 10px 0;font-size:13px;color:var(--color-text-secondary);">
                             Им приходит «пора заказать» по всем складам организации. После назначения
-                            нажмите «Ссылка для Telegram» в таблице выше и перешлите её сотруднику.
+                            впишите его Telegram ID в таблице выше или нажмите «Ссылка для Telegram» и перешлите её сотруднику.
                         </p>
                         <div id="tgPurchaserList" style="margin-bottom:10px;font-size:14px;"></div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -2377,6 +2384,7 @@ AUTH.requireAuth();
         const TG_ROLES = { owner: 'Владелец', admin: 'Админ', manager: 'Менеджер', operator: 'Оператор', chef: 'Повар',
             waiter: 'Официант', cashier: 'Кассир', employee: 'Сотрудник', viewer: 'Наблюдатель' };
         let tgPollTimer = null;
+        let tgLastStatus = null;
         let tgRemoveArmed = false;
 
         function tgUrl(suffix) {
@@ -2394,24 +2402,38 @@ AUTH.requireAuth();
             document.getElementById('tgDisconnected').style.display = st.connected ? 'none' : 'block';
             document.getElementById('tgConnected').style.display = st.connected ? 'block' : 'none';
             document.getElementById('tgCancelBtn').style.display = 'none';
+            tgLastStatus = st;
+            document.getElementById('tgNoPlatformHint').style.display = st.platformBotUsername ? 'none' : '';
             tgRenderPurchasers(st);
             if (!st.connected) return;
             const a = document.getElementById('tgBotLink');
             a.textContent = '@' + st.botUsername + (st.botName ? ' (' + st.botName + ')' : '');
             a.href = 'https://t.me/' + st.botUsername;
+            const shared = st.source === 'platform';
+            document.getElementById('tgBotLabel').textContent = shared ? 'Используется общий бот FoodFlow' : 'Подключён свой бот';
+            document.getElementById('tgChangeBtn').textContent = shared ? 'Подключить своего бота' : 'Сменить бота';
+            // Общий бот отключает только супер-админ; свой — можно, тогда вернётся общий
+            document.getElementById('tgRemoveBtn').style.display = shared ? 'none' : '';
+            document.getElementById('tgRemoveBtn').textContent = st.platformBotUsername ? 'Отключить свой (вернуться на общий)' : 'Отключить';
+            // Ввод ID не должен стираться, пока страница опрашивает привязку
+            const typed = {};
+            document.querySelectorAll('[data-tg-chat]').forEach((el) => { if (el.value) typed[el.dataset.tgChat] = el.value; });
             document.getElementById('tgRecipients').innerHTML = (st.recipients || []).map((r) => `
                 <tr style="border-top:1px solid var(--admin-border);">
                     <td style="padding:8px;">${tgEsc(r.name)}${r.isMe ? ' <span style="color:var(--color-text-secondary);">(вы)</span>' : ''}</td>
                     <td style="padding:8px;">${tgEsc(TG_ROLES[r.role] || r.role)}${r.purchaser ? ' · 🛒 закуп' : ''}</td>
                     <td style="padding:8px;">${r.linked
-                        ? '✅ привязан' + (r.telegramUsername ? ' @' + tgEsc(r.telegramUsername) : '')
-                        : (r.purchaser && !r.isMe
-                            ? '<span style="color:var(--color-text-secondary);">не привязан — перешлите сотруднику ссылку</span>'
-                            : '<span style="color:var(--color-text-secondary);">не привязан — пусть нажмёт «Привязать мой Telegram» под своим входом</span>')}</td>
-                    <td style="padding:8px;text-align:right;white-space:nowrap;">${r.purchaser && !r.isMe
+                        ? '✅ привязан' + (r.telegramUsername ? ' @' + tgEsc(r.telegramUsername) : '') + (r.chatId ? ' <span style="color:var(--color-text-secondary);">ID ' + tgEsc(r.chatId) + '</span>' : '')
+                        : `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                               <input type="text" inputmode="numeric" class="form-control" data-tg-chat="${tgEsc(r.userId)}"
+                                      placeholder="Telegram ID" style="width:150px;padding:4px 8px;">
+                               <button type="button" class="btn btn-secondary" style="padding:4px 10px;" onclick="tgSaveChatId('${tgEsc(r.userId)}')">Сохранить ID</button>
+                           </div>`}</td>
+                    <td style="padding:8px;text-align:right;white-space:nowrap;">${!r.isMe && !r.linked
                         ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px;" onclick="tgLink('${tgEsc(r.userId)}')">Ссылка для Telegram</button> ` : ''}${r.linked
                         ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px;" onclick="tgUnlink('${tgEsc(r.userId)}')">Отвязать</button>` : ''}</td>
                 </tr>`).join('');
+            document.querySelectorAll('[data-tg-chat]').forEach((el) => { if (typed[el.dataset.tgChat]) el.value = typed[el.dataset.tgChat]; });
             const me = (st.recipients || []).find((r) => r.isMe);
             document.getElementById('tgLinkBtn').textContent = me && me.linked ? 'Привязать заново' : 'Привязать мой Telegram';
             return me;
@@ -2503,7 +2525,9 @@ AUTH.requireAuth();
                 } else {
                     window.open(url, '_blank', 'noopener');
                 }
-                tgStartPolling(userId);
+                const before = ((tgLastStatus && tgLastStatus.recipients) || [])
+                    .find((r) => (userId ? r.userId === userId : r.isMe));
+                tgStartPolling(userId, before ? before.linkedAt : null);
             } catch (e) { tgShowError('Ссылка не создана: ' + e.message); }
         }
 
@@ -2544,7 +2568,7 @@ AUTH.requireAuth();
             tgSetPurchaser(id, true);
         }
 
-        function tgStartPolling(targetUserId) {
+        function tgStartPolling(targetUserId, linkedAtBefore) {
             clearInterval(tgPollTimer);
             const started = Date.now();
             tgPollTimer = setInterval(async () => {
@@ -2561,7 +2585,7 @@ AUTH.requireAuth();
                     const st = await res.json();
                     const me = tgRender(st);
                     const who = targetUserId ? (st.recipients || []).find((r) => r.userId === targetUserId) : me;
-                    if (st.linked > 0 && who && who.linked) {
+                    if (who && who.linked && who.linkedAt !== linkedAtBefore) {
                         clearInterval(tgPollTimer);
                         document.getElementById('tgLinkBox').style.display = 'none';
                         showNotification('✅ Telegram привязан');
@@ -2570,6 +2594,25 @@ AUTH.requireAuth();
                     document.getElementById('tgLinkWait').textContent = 'Проверка не удалась: ' + e.message + '. Пробую ещё…';
                 }
             }, 3000);
+        }
+
+        async function tgSaveChatId(userId) {
+            tgShowError('');
+            const el = document.querySelector('[data-tg-chat="' + userId + '"]');
+            const chatId = el ? el.value.trim() : '';
+            if (!/^\d{5,15}$/.test(chatId)) {
+                tgShowError('Telegram ID — это число. Его пришлёт бот, когда сотрудник нажмёт у него «Start»');
+                return;
+            }
+            try {
+                const res = await AUTH.fetch(tgUrl('/recipients/' + encodeURIComponent(userId) + '/chat'), {
+                    method: 'PUT', body: JSON.stringify({ chatId })
+                });
+                if (!res.ok) throw new Error(await apiError(res));
+                if (el) el.value = '';
+                tgRender(await res.json());
+                showNotification('✅ Telegram привязан — сотруднику ушло проверочное сообщение');
+            } catch (e) { tgShowError('Не привязано: ' + e.message); }
         }
 
         async function tgUnlink(userId) {
@@ -2591,7 +2634,7 @@ AUTH.requireAuth();
                     : '✅ Проверка отправлена (' + r.sent + ')');
             } catch (e) { tgShowError('Не отправлено: ' + e.message); }
         }
-        Object.assign(window, { tgLoad, tgSave, tgChangeBot, tgRemove, tgLink, tgUnlink, tgTest, tgSetPurchaser, tgAssignPurchaser });
+        Object.assign(window, { tgLoad, tgSave, tgChangeBot, tgRemove, tgLink, tgUnlink, tgTest, tgSetPurchaser, tgAssignPurchaser, tgSaveChatId });
 
         // Старт загрузки: все const/let выше уже объявлены
         tgLoad();

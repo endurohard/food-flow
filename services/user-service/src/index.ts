@@ -11,7 +11,8 @@ import { setupMetrics } from './metrics';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import enterpriseRoutes from './routes/enterprise.routes';
-import { createTelegramRoutes, createInternalNotifyRoute } from './routes/telegram.routes';
+import { createTelegramRoutes, createInternalNotifyRoute, createPlatformBotRoutes } from './routes/telegram.routes';
+import { startPlatformBotPoller } from './services/telegram-integration.service';
 
 const app = express();
 const healthPool = new Pool({ connectionString: config.database.url, max: 1 });
@@ -69,6 +70,8 @@ setupSwagger(app);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 const telegram = createTelegramRoutes();
+// До enterpriseRoutes: иначе «platform» уйдёт в /api/enterprises/:id
+app.use('/api/enterprises/platform/telegram-bot', createPlatformBotRoutes(telegram.tg));
 app.use('/api/enterprises/:id/integrations/telegram', telegram.router);
 app.use('/api/enterprises', enterpriseRoutes);
 // Только для сервисов внутри docker-сети: в Kong /internal не проброшен
@@ -99,9 +102,13 @@ const server = app.listen(PORT, () => {
   logger.info(`Swagger docs: http://localhost:${PORT}/api-docs`);
 });
 
+// Общий Telegram-бот платформы читается одним фоновым циклом на процесс
+const stopPlatformBot = startPlatformBotPoller(telegram.tg, (m) => logger.warn(m));
+
 // Graceful shutdown: stop accepting → drain → close pools → exit
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  stopPlatformBot();
   server.close(async () => {
     logger.info('HTTP server closed');
     await healthPool.end().catch(() => {});

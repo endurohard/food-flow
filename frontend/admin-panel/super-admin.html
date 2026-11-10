@@ -125,6 +125,26 @@
         <div class="alert" id="alert"></div>
       </div>
 
+      <!-- Общий Telegram-бот: через него уведомления («пора заказать») идут
+           всем организациям, у которых нет своего бота -->
+      <div class="card" id="pbCard">
+        <h2>🤖 Общий Telegram-бот FoodFlow</h2>
+        <p style="margin:0 0 12px;font-size:14px;color:var(--color-text-secondary);">
+          Через него получают уведомления организации без своего бота. Сотрудник нажимает у бота «Start» —
+          бот присылает ему Telegram ID, админ организации вписывает его в «Настройки → Интеграции».
+          Создайте отдельного бота в <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>
+          (/newbot) — бот, который уже работает в другой системе, не подойдёт.
+        </p>
+        <div id="pbStatus" style="margin-bottom:12px;font-size:14px;">Загрузка…</div>
+        <label for="pbToken">Токен бота</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="password" id="pbToken" autocomplete="off" spellcheck="false" placeholder="1234567890:AAH…" style="flex:1;min-width:260px;">
+          <button type="button" id="pbSaveBtn" onclick="pbSave()">Подключить</button>
+          <button type="button" id="pbRemoveBtn" onclick="pbRemove()" style="display:none;">Отключить</button>
+        </div>
+        <div class="alert" id="pbAlert"></div>
+      </div>
+
       <div class="card">
         <h2>🏢 Все организации (<span id="orgCount">0</span>)</h2>
         <div style="overflow-x:auto;">
@@ -236,7 +256,80 @@
       const u = AUTH.getUser() || {};
       document.getElementById('whoami').textContent = u.email || 'super_admin';
       loadOrgs();
+      pbLoad();
     })();
+
+    // ── общий Telegram-бот ──
+    const PB_URL = '/api/enterprises/platform/telegram-bot';
+    let pbRemoveArmed = false;
+    function pbAlert(msg, ok) {
+      const a = document.getElementById('pbAlert');
+      a.className = 'alert ' + (ok ? 'alert-ok' : 'alert-err');
+      a.textContent = msg || '';
+      a.style.display = msg ? 'block' : 'none';
+    }
+    async function pbErr(res) {
+      const d = await res.json().catch(() => ({}));
+      return d.message || d.error || ('HTTP ' + res.status);
+    }
+    function pbRender(st) {
+      const el = document.getElementById('pbStatus');
+      if (st.connected) {
+        el.innerHTML = '✅ Подключён <a href="https://t.me/' + esc(st.botUsername) + '" target="_blank" rel="noopener">@' +
+          esc(st.botUsername) + '</a>' + (st.botName ? ' (' + esc(st.botName) + ')' : '') +
+          ' · привязано получателей: ' + esc(st.recipients) + ' в ' + esc(st.enterprises) + ' орг.';
+      } else {
+        el.textContent = 'Не подключён — организации без своего бота уведомлений в Telegram не получают.';
+      }
+      document.getElementById('pbSaveBtn').textContent = st.connected ? 'Сменить токен' : 'Подключить';
+      document.getElementById('pbRemoveBtn').style.display = st.connected ? '' : 'none';
+    }
+    async function pbLoad() {
+      try {
+        const res = await AUTH.fetch(PB_URL);
+        if (!res.ok) throw new Error(await pbErr(res));
+        pbRender(await res.json());
+      } catch (e) {
+        document.getElementById('pbStatus').textContent = 'Не удалось загрузить: ' + e.message;
+      }
+    }
+    async function pbSave() {
+      const token = document.getElementById('pbToken').value.trim();
+      if (!token) return pbAlert('Вставьте токен, который прислал @BotFather', false);
+      const btn = document.getElementById('pbSaveBtn');
+      btn.disabled = true; btn.textContent = 'Проверяю…';
+      pbAlert('');
+      try {
+        const res = await AUTH.fetch(PB_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+        if (!res.ok) throw new Error(await pbErr(res));
+        document.getElementById('pbToken').value = '';
+        const st = await res.json();
+        pbRender(st);
+        pbAlert('Бот @' + st.botUsername + ' подключён', true);
+      } catch (e) {
+        pbAlert('Не подключено: ' + e.message, false);
+        await pbLoad();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    async function pbRemove() {
+      // Подтверждение вторым нажатием вместо confirm()
+      const btn = document.getElementById('pbRemoveBtn');
+      if (!pbRemoveArmed) {
+        pbRemoveArmed = true; btn.textContent = 'Точно отключить? Все организации без своего бота перестанут получать уведомления';
+        setTimeout(() => { pbRemoveArmed = false; btn.textContent = 'Отключить'; }, 6000);
+        return;
+      }
+      pbRemoveArmed = false; btn.textContent = 'Отключить';
+      try {
+        const res = await AUTH.fetch(PB_URL, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await pbErr(res));
+        pbAlert('Общий бот отключён', true);
+        await pbLoad();
+      } catch (e) { pbAlert('Не отключено: ' + e.message, false); }
+    }
+    Object.assign(window, { pbSave, pbRemove });
 
     let orgsCache = {};
     async function loadOrgs() {

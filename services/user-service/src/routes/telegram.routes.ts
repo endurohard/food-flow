@@ -114,6 +114,28 @@ export function createTelegramRoutes(deps?: { pool?: any; enterpriseService?: an
     } catch (e) { return fail(res, e, 'Не удалось проверить сообщения бота'); }
   });
 
+  // Привязка по Telegram ID, который сотрудник получил от бота на «Start»
+  router.put('/recipients/:userId/chat', authenticateUser, async (req: any, res) => {
+    try {
+      if (Joi.string().uuid().validate(req.params.userId).error) {
+        return res.status(400).json({ error: 'Некорректный id', message: 'Некорректный id' });
+      }
+      const { error, value } = Joi.object({
+        chatId: Joi.alternatives().try(Joi.string().trim().max(20), Joi.number().integer()).required()
+      }).validate(req.body);
+      if (error) return res.status(400).json({ error: 'Укажите Telegram ID', message: 'Укажите Telegram ID' });
+      if (!(await ownerOrAdmin(req, res))) return;
+      if (!(await tg.isRecipient(req.params.id, req.params.userId))) {
+        return res.status(400).json({
+          error: 'Сотрудник не получает уведомления',
+          message: 'Сначала назначьте сотрудника ответственным за закуп'
+        });
+      }
+      await tg.linkByChatId(req.params.id, req.params.userId, String(value.chatId));
+      return res.json({ success: true, ...(await tg.getStatus(req.params.id, req.userId)) });
+    } catch (e) { return fail(res, e, 'Не удалось привязать Telegram ID'); }
+  });
+
   router.delete('/recipients/:userId', authenticateUser, async (req: any, res) => {
     try {
       if (Joi.string().uuid().validate(req.params.userId).error) {
@@ -138,6 +160,54 @@ export function createTelegramRoutes(deps?: { pool?: any; enterpriseService?: an
   });
 
   return { router, tg };
+}
+
+/**
+ * Общий Telegram-бот платформы: им шлют уведомления организации без своего
+ * бота. Подключает и отключает только супер-админ; токен наружу не отдаётся.
+ */
+export function createPlatformBotRoutes(tg: TelegramIntegrationService) {
+  const router = Router();
+  const superOnly = (req: any, res: Response) => {
+    if (req.userRole === 'super_admin') return true;
+    res.status(403).json({ error: 'Forbidden', message: 'Общий бот настраивает только супер-администратор' });
+    return false;
+  };
+  const fail = (res: Response, e: any, what: string) => {
+    if (e instanceof TelegramIntegrationError) return res.status(e.status).json({ error: e.message, message: e.message });
+    if (String(e?.message).includes('ENCRYPTION_KEY')) {
+      return res.status(503).json({ error: 'Шифрование не настроено на сервере', message: 'Шифрование не настроено на сервере' });
+    }
+    console.error(what, e);
+    return res.status(500).json({ error: what, message: what });
+  };
+
+  router.get('/', authenticateUser, async (req: any, res) => {
+    try {
+      if (!superOnly(req, res)) return;
+      return res.json(await tg.getPlatformStatus());
+    } catch (e) { return fail(res, e, 'Не удалось загрузить общий бот'); }
+  });
+
+  router.put('/', authenticateUser, async (req: any, res) => {
+    try {
+      const { error, value } = Joi.object({ token: Joi.string().trim().max(200).required() }).validate(req.body);
+      if (error) return res.status(400).json({ error: 'Укажите токен бота', message: 'Укажите токен бота' });
+      if (!superOnly(req, res)) return;
+      const bot = await tg.savePlatformBot(value.token, req.userId);
+      return res.json({ success: true, ...bot, ...(await tg.getPlatformStatus()) });
+    } catch (e) { return fail(res, e, 'Не удалось подключить общий бот'); }
+  });
+
+  router.delete('/', authenticateUser, async (req: any, res) => {
+    try {
+      if (!superOnly(req, res)) return;
+      await tg.removePlatformBot();
+      return res.json({ success: true });
+    } catch (e) { return fail(res, e, 'Не удалось отключить общий бот'); }
+  });
+
+  return router;
 }
 
 /**

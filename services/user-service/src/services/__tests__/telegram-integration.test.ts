@@ -60,7 +60,8 @@ describe('pollLinks', () => {
     const link = pool.queries.filter((q) => /UPDATE enterprise_telegram_recipients/.test(q.sql));
     expect(link).toHaveLength(1); // групповой чат проигнорирован
     expect(link[0].sql).toMatch(/enterprise_id = \$1 AND link_code = \$2 AND link_expires_at > NOW\(\)/);
-    expect(link[0].params).toEqual(['e1', 'abc', 555, 'boss']);
+    // бот записывается в привязку: через другого бота она не считается
+    expect(link[0].params).toEqual(['e1', 'abc', 555, 'boss', 'cafe_bot']);
     expect(tg.mock.calls[0][2]).toMatchObject({ offset: 10 });
     const off = pool.queries.find((q) => /updates_offset = GREATEST/.test(q.sql))!;
     expect(off.params).toEqual(['e1', 13]);
@@ -168,5 +169,141 @@ describe('ответственные за закуп', () => {
     const q = pool.queries[0];
     expect(q.sql).toMatch(/eu\.enterprise_id = \$1 AND \(eu\.role = ANY\(\$2\) OR eu\.is_purchaser\) AND eu\.user_id = \$3/);
     expect(q.params).toEqual(['e1', ['owner', 'admin'], 'u2']);
+  });
+});
+
+describe('общий бот платформы', () => {
+  const PTOKEN = '9876543210:AAP' + 'y'.repeat(32);
+  const { encryptSecret } = require('../../utils/secrets');
+  const platformRow = (sql: string) => /FROM platform_telegram_bot WHERE id/.test(sql)
+    ? [{ bot_token: encryptSecret(PTOKEN), bot_username: 'foodflow_bot', bot_name: 'FoodFlow', updates_offset: 50 }] : null;
+
+  it('без своего бота организация шлёт через общий — и только тем, кто привязан к нему', async () => {
+    tg.mockResolvedValue({});
+    const pool = fakePool((sql) => platformRow(sql) || (/FROM enterprise_telegram_recipients r/.test(sql)
+      ? [{ chat_id: 555, subdomain: 'c' }] : []));
+    const r = await new TelegramIntegrationService(pool).notify('e1', 'Пора заказать');
+    expect(r).toMatchObject({ sent: 1 });
+    expect(tg.mock.calls[0][0]).toBe(PTOKEN);
+    const sel = pool.queries.find((q) => /FROM enterprise_telegram_recipients r/.test(q.sql))!;
+    expect(sel.sql).toMatch(/r\.bot_username = \$3/);
+    expect(sel.params[2]).toBe('foodflow_bot');
+    // общий бот читает фоновый цикл — рассылка getUpdates не дёргает
+    expect(pool.queries.some((q) => /link_code IS NOT NULL/.test(q.sql))).toBe(false);
+  });
+
+  it('свой бот главнее общего', async () => {
+    tg.mockResolvedValue({});
+    const pool = fakePool((sql) => botRow(sql) || platformRow(sql) || (/FROM enterprise_telegram_recipients r/.test(sql)
+      ? [{ chat_id: 555, subdomain: 'c' }] : []));
+    await new TelegramIntegrationService(pool).notify('e1', 'x');
+    expect(tg.mock.calls.find((c) => c[1] === 'sendMessage')![0]).toBe(TOKEN);
+    const sel = pool.queries.find((q) => /FROM enterprise_telegram_recipients r/.test(q.sql))!;
+    expect(sel.params[2]).toBe('cafe_bot');
+  });
+
+  it('pollPlatform: код любой организации без своего бота, ответ с ID на простой Start, offset только своему боту', async () => {
+    tg.mockImplementation(async (_t: string, method: string) => method === 'getUpdates' ? [
+      { update_id: 60, message: { chat: { id: 1001, type: 'private' }, from: { username: 'buyer' }, text: '/start code9' } },
+      { update_id: 61, message: { chat: { id: 1002, type: 'private' }, text: '/start' } }
+    ] : {});
+    const pool = fakePool((sql) => platformRow(sql) || (/UPDATE enterprise_telegram_recipients r/.test(sql) ? [{ user_id: 'u9' }] : []));
+    expect(await new TelegramIntegrationService(pool).pollPlatform(10)).toBe(1);
+    expect(tg.mock.calls[0][2]).toMatchObject({ offset: 50, timeout: 10 });
+    const link = pool.queries.find((q) => /UPDATE enterprise_telegram_recipients r/.test(q.sql))!;
+    expect(link.sql).toMatch(/NOT EXISTS \(SELECT 1 FROM enterprise_telegram_bots b WHERE b\.enterprise_id = r\.enterprise_id\)/);
+    expect(link.sql).toMatch(/r\.link_expires_at > NOW\(\)/);
+    expect(link.params).toEqual(['code9', 1001, 'buyer', 'foodflow_bot']);
+    const replies = tg.mock.calls.filter((c) => c[1] === 'sendMessage').map((c) => c[2]);
+    expect(replies[0].text).toMatch(/^✅ Готово/);
+    expect(replies[1]).toMatchObject({ chat_id: 1002 });
+    expect(replies[1].text).toContain('Ваш Telegram ID: 1002');
+    const off = pool.queries.find((q) => /UPDATE platform_telegram_bot SET updates_offset/.test(q.sql))!;
+    expect(off.sql).toMatch(/bot_username = \$2/);
+    expect(off.params).toEqual([62, 'foodflow_bot']);
+  });
+
+  it('свой бот тоже отвечает ID на простой Start', async () => {
+    tg.mockImplementation(async (_t: string, method: string) => method === 'getUpdates'
+      ? [{ update_id: 11, message: { chat: { id: 4242, type: 'private' }, text: '/start' } }] : {});
+    const pool = fakePool((sql) => botRow(sql) || []);
+    await new TelegramIntegrationService(pool).pollLinks('e1');
+    const reply = tg.mock.calls.find((c) => c[1] === 'sendMessage')![2];
+    expect(reply.text).toContain('Ваш Telegram ID: 4242');
+  });
+
+  it('pollLinks не читает общий бот (у организации своего нет)', async () => {
+    const pool = fakePool((sql) => platformRow(sql) || []);
+    expect(await new TelegramIntegrationService(pool).pollLinks('e1')).toBe(0);
+    expect(tg).not.toHaveBeenCalled();
+  });
+
+  it('getStatus: привязка через другого бота не считается привязкой', async () => {
+    const pool = fakePool((sql) => platformRow(sql) || (/FROM enterprise_users eu/.test(sql) ? [
+      { user_id: 'a', first_name: 'А', role: 'owner', recipient: true, chat_id: 1, bot_username: 'foodflow_bot', linked_at: 't1' },
+      { user_id: 'b', first_name: 'Б', role: 'admin', recipient: true, chat_id: 2, bot_username: 'old_own_bot', linked_at: 't2' }
+    ] : []));
+    const st = await new TelegramIntegrationService(pool).getStatus('e1', 'a');
+    expect(st).toMatchObject({ connected: true, source: 'platform', ownBot: false, botUsername: 'foodflow_bot' });
+    expect(st.recipients.map((r: any) => [r.userId, r.linked, r.chatId])).toEqual([['a', true, '1'], ['b', false, null]]);
+  });
+});
+
+describe('привязка по Telegram ID', () => {
+  it('не число — 400 без обращения к Telegram', async () => {
+    await expect(new TelegramIntegrationService(fakePool((sql) => botRow(sql) || [])).linkByChatId('e1', 'u2', '@vasya'))
+      .rejects.toMatchObject({ status: 400 });
+    expect(tg).not.toHaveBeenCalled();
+  });
+
+  it('бот не может написать (не нажал Start) — понятная ошибка, привязка не сохраняется', async () => {
+    tg.mockRejectedValueOnce(new (TelegramError as any)('Forbidden: bot can\'t initiate conversation with a user', 403));
+    const pool = fakePool((sql) => botRow(sql) || []);
+    await expect(new TelegramIntegrationService(pool).linkByChatId('e1', 'u2', '123456789'))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining('ещё не нажал') });
+    expect(pool.queries.some((q) => /INSERT INTO enterprise_telegram_recipients/.test(q.sql))).toBe(false);
+  });
+
+  it('удачная проверочная отправка — привязка с ботом, через которого слали', async () => {
+    tg.mockResolvedValue({});
+    const pool = fakePool((sql) => botRow(sql) || (/FROM enterprises WHERE id/.test(sql) ? [{ name: 'Кофейня 104' }] : []));
+    await new TelegramIntegrationService(pool).linkByChatId('e1', 'u2', ' 123456789 ');
+    expect(tg.mock.calls[0][2]).toMatchObject({ chat_id: '123456789' });
+    expect(tg.mock.calls[0][2].text).toContain('Кофейня 104');
+    const ins = pool.queries.find((q) => /INSERT INTO enterprise_telegram_recipients/.test(q.sql))!;
+    expect(ins.params).toEqual(['e1', 'u2', '123456789', 'cafe_bot']);
+  });
+});
+
+describe('свой и общий бот не пересекаются', () => {
+  it('организация не может подключить общий бот как свой', async () => {
+    const { encryptSecret } = require('../../utils/secrets');
+    tg.mockResolvedValueOnce({ username: 'foodflow_bot' }).mockResolvedValueOnce({ url: '' });
+    const pool = fakePool((sql) => /FROM platform_telegram_bot WHERE id/.test(sql)
+      ? [{ bot_token: encryptSecret(TOKEN), bot_username: 'foodflow_bot', updates_offset: 0 }] : []);
+    await expect(new TelegramIntegrationService(pool).saveBot('e1', TOKEN, 'u1')).rejects.toMatchObject({ status: 409 });
+    expect(pool.queries.some((q) => /INSERT INTO enterprise_telegram_bots/.test(q.sql))).toBe(false);
+  });
+
+  it('общим нельзя сделать бот, уже подключённый организацией', async () => {
+    tg.mockResolvedValueOnce({ username: 'cafe_bot' }).mockResolvedValueOnce({ url: '' });
+    const pool = fakePool((sql) => /FROM enterprise_telegram_bots WHERE bot_username/.test(sql) ? [{ '?column?': 1 }] : []);
+    await expect(new TelegramIntegrationService(pool).savePlatformBot(TOKEN, 'sa')).rejects.toMatchObject({ status: 409 });
+    expect(pool.queries.some((q) => /INSERT INTO platform_telegram_bot/.test(q.sql))).toBe(false);
+  });
+
+  it('общий бот хранится зашифрованным', async () => {
+    tg.mockResolvedValueOnce({ username: 'foodflow_bot', first_name: 'FoodFlow' }).mockResolvedValueOnce({ url: '' });
+    const pool = fakePool(() => []);
+    await new TelegramIntegrationService(pool).savePlatformBot(TOKEN, 'sa');
+    const ins = pool.queries.find((q) => /INSERT INTO platform_telegram_bot/.test(q.sql))!;
+    expect(ins.params[0]).toMatch(/^enc:v1:/);
+    expect(ins.params[0]).not.toContain(TOKEN);
+  });
+
+  it('отключение своего бота не стирает привязки получателей', async () => {
+    const pool = fakePool(() => []);
+    await new TelegramIntegrationService(pool).removeBot('e1');
+    expect(pool.queries.map((q) => q.sql)).toEqual(['DELETE FROM enterprise_telegram_bots WHERE enterprise_id = $1']);
   });
 });
