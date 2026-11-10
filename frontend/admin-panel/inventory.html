@@ -761,18 +761,21 @@
     }
 
     .stock-badge.in-stock {
-      background: rgba(34, 197, 94, 0.1);
-      color: var(--color-success);
+      background: #E7F1E9;
+      color: #1F5C39;   /* 7,9:1 */
     }
+    .inv-icon-btn { width: 34px; height: 34px; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center; }
+    .search-icon svg { display: block; }
+    .supplier-info a { color: var(--color-primary); }
 
     .stock-badge.low-stock {
-      background: rgba(245, 158, 11, 0.1);
-      color: var(--color-warning);
+      background: #FBEFC8;
+      color: #6E5200;   /* 7,2:1 */
     }
 
     .stock-badge.out-of-stock {
-      background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
+      background: #FBE3DC;
+      color: #9E3420;   /* 6,4:1 */
     }
 
     .quantity-cell {
@@ -1312,7 +1315,7 @@ AUTH.requireAuth();
       <div class="table-wrapper">
         <div class="table-controls">
           <div class="search-box">
-            <span class="search-icon"></span>
+            <span class="search-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="display:block"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg></span>
             <input type="text" class="search-input" id="searchInput" placeholder="Поиск по названию..." oninput="filterInventory()">
           </div>
           <div class="filter-buttons">
@@ -1330,12 +1333,10 @@ AUTH.requireAuth();
               <th>Товар</th>
               <th>Категория</th>
               <th>Количество</th>
-              <th>Единица</th>
-              <th>Мин. остаток</th>
+              <th>Минимум</th>
               <th>Статус</th>
               <th>Цена закупки</th>
               <th>Стоимость</th>
-              <th>Поставщик</th>
               <th>Действия</th>
             </tr>
           </thead>
@@ -1547,7 +1548,7 @@ AUTH.requireAuth();
             </tr>
           </thead>
           <tbody id="invoicesTableBody">
-            <tr><td colspan="10" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
+            <tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1827,8 +1828,9 @@ AUTH.requireAuth();
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Текущее количество:</label>
-            <input type="number" class="form-input" id="itemQuantity" step="0.01" required>
+            <label class="form-label" for="itemQuantity">Начальный остаток:</label>
+            <input type="number" class="form-input" id="itemQuantity" step="0.001" min="0" placeholder="0">
+            <div class="form-hint" style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">Запишется приходом на склад «<span id="itemQtyWarehouse">—</span>»</div>
           </div>
 
           <div class="form-group">
@@ -1841,13 +1843,6 @@ AUTH.requireAuth();
           <div class="form-group">
             <label class="form-label">Цена закупки за единицу (₽):</label>
             <input type="number" class="form-input" id="itemCostPrice" step="0.01" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Поставщик:</label>
-            <select class="form-select" id="itemSupplier" required>
-              <option value="">Выберите поставщика</option>
-            </select>
           </div>
         </div>
 
@@ -2017,7 +2012,7 @@ AUTH.requireAuth();
     function showDataError(message) {
       const tbody = document.getElementById('inventoryTableBody');
       if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="10" style="padding:28px;text-align:left;'
+        tbody.innerHTML = '<tr><td colspan="8" style="padding:28px;text-align:left;'
           + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
           + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
           + '⚠️ Склад не загружен — сохранение отключено</div>'
@@ -2050,7 +2045,7 @@ AUTH.requireAuth();
     async function initializeData() {
       const tbody = document.getElementById('inventoryTableBody');
       if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--color-grey-5);">Загрузка...</td></tr>';
       }
 
       inventory = [];
@@ -2081,7 +2076,7 @@ AUTH.requireAuth();
         suppliers = (suppData.suppliers || []).map(s => ({
           id: s.id, name: s.name, contact: s.contact_person || '',
           phone: s.phone || '', email: s.email || '',
-          address: s.address || '', categories: '', rating: 5,
+          address: s.address || '',
           balance: parseFloat(s.balance) || 0
         }));
 
@@ -2175,6 +2170,20 @@ AUTH.requireAuth();
       return names[category] || category;
     }
 
+    // Всё, что пришло из базы (названия, имена, примечания), вставляется в
+    // innerHTML только через esc(): иначе название товара вида <img onerror=…>
+    // выполнилось бы у каждого, кто откроет склад.
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    // Деньги и количества — в русском формате: «2 040,00 ₽», «0,014 кг» → «14 г»
+    function money(v) {
+      return (parseFloat(v) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+    }
+    function qtyText(v, unit) {
+      return window.Units ? Units.qty(v, unit) : (parseFloat(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 3 }) + ' ' + (unit || '');
+    }
+
     // id товаров и поставщиков — UUID-строки, их нельзя вставлять в onclick
     // как есть: без кавычек браузер прочитает их как выражение JS.
     function jsArg(id) {
@@ -2197,32 +2206,31 @@ AUTH.requireAuth();
 
       tbody.innerHTML = filteredItems.map(item => {
         const status = getItemStatus(item);
-        const supplier = suppliers.find(s => s.id === item.supplierId);
         const percentage = (item.quantity / (item.minQuantity * 2)) * 100;
         const barClass = percentage > 60 ? 'high' : percentage > 30 ? 'medium' : 'low';
         const totalValue = item.quantity * (item.costPrice || 0);
 
         return `
           <tr>
-            <td><strong>${item.name}</strong></td>
-            <td>${getCategoryName(item.category)}</td>
+            <td><strong>${esc(item.name)}</strong></td>
+            <td>${esc(getCategoryName(item.category))}</td>
             <td>
               <div class="quantity-cell">
-                <span style="min-width: 60px;"><strong>${item.quantity}</strong> ${item.unit}</span>
+                <span style="min-width: 72px; white-space: nowrap;"><strong>${esc(qtyText(item.quantity, item.unit))}</strong></span>
                 <div class="quantity-bar">
                   <div class="quantity-fill ${barClass}" style="width: ${Math.min(percentage, 100)}%"></div>
                 </div>
               </div>
             </td>
-            <td>${item.unit}</td>
-            <td>${item.minQuantity}</td>
+            <td style="white-space:nowrap">${esc(qtyText(item.minQuantity, item.unit))}</td>
             <td><span class="stock-badge ${status}">${getStatusLabel(status)}</span></td>
-            <td>${(item.costPrice || 0).toFixed(2)} ₽/${item.unit}</td>
-            <td style="font-weight: 700; color: var(--color-primary);">${totalValue.toFixed(2)} ₽</td>
-            <td>${supplier ? supplier.name : '-'}</td>
+            <td style="white-space:nowrap">${money(item.costPrice)}/${esc(item.unit)}</td>
+            <td style="white-space:nowrap; font-weight: 600;">${money(totalValue)}</td>
             <td>
-              <button class="btn btn-secondary btn-small" onclick="editItem(${jsArg(item.id)})">✏️</button>
-              <button class="btn btn-danger btn-small" onclick="deleteItem(${jsArg(item.id)})" style="margin-left:4px;">🗑</button>
+              <div style="display:flex;gap:4px;">
+              <button class="btn btn-secondary btn-small inv-icon-btn" onclick="editItem(${jsArg(item.id)})" aria-label="Изменить «${esc(item.name)}»" title="Изменить"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"/></svg></button>
+              <button class="btn btn-danger btn-small inv-icon-btn" onclick="deleteItem(${jsArg(item.id)})" aria-label="Удалить «${esc(item.name)}»" title="Удалить"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3h4v2M5 5l1 12h8l1-12"/></svg></button>
+              </div>
             </td>
           </tr>
         `;
@@ -2267,6 +2275,8 @@ AUTH.requireAuth();
       editingItemId = null;
       document.getElementById('itemModalTitle').textContent = 'Добавить товар';
       document.getElementById('itemForm').reset();
+      document.getElementById('itemQuantity').closest('.form-group').style.display = '';
+      document.getElementById('itemQtyWarehouse').textContent = warehouses[0] ? (warehouses[0].name || 'основной') : '—';
       document.getElementById('itemModal').classList.add('active');
     }
 
@@ -2279,10 +2289,11 @@ AUTH.requireAuth();
       document.getElementById('itemName').value = item.name;
       document.getElementById('itemCategory').value = item.category;
       document.getElementById('itemUnit').value = item.unit;
-      document.getElementById('itemQuantity').value = item.quantity;
+      document.getElementById('itemQuantity').value = '';
+      // остаток при правке меняется только движением — иначе цифры разойдутся с журналом
+      document.getElementById('itemQuantity').closest('.form-group').style.display = 'none';
       document.getElementById('itemMinQuantity').value = item.minQuantity;
       document.getElementById('itemCostPrice').value = item.costPrice || 0;
-      document.getElementById('itemSupplier').value = item.supplierId;
       document.getElementById('itemModal').classList.add('active');
     }
 
@@ -2314,7 +2325,21 @@ AUTH.requireAuth();
           });
         }
         if (!res.ok) throw new Error(await apiError(res));
-        showNotification(editingItemId ? '✅ Товар обновлён' : '✅ Товар добавлен');
+        let note = editingItemId ? 'Товар обновлён' : 'Товар добавлен';
+        const startQty = parseFloat(document.getElementById('itemQuantity').value);
+        if (!editingItemId && startQty > 0 && warehouses[0]) {
+          const created = await res.json().catch(() => ({}));
+          const newId = created.item && created.item.id;
+          if (newId) {
+            const mv = await AUTH.fetch('/api/inventory/movements', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ warehouseId: warehouses[0].id, inventoryItemId: newId, movementType: 'receipt',
+                                     quantity: startQty, costPrice: formData.costPrice || undefined, notes: 'Начальный остаток' })
+            });
+            note = mv.ok ? 'Товар добавлен, остаток записан приходом' : 'Товар добавлен, но остаток не записан: ' + await apiError(mv);
+          }
+        }
+        showNotification(note);
         closeItemModal();
         await reloadInventoryFromAPI();
       } catch (e) {
@@ -2329,7 +2354,7 @@ AUTH.requireAuth();
       // Подтверждение вторым нажатием вместо confirm()
       if (pendingItemDelete !== id) {
         pendingItemDelete = id;
-        showNotification('⚠️ Нажмите 🗑 ещё раз, чтобы удалить товар');
+        showNotification('Нажмите «Удалить» ещё раз, чтобы удалить товар');
         setTimeout(() => { if (pendingItemDelete === id) pendingItemDelete = null; }, 5000);
         return;
       }
@@ -2423,7 +2448,7 @@ AUTH.requireAuth();
     function loadWarehouses() {
       const sel = document.getElementById('movementWarehouse');
       if (!sel) return;
-      const opts = warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('');
+      const opts = warehouses.map(w => `<option value="${w.id}">${esc(w.name || w.id)}</option>`).join('');
       sel.innerHTML = warehouses.length ? opts : '<option value="">Складов нет — движение записать некуда</option>';
       const tgt = document.getElementById('movementTarget');
       if (tgt) tgt.innerHTML = warehouses.length > 1 ? opts : '<option value="">Нужен второй склад</option>';
@@ -2451,7 +2476,7 @@ AUTH.requireAuth();
       const sel = document.getElementById('movementItem');
       if (sel) {
         sel.innerHTML = '<option value="">Выберите товар</option>' +
-          inventory.map(i => `<option value="${i.id}">${i.name} (${i.unit})</option>`).join('');
+          inventory.map(i => `<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('');
       }
     }
 
@@ -2467,13 +2492,13 @@ AUTH.requireAuth();
 
     function updateSupplierOptions() {
       const select = document.getElementById('itemSupplier');
-      select.innerHTML = '<option value="">Выберите поставщика</option>' +
-        suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      if (select) select.innerHTML = '<option value="">Выберите поставщика</option>' +
+        suppliers.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 
       const orderSelect = document.getElementById('orderSupplier');
       if (orderSelect) {
         orderSelect.innerHTML = '<option value="">Выберите поставщика</option>' +
-          suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+          suppliers.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
       }
     }
 
@@ -2481,12 +2506,12 @@ AUTH.requireAuth();
       const select = document.getElementById('orderItem');
       if (select) {
         select.innerHTML = '<option value="">Выберите товар</option>' +
-          inventory.map(item => `<option value="${item.id}">${item.name} (${item.unit})</option>`).join('');
+          inventory.map(item => `<option value="${item.id}">${esc(item.name)} (${esc(item.unit)})</option>`).join('');
       }
       const whSelect = document.getElementById('orderWarehouse');
       if (whSelect) {
         whSelect.innerHTML = warehouses.length
-          ? warehouses.map(w => `<option value="${w.id}">${w.name || w.id}</option>`).join('')
+          ? warehouses.map(w => `<option value="${w.id}">${esc(w.name || w.id)}</option>`).join('')
           : '<option value="">Складов нет — приход оформить некуда</option>';
       }
     }
@@ -2511,29 +2536,30 @@ AUTH.requireAuth();
         <div class="supplier-card">
           <div class="supplier-header">
             <div>
-              <div class="supplier-name">${s.name}</div>
-              <div class="supplier-rating">⭐ ${s.rating}/5.0</div>
+              <div class="supplier-name">${esc(s.name)}</div>
             </div>
           </div>
           <div class="supplier-info">
-            <div><strong>Контакт:</strong> ${s.contact}</div>
-            <div><strong>Телефон:</strong> ${s.phone}</div>
-            <div><strong>Email:</strong> ${s.email}</div>
-            <div><strong>Адрес:</strong> ${s.address}</div>
-            <div><strong>Категории:</strong> ${s.categories}</div>
+            ${s.contact ? `<div><strong>Контакт:</strong> ${esc(s.contact)}</div>` : ''}
+            ${s.phone ? `<div><strong>Телефон:</strong> <a href="tel:${esc(s.phone.replace(/[^\d+]/g, ''))}">${esc(s.phone)}</a></div>` : ''}
+            ${s.email ? `<div><strong>Email:</strong> <a href="mailto:${esc(s.email)}">${esc(s.email)}</a></div>` : ''}
+            ${s.address ? `<div><strong>Адрес:</strong> ${esc(s.address)}</div>` : ''}
+            ${!s.contact && !s.phone && !s.email && !s.address ? '<div style="color:var(--color-text-secondary)">Контакты не указаны</div>' : ''}
           </div>
           <div style="margin:10px 0;">
             ${(s.balance || 0) > 0
               ? '<span style="background:var(--color-danger-light);color:var(--color-danger);border-radius:8px;padding:4px 10px;font-weight:600;">Долг: ' + s.balance.toLocaleString('ru-RU') + ' ₽</span>'
-              : '<span style="background:var(--color-success-light);color:var(--color-success);border-radius:8px;padding:4px 10px;font-weight:600;">Долгов нет</span>'}
+              : (s.balance || 0) < 0
+                ? '<span style="background:var(--admin-content-bg);color:var(--color-text-primary);border-radius:8px;padding:4px 10px;font-weight:600;">Переплата: ' + Math.abs(s.balance).toLocaleString('ru-RU') + ' ₽</span>'
+                : '<span style="background:var(--color-success-light);color:#1F5C39;border-radius:8px;padding:4px 10px;font-weight:600;">Долгов нет</span>'}
           </div>
           <div class="supplier-actions">
-            <button class="btn btn-primary btn-small" onclick="toggleSupplierPayForm(${jsArg(s.id)})">💸 Оплатить</button>
+            ${(s.balance || 0) > 0 ? `<button class="btn btn-primary btn-small" onclick="toggleSupplierPayForm(${jsArg(s.id)})">Оплатить</button>` : ''}
           </div>
           <div id="payForm-${s.id}" style="display:none;margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap;">
             <input type="number" step="0.01" min="0.01" class="form-input" style="max-width:160px;display:inline-block;"
                    id="payAmount-${s.id}" value="${(s.balance || 0) > 0 ? s.balance : ''}" placeholder="Сумма, ₽">
-            <button class="btn btn-success btn-small" onclick="paySupplier(${jsArg(s.id)})">✅ Провести</button>
+            <button class="btn btn-success btn-small" onclick="paySupplier(${jsArg(s.id)})">Провести оплату</button>
             <button class="btn btn-secondary btn-small" onclick="toggleSupplierPayForm(${jsArg(s.id)})">Отмена</button>
             <span id="payError-${s.id}" style="color:var(--color-danger);font-size:13px;"></span>
           </div>
@@ -2583,7 +2609,7 @@ AUTH.requireAuth();
         suppliers = (data.suppliers || []).map(s => ({
           id: s.id, name: s.name, contact: s.contact_person || '',
           phone: s.phone || '', email: s.email || '',
-          address: s.address || '', categories: '', rating: 5,
+          address: s.address || '',
           balance: parseFloat(s.balance) || 0
         }));
         renderSuppliers();
@@ -2672,18 +2698,18 @@ AUTH.requireAuth();
           <div class="order-history-item">
             <div class="order-header">
               <div>
-                <span class="order-number">${m.item_name || '—'}</span>
+                <span class="order-number">${esc(m.item_name || '—')}</span>
                 <span style="color: var(--color-text-secondary); margin-left: 12px;">${new Date(m.created_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
               </div>
               <span class="order-status completed">Оприходовано</span>
             </div>
             <div style="color: var(--color-text-secondary); margin-bottom: 8px;">
-              <strong>Склад:</strong> ${m.warehouse_name || '—'}${who ? ' · <strong>Принял:</strong> ' + who : ''}
+              <strong>Склад:</strong> ${esc(m.warehouse_name || '—')}${who ? ' · <strong>Принял:</strong> ' + esc(who) : ''}
             </div>
             <div style="color: var(--color-text-primary);">
-              ${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${m.unit || ''} × ${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽
+              ${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${esc(m.unit || '')} × ${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽
             </div>
-            ${m.notes ? `<div style="color: var(--color-text-secondary); font-size: 13px; margin-top: 6px;">${m.notes}</div>` : ''}
+            ${m.notes ? `<div style="color: var(--color-text-secondary); font-size: 13px; margin-top: 6px;">${esc(m.notes)}</div>` : ''}
             <div style="color: var(--color-primary); font-size: 18px; font-weight: 700; margin-top: 8px;">
               Сумма: ${(qty * price).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽
             </div>
@@ -2792,22 +2818,22 @@ AUTH.requireAuth();
         if (setRes.ok) {
           const rows = (await setRes.json()).settlements || [];
           document.getElementById('settlementsBody').innerHTML = rows.length ? rows.map(s => `<tr>
-            <td><strong>${s.name}</strong></td><td>${s.invoices_count}</td><td>${fmt(s.invoiced)} ₽</td><td>${fmt(s.paid)} ₽</td>
+            <td><strong>${esc(s.name)}</strong></td><td>${s.invoices_count}</td><td>${fmt(s.invoiced)} ₽</td><td>${fmt(s.paid)} ₽</td>
             <td>${parseFloat(s.balance) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + fmt(s.balance) + ' ₽</span>' : '<span style="color:var(--color-success);">0 ₽</span>'}</td>
           </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
         }
         if (itemRes.ok) {
           const rows = (await itemRes.json()).items || [];
           document.getElementById('itemAnalysisBody').innerHTML = rows.length ? rows.map(i => `<tr>
-            <td><strong>${i.name}</strong></td><td>${fmt(i.received_qty)}</td><td>${fmt(i.sold_qty)}</td>
+            <td><strong>${esc(i.name)}</strong></td><td>${fmt(i.received_qty)}</td><td>${fmt(i.sold_qty)}</td>
             <td>${parseFloat(i.written_off_qty) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + fmt(i.written_off_qty) + '</span>' : '0'}</td>
-            <td>${fmt(i.write_off_cost)} ₽</td><td>${fmt(i.stock)} ${i.unit || ''}</td>
+            <td>${fmt(i.write_off_cost)} ₽</td><td>${fmt(i.stock)} ${esc(i.unit || '')}</td>
           </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
         }
         if (dishRes.ok) {
           const rows = (await dishRes.json()).dishes || [];
           document.getElementById('dishAnalysisBody').innerHTML = rows.length ? rows.map((d, idx) => `<tr${idx >= rows.length - 3 && parseFloat(d.sold_qty) === 0 ? ' style="opacity:.6"' : ''}>
-            <td><strong>${d.name}</strong></td><td>${d.orders_count}</td><td>${fmt(d.sold_qty)}</td><td>${fmt(d.revenue)} ₽</td>
+            <td><strong>${esc(d.name)}</strong></td><td>${d.orders_count}</td><td>${fmt(d.sold_qty)}</td><td>${fmt(d.revenue)} ₽</td>
           </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
         }
       } catch (e) { /* отчёты не критичны */ }
@@ -2839,11 +2865,11 @@ AUTH.requireAuth();
 
         return `
           <tr>
-            <td><strong>${item.name}</strong></td>
-            <td>${item.quantity} ${item.unit}</td>
-            <td>${item.minQuantity} ${item.unit}</td>
-            <td style="color: var(--color-warning); font-weight: 700;">${needed.toFixed(1)} ${item.unit}</td>
-            <td>${supplier ? supplier.name : '-'}</td>
+            <td><strong>${esc(item.name)}</strong></td>
+            <td>${item.quantity} ${esc(item.unit)}</td>
+            <td>${item.minQuantity} ${esc(item.unit)}</td>
+            <td style="color: var(--color-warning); font-weight: 700;">${needed.toFixed(1)} ${esc(item.unit)}</td>
+            <td>${esc(supplier ? supplier.name : '-')}</td>
             <td>
               <button class="btn btn-warning btn-small" onclick="quickRestock(${jsArg(item.id)})">📦 Заказать</button>
             </td>
@@ -2884,13 +2910,13 @@ AUTH.requireAuth();
       }
       tbody.innerHTML = productionRuns.map(r => {
         const ings = (r.ingredients || []).map(i =>
-          `${i.itemName}: ${parseFloat(i.quantity).toLocaleString('ru-RU', {maximumFractionDigits: 3})}`
+          `${esc(i.itemName)}: ${parseFloat(i.quantity).toLocaleString('ru-RU', {maximumFractionDigits: 3})}`
         ).join(', ');
         const cancelled = r.status === 'cancelled';
         return `<tr${cancelled ? ' style="opacity:.55"' : ''}>
           <td>${new Date(r.produced_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
-          <td><strong>${r.output_name || ''}</strong></td>
-          <td>${parseFloat(r.quantity).toLocaleString('ru-RU')} ${r.output_unit || ''}</td>
+          <td><strong>${esc(r.output_name || '')}</strong></td>
+          <td>${parseFloat(r.quantity).toLocaleString('ru-RU')} ${esc(r.output_unit || '')}</td>
           <td>${(parseFloat(r.total_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
           <td>${(parseFloat(r.unit_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
           <td style="font-size:12px;color:var(--color-text-secondary);">${ings}</td>
@@ -2918,12 +2944,12 @@ AUTH.requireAuth();
         document.getElementById('productionTechCard').innerHTML =
           '<option value="">Выберите техкарту</option>' +
           productionTechCards.map(tc =>
-            `<option value="${tc.id}">${tc.name || tc.output_item_name || tc.menu_item_name} (выход: ${parseFloat(tc.output_quantity || 1).toLocaleString('ru-RU')} ${tc.output_item_unit || ''})</option>`
+            `<option value="${tc.id}">${esc(tc.name || tc.output_item_name || tc.menu_item_name)} (выход: ${parseFloat(tc.output_quantity || 1).toLocaleString('ru-RU')} ${esc(tc.output_item_unit || '')})</option>`
           ).join('');
 
         const whs = whData.warehouses || [];
         document.getElementById('productionWarehouse').innerHTML =
-          whs.map(w => `<option value="${w.id}">${w.name}</option>`).join('') || '<option value="">Нет складов</option>';
+          whs.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('') || '<option value="">Нет складов</option>';
       } catch (e) {
         document.getElementById('productionError').textContent = 'Ошибка загрузки данных: ' + e.message;
       }
@@ -3032,7 +3058,7 @@ AUTH.requireAuth();
         fillInvoiceItemsCounts();
       } catch (e) {
         supplierInvoices = [];
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--color-danger);">Ошибка загрузки накладных: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-danger);">Ошибка загрузки накладных: ' + e.message + '</td></tr>';
       }
     }
 
@@ -3044,7 +3070,7 @@ AUTH.requireAuth();
       const list = data.suppliers || [];
       document.getElementById('invoiceFilterSupplier').innerHTML =
         '<option value="">Все поставщики</option>' +
-        list.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        list.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
       invoiceSuppliersLoaded = true;
     }
 
@@ -3059,7 +3085,7 @@ AUTH.requireAuth();
           .toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
 
       if (!supplierInvoices.length) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--color-grey-5);">Накладных пока нет — создайте накладную от поставщика</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--color-grey-5);">Накладных пока нет — создайте накладную от поставщика</td></tr>';
         return;
       }
 
@@ -3094,10 +3120,10 @@ AUTH.requireAuth();
             ? '<strong style="color:var(--color-danger);">' + money(debt) + ' ₽</strong>'
             : '<span style="color:var(--color-success);">оплачена</span>';
         return `<tr${isReceived ? '' : ' style="opacity:.85"'}>
-          <td><strong>${inv.invoice_number || '—'}</strong></td>
+          <td><strong>${esc(inv.invoice_number || '—')}</strong></td>
           <td>${dateText}</td>
-          <td>${inv.supplier_name || '—'}</td>
-          <td>${inv.warehouse_name || '—'}</td>
+          <td>${esc(inv.supplier_name || '—')}</td>
+          <td>${esc(inv.warehouse_name || '—')}</td>
           <td>${money(inv.total_amount)} ₽</td>
           <td>${payHtml}</td>
           <td>${debtHtml}</td>
@@ -3151,12 +3177,12 @@ AUTH.requireAuth();
         const sups = supData.suppliers || [];
         document.getElementById('invoiceSupplier').innerHTML =
           '<option value="">Выберите поставщика</option>' +
-          sups.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+          sups.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 
         const whs = whData.warehouses || [];
         document.getElementById('invoiceWarehouse').innerHTML =
           whs.length
-            ? whs.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
+            ? whs.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')
             : '<option value="">Нет складов</option>';
       } catch (e) {
         document.getElementById('invoiceError').textContent = 'Ошибка загрузки данных: ' + e.message;
@@ -3237,7 +3263,7 @@ AUTH.requireAuth();
         const data = await res.json();
         invoiceInventoryItems = data.items || [];
         sel.innerHTML = '<option value="">Выберите товар</option>' +
-          invoiceInventoryItems.map(i => `<option value="${i.id}">${i.name}${i.unit ? ' (' + i.unit + ')' : ''}</option>`).join('');
+          invoiceInventoryItems.map(i => `<option value="${i.id}">${esc(i.name)}${esc(i.unit ? ' (' + i.unit + ')' : '')}</option>`).join('');
       } catch (e) {
         invoiceInventoryItems = [];
         sel.innerHTML = '<option value="">Ошибка загрузки товаров</option>';
@@ -3288,8 +3314,8 @@ AUTH.requireAuth();
           : qty * price;
         total += sum;
         return `<tr>
-          <td><strong>${it.inventory_item_name || it.name || '—'}</strong></td>
-          <td>${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${it.unit || ''}</td>
+          <td><strong>${esc(it.inventory_item_name || it.name || '—')}</strong></td>
+          <td>${qty.toLocaleString('ru-RU', {maximumFractionDigits: 3})} ${esc(it.unit || '')}</td>
           <td>${price.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
           <td>${sum.toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
         </tr>`;
