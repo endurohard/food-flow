@@ -1554,9 +1554,22 @@ AUTH.requireAuth();
         <div class="table-controls" style="flex-wrap:wrap;gap:10px;">
           <div class="search-box" style="flex:1 1 220px;">
             <span class="search-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="display:block"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg></span>
-            <input type="text" class="search-input" id="journalSearch" placeholder="Товар или примечание" oninput="renderJournal()" aria-label="Поиск по журналу">
+            <input type="text" class="search-input" id="journalSearch" placeholder="Товар или примечание" oninput="journalChanged(true)" aria-label="Поиск по журналу">
           </div>
-          <select class="form-select" id="journalType" onchange="renderJournal()" aria-label="Тип движения" style="width:auto;min-width:170px;">
+          <select class="form-select" id="journalPeriod" onchange="journalChanged()" aria-label="Период" style="width:auto;min-width:150px;">
+            <option value="7">7 дней</option>
+            <option value="today">Сегодня</option>
+            <option value="30">30 дней</option>
+            <option value="90">90 дней</option>
+            <option value="all">Всё время</option>
+            <option value="custom">Период…</option>
+          </select>
+          <span id="journalRange" style="display:none;align-items:center;gap:6px;">
+            <input type="date" class="form-input" id="journalFrom" onchange="journalChanged()" aria-label="С даты" style="width:auto;">
+            <span>—</span>
+            <input type="date" class="form-input" id="journalTo" onchange="journalChanged()" aria-label="По дату" style="width:auto;">
+          </span>
+          <select class="form-select" id="journalType" onchange="journalChanged()" aria-label="Тип движения" style="width:auto;min-width:170px;">
             <option value="">Все движения</option>
             <option value="in">Приходы</option>
             <option value="out">Расходы и списания</option>
@@ -1564,13 +1577,16 @@ AUTH.requireAuth();
             <option value="transfer">Перемещения</option>
             <option value="adjust">Корректировки</option>
           </select>
-          <select class="form-select" id="journalWarehouse" onchange="renderJournal()" aria-label="Склад" style="width:auto;min-width:170px;"><option value="">Все склады</option></select>
+          <select class="form-select" id="journalWarehouse" onchange="journalChanged()" aria-label="Склад" style="width:auto;min-width:170px;"><option value="">Все склады</option></select>
         </div>
         <table class="data-table inv-journal">
           <thead><tr><th>Когда</th><th>Движение</th><th>Товар</th><th>Склад</th><th style="text-align:right">Количество</th><th style="text-align:right">Сумма</th><th>Кто, примечание</th></tr></thead>
           <tbody id="journalBody"><tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr></tbody>
         </table>
-        <p id="journalNote" style="font-size:12px;color:var(--color-text-secondary);margin:10px 0 0;"></p>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <span id="journalNote" style="font-size:13px;color:var(--color-text-secondary);"></span>
+          <button type="button" class="btn btn-secondary" id="journalMore" style="display:none;" onclick="loadJournal(true)">Показать ещё</button>
+        </div>
       </div>
       <div id="ordersList" hidden></div>
     </div>
@@ -2760,59 +2776,117 @@ AUTH.requireAuth();
       }
     }
 
-    // ── Журнал движений: все типы, фильтры на странице ──
+    // ── Журнал движений: фильтры — на сервере ──
+    // Период, тип, склад и поиск уходят в запрос, поэтому найти можно любое
+    // движение, а не только среди последних загруженных. Страница по 100,
+    // «Показать ещё» догружает следующую.
     let journal = [];
+    let journalTotal = 0;
+    let journalSeq = 0;
+    let journalTimer = null;
     const MOVE_TYPES = {
       receipt: ['Приход', 'in'], return: ['Возврат', 'in'], production_in: ['Выпуск', 'in'], transfer_in: ['Перемещение', 'in'],
       adjustment_plus: ['Корректировка +', 'in'], write_off: ['Списание', 'out'], sale: ['Продажа', 'out'],
       production_out: ['В производство', 'out'], transfer_out: ['Перемещение', 'out'], adjustment_minus: ['Корректировка −', 'out'],
       inventory: ['Инвентаризация', 'adj']
     };
-    const JOURNAL_LIMIT = 500;
-    async function loadJournal() {
+    const JOURNAL_GROUPS = {
+      in: Object.keys(MOVE_TYPES).filter(k => MOVE_TYPES[k][1] === 'in'),
+      out: Object.keys(MOVE_TYPES).filter(k => MOVE_TYPES[k][1] === 'out'),
+      sale: ['sale'],
+      transfer: ['transfer_in', 'transfer_out'],
+      adjust: ['adjustment_plus', 'adjustment_minus', 'inventory']
+    };
+    const JOURNAL_PAGE = 100;
+
+    function journalRange() {
+      const p = document.getElementById('journalPeriod').value;
+      const day = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+      const today = day(new Date());
+      const plus = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+      document.getElementById('journalRange').style.display = p === 'custom' ? 'inline-flex' : 'none';
+      if (p === 'all') return {};
+      if (p === 'today') return { from: today, to: plus(today, 1) };
+      if (p === 'custom') {
+        const f = document.getElementById('journalFrom').value, t = document.getElementById('journalTo').value;
+        return { from: f ? day(f + 'T00:00:00') : null, to: t ? plus(day(t + 'T00:00:00'), 1) : null };
+      }
+      return { from: plus(today, -(parseInt(p, 10) - 1)), to: plus(today, 1) };
+    }
+
+    function journalChanged(debounce) {
+      clearTimeout(journalTimer);
+      journalTimer = setTimeout(() => loadJournal(false), debounce ? 350 : 0);
+    }
+    window.journalChanged = journalChanged;
+
+    async function loadJournal(append) {
       const body = document.getElementById('journalBody');
       const wh = document.getElementById('journalWarehouse');
       if (wh && wh.options.length <= 1) wh.innerHTML = '<option value="">Все склады</option>' + warehouses.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('');
+      const jt = document.getElementById('journalTo');
+      if (jt && !jt.value) {
+        const d = new Date(); const ymd = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+        jt.value = ymd(d); d.setDate(d.getDate() - 6); document.getElementById('journalFrom').value = ymd(d);
+      }
+      const r = journalRange();
+      const q = new URLSearchParams({ limit: String(JOURNAL_PAGE), offset: String(append ? journal.length : 0), withTotal: '1' });
+      if (r.from) q.set('dateFrom', r.from.toISOString());
+      if (r.to) q.set('dateTo', r.to.toISOString());
+      const group = JOURNAL_GROUPS[document.getElementById('journalType').value];
+      if (group) q.set('movementType', group.join(','));
+      if (wh && wh.value) q.set('warehouseId', wh.value);
+      const search = document.getElementById('journalSearch').value.trim();
+      if (search) q.set('search', search);
+      const seq = ++journalSeq;
+      if (!append) body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);padding:24px;">Загрузка...</td></tr>';
+      const more = document.getElementById('journalMore');
+      more.disabled = true;
       try {
-        const res = await AUTH.fetch('/api/inventory/movements?limit=' + JOURNAL_LIMIT);
+        const res = await AUTH.fetch('/api/inventory/movements?' + q.toString());
         if (!res.ok) throw new Error(await apiError(res));
-        journal = (await res.json()).movements || [];
+        const data = await res.json();
+        if (seq !== journalSeq) return; // пока грузили, фильтр поменяли
+        const rows = data.movements || [];
+        journal = append ? journal.concat(rows) : rows;
+        journalTotal = typeof data.total === 'number' ? data.total : journal.length;
         renderJournal();
       } catch (e) {
-        journal = [];
+        if (seq !== journalSeq) return;
+        if (!append) journal = [];
         body.innerHTML = '<tr><td colspan="7" style="color:#9E3420;padding:20px;">Журнал не загружен: ' + esc(e.message) + '</td></tr>';
+        document.getElementById('journalNote').textContent = '';
+        more.style.display = 'none';
+      } finally {
+        more.disabled = false;
       }
     }
+
+    function plural(n, a, b, c) { n = Math.abs(n) % 100; const n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
+
     function renderJournal() {
       const body = document.getElementById('journalBody');
-      const q = (document.getElementById('journalSearch').value || '').toLowerCase().trim();
-      const type = document.getElementById('journalType').value;
-      const wh = document.getElementById('journalWarehouse').value;
-      const rows = journal.filter(m => {
-        const t = MOVE_TYPES[m.movement_type] || [m.movement_type, 'adj'];
-        if (wh && String(m.warehouse_id) !== wh) return false;
-        if (type === 'in' && t[1] !== 'in') return false;
-        if (type === 'out' && t[1] !== 'out') return false;
-        if (type === 'sale' && m.movement_type !== 'sale') return false;
-        if (type === 'transfer' && !/^transfer/.test(m.movement_type || '')) return false;
-        if (type === 'adjust' && !/^adjustment|^inventory/.test(m.movement_type || '')) return false;
-        if (q && !((m.item_name || '') + ' ' + (m.notes || '')).toLowerCase().includes(q)) return false;
-        return true;
-      });
-      document.getElementById('journalNote').textContent = journal.length >= JOURNAL_LIMIT
-        ? 'Показаны последние ' + JOURNAL_LIMIT + ' движений.' : '';
-      if (!rows.length) {
+      const more = document.getElementById('journalMore');
+      const note = document.getElementById('journalNote');
+      note.textContent = journalTotal
+        ? 'Найдено ' + journalTotal.toLocaleString('ru-RU') + ' ' + plural(journalTotal, 'движение', 'движения', 'движений')
+          + (journal.length < journalTotal ? ', показано ' + journal.length.toLocaleString('ru-RU') : '')
+        : '';
+      more.style.display = journal.length < journalTotal ? '' : 'none';
+      if (!journal.length) {
+        const filtered = document.getElementById('journalSearch').value.trim() || document.getElementById('journalType').value
+          || document.getElementById('journalWarehouse').value || document.getElementById('journalPeriod').value !== 'all';
         body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);padding:24px;">'
-          + (journal.length ? 'Под фильтр ничего не подходит' : 'Движений пока нет — оформите приход или примите накладную') + '</td></tr>';
+          + (filtered ? 'За этот период и с этими фильтрами движений нет' : 'Движений пока нет — оформите приход или примите накладную') + '</td></tr>';
         return;
       }
-      body.innerHTML = rows.map(m => {
+      body.innerHTML = journal.map(m => {
         const t = MOVE_TYPES[m.movement_type] || [m.movement_type || '—', 'adj'];
         const qty = Math.abs(parseFloat(m.quantity) || 0);
         const price = parseFloat(m.cost_price) || 0;
         const sign = t[1] === 'in' ? '+' : t[1] === 'out' ? '−' : '';
         const who = [m.first_name, m.last_name].filter(Boolean).join(' ');
-        const when = new Date(m.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const when = new Date(m.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
         return `<tr>
           <td style="white-space:nowrap;color:var(--color-text-secondary)">${when}</td>
           <td><span class="mv-chip mv-${t[1]}">${esc(t[0])}</span></td>
@@ -2825,6 +2899,7 @@ AUTH.requireAuth();
       }).join('');
     }
     window.renderJournal = renderJournal;
+    window.loadJournal = loadJournal;
 
     function renderOrders() {
       const container = document.getElementById('ordersList');

@@ -2,6 +2,19 @@ import crypto from 'crypto';
 import pkg from 'pg';
 const { Pool } = pkg;
 
+export interface MovementFilters {
+  enterpriseId?: string;
+  warehouseId?: string;
+  inventoryItemId?: string;
+  movementType?: string;
+  movementTypes?: string[];
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export class InventoryService {
   private pool: InstanceType<typeof Pool>;
 
@@ -322,18 +335,15 @@ export class InventoryService {
     }
   }
 
-  async getMovements(filters: { enterpriseId?: string; warehouseId?: string; inventoryItemId?: string; movementType?: string; limit?: number; offset?: number }): Promise<any[]> {
-    const conditions: string[] = [];
-    const values: any[] = [];
-    let p = 1;
-    if (filters.enterpriseId) { conditions.push(`m.enterprise_id = $${p++}`); values.push(filters.enterpriseId); }
-    if (filters.warehouseId) { conditions.push(`m.warehouse_id = $${p++}`); values.push(filters.warehouseId); }
-    if (filters.inventoryItemId) { conditions.push(`m.inventory_item_id = $${p++}`); values.push(filters.inventoryItemId); }
-    if (filters.movementType) { conditions.push(`m.movement_type = $${p++}`); values.push(filters.movementType); }
-
-    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-    values.push(filters.limit || 100, filters.offset || 0);
-
+  /**
+   * Журнал движений склада. Фильтры — в SQL, а не на странице: экран раньше
+   * брал последние 500 записей и фильтровал их сам, поэтому движения старше
+   * этих 500 найти было нельзя ни по дате, ни по товару.
+   * dateFrom — включительно, dateTo — не включительно (полуинтервал).
+   */
+  async getMovements(filters: MovementFilters): Promise<any[]> {
+    const { where, values } = this.movementWhere(filters);
+    const p = values.length + 1;
     const result = await this.pool.query(
       `SELECT m.*, i.name as item_name, i.unit, w.name as warehouse_name, u.first_name, u.last_name
        FROM stock_movements m
@@ -342,10 +352,44 @@ export class InventoryService {
        LEFT JOIN users u ON m.performed_by = u.id
        ${where}
        ORDER BY m.created_at DESC
-       LIMIT $${p++} OFFSET $${p}`,
-      values
+       LIMIT $${p} OFFSET $${p + 1}`,
+      [...values, filters.limit || 100, filters.offset || 0]
     );
     return result.rows;
+  }
+
+  /** Сколько движений подходит под те же фильтры — для «Показать ещё». */
+  async countMovements(filters: MovementFilters): Promise<number> {
+    const { where, values } = this.movementWhere(filters);
+    const result = await this.pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM stock_movements m
+       INNER JOIN inventory_items i ON m.inventory_item_id = i.id
+       ${where}`,
+      values
+    );
+    return result.rows[0] ? Number(result.rows[0].n) || 0 : 0;
+  }
+
+  private movementWhere(filters: MovementFilters): { where: string; values: any[] } {
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let p = 1;
+    if (filters.enterpriseId) { conditions.push(`m.enterprise_id = $${p++}`); values.push(filters.enterpriseId); }
+    if (filters.warehouseId) { conditions.push(`m.warehouse_id = $${p++}`); values.push(filters.warehouseId); }
+    if (filters.inventoryItemId) { conditions.push(`m.inventory_item_id = $${p++}`); values.push(filters.inventoryItemId); }
+    const types = (filters.movementTypes && filters.movementTypes.length)
+      ? filters.movementTypes
+      : (filters.movementType ? [filters.movementType] : []);
+    if (types.length === 1) { conditions.push(`m.movement_type = $${p++}`); values.push(types[0]); }
+    else if (types.length > 1) { conditions.push(`m.movement_type = ANY($${p++})`); values.push(types); }
+    if (filters.dateFrom) { conditions.push(`m.created_at >= $${p++}`); values.push(filters.dateFrom); }
+    if (filters.dateTo) { conditions.push(`m.created_at < $${p++}`); values.push(filters.dateTo); }
+    if (filters.search) {
+      conditions.push(`(i.name ILIKE $${p} OR m.notes ILIKE $${p})`); p++;
+      values.push('%' + filters.search.replace(/[\\%_]/g, (c) => '\\' + c) + '%');
+    }
+    return { where: conditions.length ? 'WHERE ' + conditions.join(' AND ') : '', values };
   }
 
   // ========== AUTO-DEDUCTION (for order completion) ==========

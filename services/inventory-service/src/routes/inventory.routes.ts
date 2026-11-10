@@ -283,21 +283,51 @@ router.post('/transfers', authenticateUser, requireRole('admin', 'owner', 'manag
   }
 });
 
+const MOVEMENT_TYPE_RE = /^[a-z_]{2,40}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Разбор фильтров журнала движений из query. Ошибка — текстом для 400. */
+export function parseMovementQuery(q: Record<string, unknown>):
+  { filters: import('../services/inventory.service').MovementFilters } | { error: string } {
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+  const date = (v: unknown, name: string) => {
+    const s = str(v);
+    if (s === undefined) return { ok: true as const, value: undefined };
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? { ok: false as const, error: `${name}: неверная дата` } : { ok: true as const, value: d.toISOString() };
+  };
+  const from = date(q.dateFrom, 'dateFrom'); if (!from.ok) return { error: from.error };
+  const to = date(q.dateTo, 'dateTo'); if (!to.ok) return { error: to.error };
+  const typesRaw = str(q.movementType);
+  const movementTypes = typesRaw ? typesRaw.split(',').map((t) => t.trim()).filter(Boolean) : [];
+  if (movementTypes.some((t) => !MOVEMENT_TYPE_RE.test(t))) return { error: 'movementType: неверный тип' };
+  const warehouseId = str(q.warehouseId), inventoryItemId = str(q.inventoryItemId);
+  if (warehouseId && !UUID_RE.test(warehouseId)) return { error: 'warehouseId: неверный id' };
+  if (inventoryItemId && !UUID_RE.test(inventoryItemId)) return { error: 'inventoryItemId: неверный id' };
+  const limit = Math.min(Math.max(parseInt(String(q.limit ?? ''), 10) || 100, 1), 1000);
+  const offset = Math.max(parseInt(String(q.offset ?? ''), 10) || 0, 0);
+  const search = str(q.search);
+  return { filters: {
+    warehouseId, inventoryItemId, movementTypes, dateFrom: from.value, dateTo: to.value,
+    search: search ? search.slice(0, 100) : undefined, limit, offset
+  } };
+}
+
 router.get('/movements', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
-    const movements = await inventoryService.getMovements({
-      enterpriseId: isSuper ? undefined : req.enterpriseId,
-      warehouseId: req.query.warehouseId as string,
-      inventoryItemId: req.query.inventoryItemId as string,
-      movementType: req.query.movementType as string,
-      limit: parseInt(req.query.limit as string) || 100,
-      offset: parseInt(req.query.offset as string) || 0
-    });
-    return res.json({ movements });
+    const parsed = parseMovementQuery(req.query as Record<string, unknown>);
+    if ('error' in parsed) return res.status(400).json({ error: parsed.error, message: parsed.error });
+    const filters = { ...parsed.filters, enterpriseId: isSuper ? undefined : req.enterpriseId };
+    // total — только по просьбе (?withTotal=1): старые вызовы получают прежний ответ
+    const [movements, total] = await Promise.all([
+      inventoryService.getMovements(filters),
+      req.query.withTotal ? inventoryService.countMovements(filters) : Promise.resolve(undefined)
+    ]);
+    return res.json(total === undefined ? { movements } : { movements, total });
   } catch (error) {
     console.error('Get movements error:', error);
     return res.status(500).json({ error: 'Internal server error' });
