@@ -795,6 +795,52 @@
     .search-icon svg { display: block; }
     .supplier-info a { color: var(--color-primary); }
 
+    /* Заказы поставщикам */
+    .po-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+    .po-draft { background: #EFE8D6; color: #4A443A; }
+    .po-sent { background: #E3ECF8; color: #1D4E89; }
+    .po-partially_received { background: #FBEFC8; color: #6E5200; }
+    .po-received { background: #E7F1E9; color: #1F5C39; }
+    .po-cancelled { background: #ECECEC; color: #5A5A5A; text-decoration: line-through; }
+    .po-progress { display: flex; align-items: center; gap: 8px; min-width: 110px; }
+    .po-progress-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--admin-border, #e5e5e5); overflow: hidden; }
+    .po-progress-bar i { display: block; height: 100%; background: #2E7D4F; }
+    .po-progress span { font-size: 12px; color: var(--color-text-secondary); min-width: 34px; text-align: right; }
+    .po-head { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .po-head .form-group { margin-bottom: 0; }
+    #poModal .table-wrapper { padding: 0; overflow-x: auto; }
+    .po-items { min-width: 0 !important; width: 100%; font-size: 14px; }
+    .po-items td, .po-items th { padding: 8px 10px !important; }
+    .po-num { white-space: nowrap; }
+    .po-diff-minus { color: #9E3420; font-weight: 600; }
+    .po-diff-plus { color: #1D4E89; font-weight: 600; }
+    .po-diff-ok { color: #1F5C39; }
+    .po-add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 12px; }
+    .po-add .form-group { margin-bottom: 0; }
+    .po-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    .po-footer .spacer { flex: 1; }
+    .po-invoices { margin-top: 16px; font-size: 14px; }
+    .po-invoices a { color: var(--color-primary); cursor: pointer; }
+    .po-sugg-group { border: 1px solid var(--admin-border, #e5e5e5); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .po-sugg-group h4 { margin: 0 0 8px; font-size: 15px; }
+    .po-sugg-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 110px 120px; gap: 10px; align-items: center; padding: 6px 0; font-size: 14px; }
+    .po-sugg-row small { color: var(--color-text-secondary); display: block; }
+    @media (max-width: 760px) {
+      .po-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .po-add .form-group:first-child { grid-column: 1 / -1; }
+      .po-sugg-row { grid-template-columns: auto minmax(0, 1fr) 90px; }
+      .po-sugg-row .po-sugg-price { display: none; }
+      #purchasesTableBody td:nth-child(4), #purchasesTableBody td:nth-child(5) { display: none; }
+      #purchasesTab thead th:nth-child(4), #purchasesTab thead th:nth-child(5) { display: none; }
+      .po-items thead { display: none; }
+      .po-items, .po-items tbody { display: block; }
+      .po-items tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--admin-border, #e5e5e5); }
+      .po-items td { display: block; padding: 0 !important; border: 0 !important; }
+      .po-items td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--color-text-secondary); }
+      .po-items td.po-name { grid-column: 1 / 3; font-weight: 600; }
+      .po-items td.po-empty { grid-column: 1 / -1; }
+    }
+
     .stock-badge.low-stock {
       background: #FBEFC8;
       color: #6E5200;   /* 7,2:1 */
@@ -1300,6 +1346,7 @@ AUTH.requireAuth();
       <button class="tab active" onclick="switchTab('inventory')">Остатки</button>
       <button class="tab" onclick="switchTab('production')">Производство</button>
       <button class="tab" onclick="switchTab('suppliers')">Поставщики</button>
+      <button class="tab" onclick="switchTab('purchases')">Заказы поставщикам</button>
       <button class="tab" onclick="switchTab('invoices')">Накладные</button>
       <button class="tab" onclick="switchTab('orders')">Журнал движений</button>
       <button class="tab" onclick="switchTab('reports')">Отчёты</button>
@@ -1462,6 +1509,49 @@ AUTH.requireAuth();
 
       <div id="suppliersList">
         <!-- Suppliers will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Заказы поставщикам: что заказали, что привезли -->
+    <div id="purchasesTab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <h2 style="font-size: 20px; font-weight: 700;">Заказы поставщикам</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="openPoSuggestions()">Предложить по минимуму</button>
+          <button class="btn btn-primary" onclick="createPurchaseOrder()">Новый заказ</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
+        <div class="form-group" style="margin-bottom:0;min-width:200px;">
+          <label class="form-label" for="poFilterStatus">Статус:</label>
+          <select class="form-select" id="poFilterStatus" onchange="loadPurchaseOrders()">
+            <option value="">Все, кроме отменённых</option>
+            <option value="open">Ждём поставку</option>
+            <option value="draft">Черновики</option>
+            <option value="received">Получены</option>
+            <option value="cancelled">Отменённые</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Номер</th>
+              <th>Поставщик</th>
+              <th>Сумма</th>
+              <th>Склад</th>
+              <th>Ожидается</th>
+              <th>Получено</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody id="purchasesTableBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -2064,6 +2154,98 @@ AUTH.requireAuth();
     </div>
   </div>
 
+  <!-- Заказ поставщику: шапка, позиции, сверка с полученным -->
+  <div class="modal" id="poModal">
+    <div class="modal-content" style="max-width:920px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="poTitle">Заказ поставщику</h2>
+        <button class="close-btn" onclick="closePoModal()" aria-label="Закрыть">&times;</button>
+      </div>
+      <div class="po-head">
+        <div class="form-group">
+          <label class="form-label" for="poSupplier">Поставщик</label>
+          <select class="form-select" id="poSupplier" onchange="savePoHeader()"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="poWarehouse">Склад прихода</label>
+          <select class="form-select" id="poWarehouse" onchange="savePoHeader()"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="poExpected">Ожидаемая дата</label>
+          <input type="date" class="form-input" id="poExpected" onchange="savePoHeader()">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="poNotes">Комментарий</label>
+          <input type="text" class="form-input" id="poNotes" maxlength="1000" onchange="savePoHeader()">
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table po-items">
+          <thead>
+            <tr>
+              <th>Товар</th>
+              <th>Заказано</th>
+              <th>Цена</th>
+              <th>Сумма</th>
+              <th>Получено</th>
+              <th>Расхождение</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="poItemsBody"></tbody>
+        </table>
+      </div>
+
+      <form class="po-add" id="poAddForm" onsubmit="addPoItem(event)">
+        <div class="form-group">
+          <label class="form-label" for="poAddItem">Товар</label>
+          <select class="form-select" id="poAddItem" onchange="poItemPicked()" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="poAddQty" id="poAddQtyLabel">Количество</label>
+          <input type="number" class="form-input" id="poAddQty" step="0.001" min="0.001" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="poAddPrice">Цена за ед., ₽</label>
+          <input type="number" class="form-input" id="poAddPrice" step="0.01" min="0">
+        </div>
+        <button type="submit" class="btn btn-primary">Добавить</button>
+      </form>
+
+      <div class="po-invoices" id="poInvoices"></div>
+      <div id="poError" style="color:#9E3420;margin-top:10px;min-height:18px;"></div>
+
+      <div class="po-footer">
+        <button class="btn btn-danger" id="poCancelBtn" onclick="cancelPo()">Отменить заказ</button>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary" onclick="closePoModal()">Закрыть</button>
+        <button class="btn btn-primary" id="poSendBtn" onclick="sendPo()">Отправить поставщику</button>
+        <button class="btn btn-success" id="poInvoiceBtn" onclick="invoiceFromPo()">Принять поставку → накладная</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Предложение заказа по минимальным остаткам -->
+  <div class="modal" id="poSuggModal">
+    <div class="modal-content" style="max-width:720px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Что пора заказать</h2>
+        <button class="close-btn" onclick="closePoSuggestions()" aria-label="Закрыть">&times;</button>
+      </div>
+      <p style="color:var(--color-text-secondary);margin:0 0 14px;font-size:14px;">
+        Товары с остатком ниже минимума, которых нет в открытых заказах. Количество — до двойного минимума;
+        поставщик — тот, у кого брали в последний раз. На каждого поставщика будет свой черновик заказа.
+      </p>
+      <div id="poSuggBody"></div>
+      <div class="po-footer">
+        <span class="spacer"></span>
+        <button class="btn btn-secondary" onclick="closePoSuggestions()">Отмена</button>
+        <button class="btn btn-primary" id="poSuggCreateBtn" onclick="createFromSuggestions()">Создать черновики</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification -->
   <div class="notification" id="notification"></div>
 
@@ -2111,7 +2293,7 @@ AUTH.requireAuth();
     function showDataError(message) {
       const tbody = document.getElementById('inventoryTableBody');
       if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="7" style="padding:28px;text-align:left;'
+        tbody.innerHTML = '<tr><td colspan="7" class="po-empty" style="padding:28px;text-align:left;'
           + 'background:rgba(229,57,53,0.08);border:1px solid rgba(229,57,53,0.35);border-radius:12px;">'
           + '<div style="font-size:16px;font-weight:700;color:#e53935;margin-bottom:10px;">'
           + '⚠️ Склад не загружен — сохранение отключено</div>'
@@ -2241,6 +2423,7 @@ AUTH.requireAuth();
       else if (tab === 'reports') { loadReceiptMovements().then(renderReports); }
       else if (tab === 'production') loadProductionRuns();
       else if (tab === 'invoices') loadSupplierInvoices();
+      else if (tab === 'purchases') loadPurchaseOrders();
     }
 
     // Стоимость остатка — по партиям (по ним же считается себестоимость
@@ -3744,6 +3927,296 @@ AUTH.requireAuth();
           showNotification('⚠️ Ошибка приёмки: ' + e.message);
         }
       }
+    }
+
+
+    // ===== Заказы поставщикам =====
+    // Заказ — что попросили у поставщика. Приёмка идёт обычной накладной,
+    // созданной из заказа; принятое количество сервер пишет обратно в заказ.
+    const PO_STATUS = { draft: 'Черновик', sent: 'Отправлен', partially_received: 'Получен частично', received: 'Получен', cancelled: 'Отменён' };
+    let purchaseOrders = [];
+    let currentPo = null;
+    let poSuggestions = [];
+
+    const poChip = (st) => `<span class="po-chip po-${esc(st)}">${esc(PO_STATUS[st] || st)}</span>`;
+    const dateRu = (v) => v ? new Date(v).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+    const isoDay = (v) => v ? String(v).slice(0, 10) : '';
+
+    async function loadPurchaseOrders() {
+      const tbody = document.getElementById('purchasesTableBody');
+      try {
+        const f = document.getElementById('poFilterStatus').value;
+        const qs = f && f !== 'open' ? '?status=' + encodeURIComponent(f) : '';
+        const res = await AUTH.fetch('/api/suppliers/purchase-orders' + qs);
+        if (!res.ok) throw new Error(await apiError(res));
+        let list = (await res.json()).orders || [];
+        if (!f) list = list.filter(o => o.status !== 'cancelled');
+        if (f === 'open') list = list.filter(o => o.status === 'sent' || o.status === 'partially_received');
+        purchaseOrders = list;
+        renderPurchaseOrders();
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9E3420;">Ошибка загрузки заказов: ' + esc(e.message) + '</td></tr>';
+      }
+    }
+
+    function renderPurchaseOrders() {
+      const tbody = document.getElementById('purchasesTableBody');
+      if (!purchaseOrders.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-text-secondary);padding:28px;">'
+          + 'Заказов нет. Создайте заказ или нажмите «Предложить по минимуму» — подберём, что заканчивается.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = purchaseOrders.map(o => {
+        const pct = Math.max(0, Math.min(100, Number(o.received_percent) || 0));
+        const late = o.expected_date && ['sent', 'partially_received'].includes(o.status) && isoDay(o.expected_date) < todayIso();
+        return `<tr style="cursor:pointer" tabindex="0" onkeydown="if(event.key==='Enter')this.click()" onclick="openPurchaseOrder(${jsArg(o.id)})">
+          <td class="po-num"><strong>${esc(o.order_number)}</strong><div style="font-size:12px;color:var(--color-text-secondary)">${dateRu(o.created_at)}</div></td>
+          <td>${o.supplier_name ? esc(o.supplier_name) : '<span style="color:#9E3420">не выбран</span>'}</td>
+          <td style="white-space:nowrap">${money(o.total_amount)}</td>
+          <td>${esc(o.warehouse_name || '—')}</td>
+          <td style="white-space:nowrap;${late ? 'color:#9E3420;font-weight:600' : ''}">${dateRu(o.expected_date)}${late ? '<div style="font-size:12px">просрочен</div>' : ''}</td>
+          <td>${o.status === 'draft' || o.status === 'cancelled' ? '—' : `<div class="po-progress"><div class="po-progress-bar"><i style="width:${pct}%"></i></div><span>${pct}%</span></div>`}</td>
+          <td>${poChip(o.status)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function todayIso() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    async function createPurchaseOrder() {
+      if (!requireServer('заказ')) return;
+      try {
+        const res = await AUTH.fetch('/api/suppliers/purchase-orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [] })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        const { order } = await res.json();
+        await loadPurchaseOrders();
+        await openPurchaseOrder(order.id);
+      } catch (e) { showNotification('❌ Заказ не создан: ' + e.message); }
+    }
+
+    async function openPurchaseOrder(id) {
+      try {
+        const res = await AUTH.fetch('/api/suppliers/purchase-orders/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error(await apiError(res));
+        currentPo = (await res.json()).order;
+        document.getElementById('poError').textContent = '';
+        renderPo();
+        document.getElementById('poModal').classList.add('active');
+      } catch (e) { showNotification('❌ ' + e.message); }
+    }
+
+    function closePoModal() {
+      document.getElementById('poModal').classList.remove('active');
+      currentPo = null;
+    }
+
+    function renderPo() {
+      const po = currentPo;
+      const editable = po.status === 'draft' || po.status === 'sent';
+      const headEditable = editable;
+      document.getElementById('poTitle').innerHTML = 'Заказ № ' + esc(po.order_number) + ' ' + poChip(po.status);
+
+      const sup = document.getElementById('poSupplier');
+      sup.innerHTML = '<option value="">— выберите поставщика —</option>'
+        + suppliers.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+      sup.value = po.supplier_id || '';
+      const wh = document.getElementById('poWarehouse');
+      wh.innerHTML = warehouses.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('');
+      wh.value = po.warehouse_id || '';
+      document.getElementById('poExpected').value = isoDay(po.expected_date);
+      document.getElementById('poNotes').value = po.notes || '';
+      ['poSupplier', 'poWarehouse', 'poExpected', 'poNotes'].forEach(i => { document.getElementById(i).disabled = !headEditable; });
+
+      const items = po.items || [];
+      const showRecv = po.status !== 'draft';
+      const body = document.getElementById('poItemsBody');
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--color-text-secondary);padding:18px;">Добавьте товары ниже</td></tr>';
+      } else {
+        let total = 0;
+        body.innerHTML = items.map(it => {
+          const q = Number(it.quantity), r = Number(it.received_quantity) || 0;
+          const price = it.price_per_unit === null || it.price_per_unit === undefined ? null : Number(it.price_per_unit);
+          const sum = price === null ? null : q * price;
+          total += sum || 0;
+          const diff = Math.round((r - q) * 1000) / 1000;
+          let diffHtml = '—';
+          if (showRecv && r > 0) {
+            diffHtml = diff === 0 ? '<span class="po-diff-ok">✓ полностью</span>'
+              : diff < 0 ? `<span class="po-diff-minus">недовоз ${qtyText(-diff, it.unit)}</span>`
+              : `<span class="po-diff-plus">сверх +${qtyText(diff, it.unit)}</span>`;
+          } else if (showRecv) diffHtml = '<span style="color:var(--color-text-secondary)">ждём</span>';
+          return `<tr>
+            <td class="po-name">${esc(it.item_name)}</td>
+            <td style="white-space:nowrap" data-label="Заказано">${qtyText(q, it.unit)}</td>
+            <td style="white-space:nowrap" data-label="Цена">${price === null ? '<span style="color:var(--color-text-secondary)">не указана</span>' : money(price)}</td>
+            <td style="white-space:nowrap" data-label="Сумма">${sum === null ? '—' : money(sum)}</td>
+            <td style="white-space:nowrap" data-label="Получено">${showRecv ? qtyText(r, it.unit) : '—'}</td>
+            <td data-label="Расхождение">${diffHtml}</td>
+            <td style="grid-row:1;grid-column:3">${editable && r === 0 ? `<button class="btn btn-small btn-danger inv-icon-btn" title="Убрать" aria-label="Убрать позицию" onclick="removePoItem(${jsArg(it.id)})">✕</button>` : ''}</td>
+          </tr>`;
+        }).join('') + `<tr><td colspan="3" class="po-empty" style="text-align:right;font-weight:600">Итого: <span style="white-space:nowrap">${money(total)}</span></td><td colspan="4" class="po-empty"></td></tr>`;
+      }
+
+      // Добавлять можно в черновик и в отправленный заказ (поставщик попросил дозаказать)
+      const form = document.getElementById('poAddForm');
+      form.style.display = editable ? 'grid' : 'none';
+      if (editable) {
+        const used = new Set(items.map(i => i.inventory_item_id));
+        document.getElementById('poAddItem').innerHTML = '<option value="">— товар —</option>'
+          + inventory.filter(i => !used.has(i.id)).sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+            .map(i => `<option value="${esc(i.id)}">${esc(i.name)} (${esc(i.unit)})</option>`).join('');
+        form.reset();
+      }
+
+      const inv = po.invoices || [];
+      document.getElementById('poInvoices').innerHTML = inv.length
+        ? '<strong>Накладные по заказу:</strong> ' + inv.map(x => `<a onclick="gotoInvoice(${jsArg(x.id)})">${esc(x.invoice_number)}</a> — ${x.status === 'received' ? 'принята ' + dateRu(x.received_at) : 'черновик'}, ${money(x.total_amount)}`).join('; ')
+        : '';
+
+      document.getElementById('poSendBtn').style.display = po.status === 'draft' ? '' : 'none';
+      document.getElementById('poInvoiceBtn').style.display = po.status === 'sent' || po.status === 'partially_received' ? '' : 'none';
+      document.getElementById('poCancelBtn').style.display = po.status === 'received' || po.status === 'cancelled' ? 'none' : '';
+    }
+
+    function poItemPicked() {
+      const it = inventory.find(i => i.id === document.getElementById('poAddItem').value);
+      document.getElementById('poAddQtyLabel').textContent = 'Количество' + (it ? ', ' + it.unit : '');
+      if (it && it.costPrice) document.getElementById('poAddPrice').value = it.costPrice;
+    }
+
+    async function poCall(url, opts, okMsg) {
+      document.getElementById('poError').textContent = '';
+      try {
+        const res = await AUTH.fetch(url, opts);
+        if (!res.ok) throw new Error(await apiError(res));
+        const data = await res.json();
+        if (okMsg) showNotification(okMsg);
+        return data;
+      } catch (e) {
+        document.getElementById('poError').textContent = e.message;
+        return null;
+      }
+    }
+    const poUrl = (tail) => '/api/suppliers/purchase-orders/' + encodeURIComponent(currentPo.id) + (tail || '');
+    const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+    async function savePoHeader() {
+      if (!currentPo) return;
+      const d = await poCall(poUrl(), jsonOpts('PUT', {
+        supplierId: document.getElementById('poSupplier').value || null,
+        warehouseId: document.getElementById('poWarehouse').value || null,
+        expectedDate: document.getElementById('poExpected').value || null,
+        notes: document.getElementById('poNotes').value.trim() || null
+      }));
+      if (d) { Object.assign(currentPo, d.order); loadPurchaseOrders(); }
+    }
+
+    async function addPoItem(ev) {
+      ev.preventDefault();
+      const priceRaw = document.getElementById('poAddPrice').value;
+      const d = await poCall(poUrl('/items'), jsonOpts('POST', {
+        inventoryItemId: document.getElementById('poAddItem').value,
+        quantity: parseFloat(document.getElementById('poAddQty').value),
+        pricePerUnit: priceRaw === '' ? null : parseFloat(priceRaw)
+      }));
+      if (d) { currentPo = d.order; renderPo(); loadPurchaseOrders(); document.getElementById('poAddItem').focus(); }
+    }
+
+    async function removePoItem(rowId) {
+      const d = await poCall(poUrl('/items/' + encodeURIComponent(rowId)), { method: 'DELETE' });
+      if (d) { currentPo = d.order; renderPo(); loadPurchaseOrders(); }
+    }
+
+    async function sendPo() {
+      const d = await poCall(poUrl('/send'), jsonOpts('POST'), '✅ Заказ отмечен как отправленный');
+      if (d) { await openPurchaseOrder(currentPo.id); loadPurchaseOrders(); }
+    }
+
+    async function cancelPo() {
+      if (!confirm('Отменить заказ ' + currentPo.order_number + '?')) return;
+      const d = await poCall(poUrl('/cancel'), jsonOpts('POST'), 'Заказ отменён');
+      if (d) { closePoModal(); loadPurchaseOrders(); }
+    }
+
+    // Приёмка: черновик накладной с тем, что ещё не привезли, по цене заказа.
+    // Кладовщик правит количества по факту — расхождение видно в заказе.
+    async function invoiceFromPo() {
+      const d = await poCall(poUrl('/invoice'), jsonOpts('POST'));
+      if (!d) return;
+      showNotification(d.existing ? 'По заказу уже есть черновик накладной — открываю его' : '✅ Черновик накладной создан — проверьте количества и примите');
+      await gotoInvoice(d.invoice.id);
+    }
+
+    async function gotoInvoice(invoiceId) {
+      closePoModal();
+      const btn = document.querySelector(`.tab[onclick="switchTab('invoices')"]`);
+      if (btn) btn.click();
+      await loadSupplierInvoices();
+      await openInvoiceItemsModal(invoiceId);
+    }
+
+    async function openPoSuggestions() {
+      const body = document.getElementById('poSuggBody');
+      body.innerHTML = '<div style="color:var(--color-text-secondary)">Загрузка...</div>';
+      document.getElementById('poSuggModal').classList.add('active');
+      try {
+        const res = await AUTH.fetch('/api/suppliers/purchase-orders/suggestions');
+        if (!res.ok) throw new Error(await apiError(res));
+        poSuggestions = (await res.json()).suggestions || [];
+      } catch (e) { body.innerHTML = '<div style="color:#9E3420">' + esc(e.message) + '</div>'; return; }
+      document.getElementById('poSuggCreateBtn').style.display = poSuggestions.length ? '' : 'none';
+      if (!poSuggestions.length) {
+        body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--color-text-secondary)">Всё в порядке: товаров ниже минимума без заказа нет.<br><small>Минимум задаётся в карточке товара.</small></div>';
+        return;
+      }
+      const groups = {};
+      poSuggestions.forEach((s, i) => { (groups[s.supplierId || ''] = groups[s.supplierId || ''] || []).push(i); });
+      body.innerHTML = Object.entries(groups).map(([sid, idx]) => {
+        const sup = suppliers.find(x => x.id === sid);
+        return `<div class="po-sugg-group"><h4>${sup ? esc(sup.name) : 'Поставщик не известен — выберите в заказе'}</h4>`
+          + idx.map(i => { const s = poSuggestions[i]; return `<label class="po-sugg-row">
+              <input type="checkbox" checked data-i="${i}">
+              <span>${esc(s.name)}<small>остаток ${qtyText(s.stock, s.unit)} · минимум ${qtyText(s.minStock, s.unit)}</small></span>
+              <input type="number" class="form-input" data-q="${i}" value="${s.quantity}" step="0.001" min="0.001" aria-label="Количество ${esc(s.name)}">
+              <span class="po-sugg-price">${s.pricePerUnit === null ? '' : money(s.pricePerUnit) + ' / ' + esc(s.unit)}</span>
+            </label>`; }).join('') + '</div>';
+      }).join('');
+    }
+
+    function closePoSuggestions() { document.getElementById('poSuggModal').classList.remove('active'); }
+
+    async function createFromSuggestions() {
+      if (!requireServer('заказ')) return;
+      const groups = {};
+      document.querySelectorAll('#poSuggBody input[data-i]').forEach(cb => {
+        if (!cb.checked) return;
+        const i = +cb.dataset.i, s = poSuggestions[i];
+        const q = parseFloat(document.querySelector(`#poSuggBody input[data-q="${i}"]`).value);
+        if (!(q > 0)) return;
+        (groups[s.supplierId || ''] = groups[s.supplierId || ''] || []).push({ inventoryItemId: s.inventoryItemId, quantity: q, pricePerUnit: s.pricePerUnit });
+      });
+      const entries = Object.entries(groups);
+      if (!entries.length) { showNotification('Отметьте хотя бы один товар'); return; }
+      const btn = document.getElementById('poSuggCreateBtn');
+      btn.disabled = true;
+      let made = 0;
+      try {
+        for (const [sid, items] of entries) {
+          const res = await AUTH.fetch('/api/suppliers/purchase-orders', jsonOpts('POST', { supplierId: sid || null, items }));
+          if (!res.ok) throw new Error(await apiError(res));
+          made++;
+        }
+        showNotification(`✅ Создано черновиков заказов: ${made}`);
+        closePoSuggestions();
+      } catch (e) {
+        showNotification('❌ ' + (made ? `Создано ${made}, дальше ошибка: ` : '') + e.message);
+      } finally { btn.disabled = false; loadPurchaseOrders(); }
     }
 
     function showNotification(message) {

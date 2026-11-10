@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { receiveFromInvoice } from './purchase-order.service';
 import pkg from 'pg';
 const { Pool } = pkg;
 import { config } from '../config';
@@ -359,6 +360,11 @@ export class SupplierService {
         `UPDATE supply_invoices SET status = 'received', received_by = $1, received_at = NOW() WHERE id = $2`,
         [receivedBy, invoiceId]
       );
+
+      // Накладная по заказу: полученное — в заказ, статус заказа пересчитывается
+      if (invoice.rows[0].purchase_order_id) {
+        await receiveFromInvoice(client, invoiceId, invoice.rows[0].purchase_order_id);
+      }
 
       // Долг поставщику растёт на сумму принятой накладной
       if (invoice.rows[0].supplier_id && invoice.rows[0].total_amount) {
