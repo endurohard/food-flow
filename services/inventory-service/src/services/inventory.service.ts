@@ -33,7 +33,14 @@ export class InventoryService {
     if (filters.category) { conditions.push(`i.category = $${p++}`); values.push(filters.category); }
     if (filters.search) { conditions.push(`i.name ILIKE $${p++}`); values.push(`%${filters.search}%`); }
 
-    let query = `SELECT i.*, COALESCE(SUM(s.quantity), 0) as total_stock
+    // batch_qty / batch_value — что лежит в партиях и по каким ценам. Стоимость
+    // склада считается по ним (по ним же идёт себестоимость продаж), а не
+    // «остаток × цена последней накладной», которая завышала или занижала её.
+    let query = `SELECT i.*, COALESCE(SUM(s.quantity), 0) as total_stock,
+       (SELECT COALESCE(SUM(b.quantity), 0) FROM inventory_batches b
+         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL) AS batch_qty,
+       (SELECT COALESCE(SUM(b.quantity * b.cost_price), 0) FROM inventory_batches b
+         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL) AS batch_value
        FROM inventory_items i
        LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id
        ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
@@ -248,10 +255,14 @@ export class InventoryService {
     expiryDate?: string;
     supplierId?: string;
     invoiceId?: string;
-  }): Promise<any> {
-    const client = await this.pool.connect();
+  }, externalClient?: any): Promise<any> {
+    // externalClient — соединение с уже открытой транзакцией (приёмка
+    // накладной): тогда движение входит в неё и откатывается вместе с ней.
+    // Без него движение — своя транзакция, как раньше.
+    const own = !externalClient;
+    const client = externalClient || await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      if (own) await client.query('BEGIN');
 
       const isInflow = ['receipt', 'return', 'adjustment_plus'].includes(data.movementType);
       // Ручной расход (списание, корректировка «минус», перемещение, продажа)
@@ -325,13 +336,13 @@ export class InventoryService {
         );
       }
 
-      await client.query('COMMIT');
+      if (own) await client.query('COMMIT');
       return movResult.rows[0];
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (own) await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      if (own) client.release();
     }
   }
 

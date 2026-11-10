@@ -3,6 +3,11 @@ const { Pool } = pkg;
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
+/** Ошибка накладной, понятная пользователю (отдаётся как 400). */
+export class InvoiceError extends Error {
+  constructor(message: string) { super(message); this.name = 'InvoiceError'; }
+}
+
 export class SupplierService {
   private pool: InstanceType<typeof Pool>;
 
@@ -188,6 +193,12 @@ export class SupplierService {
     return result.rows;
   }
 
+  /**
+   * Приёмка накладной — ОДНА транзакция: движения по всем позициям, статус,
+   * долг поставщику. Раньше каждая позиция проводилась своей транзакцией, и
+   * сбой на третьей оставлял первые две на складе при накладной-черновике —
+   * повторное «Принять» оприходовало их дважды.
+   */
   async confirmInvoice(invoiceId: string, receivedBy: string, inventoryService: any, enterpriseId?: string): Promise<any> {
     const client = await this.pool.connect();
     try {
@@ -203,21 +214,38 @@ export class SupplierService {
 
       const items = await client.query('SELECT * FROM supply_invoice_items WHERE invoice_id = $1', [invoiceId]);
 
-      // Create stock movements for each item
+      // Проверки до проводок: позиция без товара из справочника входила в
+      // сумму и в долг, но на склад не попадала — молча. Теперь приёмка
+      // останавливается и говорит, что поправить.
+      if (!invoice.rows[0].warehouse_id) throw new InvoiceError('Не выбран склад — укажите, куда принимать товар');
+      if (items.rows.length === 0) throw new InvoiceError('В накладной нет позиций');
+      const unlinked = items.rows.filter((i: any) => !i.inventory_item_id);
+      if (unlinked.length) {
+        throw new InvoiceError('Позиции не связаны с товарами склада: '
+          + unlinked.slice(0, 5).map((i: any) => i.name || 'без названия').join(', ')
+          + (unlinked.length > 5 ? ` и ещё ${unlinked.length - 5}` : '')
+          + '. Выберите для них товар из справочника.');
+      }
+      const badQty = items.rows.filter((i: any) => !(parseFloat(i.quantity) > 0));
+      if (badQty.length) throw new InvoiceError('У позиции «' + (badQty[0].name || '') + '» не указано количество');
+
+      // Движения — в этой же транзакции. Партия помнит поставщика и накладную:
+      // по ним видно, от кого товар и по какой цене, и возможен возврат поставщику.
       for (const item of items.rows) {
-        if (item.inventory_item_id && invoice.rows[0].warehouse_id) {
-          await inventoryService.addStockMovement({
-            warehouseId: invoice.rows[0].warehouse_id,
-            inventoryItemId: item.inventory_item_id,
-            movementType: 'receipt',
-            quantity: parseFloat(item.quantity),
-            costPrice: item.price_per_unit ? parseFloat(item.price_per_unit) : undefined,
-            referenceType: 'invoice',
-            referenceId: invoiceId,
-            performedBy: receivedBy,
-            enterpriseId: invoice.rows[0].enterprise_id
-          });
-        }
+        await inventoryService.addStockMovement({
+          warehouseId: invoice.rows[0].warehouse_id,
+          inventoryItemId: item.inventory_item_id,
+          movementType: 'receipt',
+          quantity: parseFloat(item.quantity),
+          costPrice: item.price_per_unit ? parseFloat(item.price_per_unit) : undefined,
+          referenceType: 'invoice',
+          referenceId: invoiceId,
+          performedBy: receivedBy,
+          enterpriseId: invoice.rows[0].enterprise_id,
+          supplierId: invoice.rows[0].supplier_id || undefined,
+          invoiceId,
+          notes: 'Накладная ' + (invoice.rows[0].invoice_number || '')
+        }, client);
       }
 
       // Update invoice status

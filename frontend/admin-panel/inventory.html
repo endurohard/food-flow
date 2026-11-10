@@ -1366,7 +1366,7 @@ AUTH.requireAuth();
               <th>Количество</th>
               <th>Минимум</th>
               <th>Статус</th>
-              <th>Цена закупки</th>
+              <th title="Цена последней накладной или прихода">Последняя цена</th>
               <th>Стоимость</th>
               <th>Действия</th>
             </tr>
@@ -2167,7 +2167,9 @@ AUTH.requireAuth();
           id: i.id, name: i.name, category: i.category || 'other',
           quantity: parseFloat(i.total_stock) || 0, unit: i.unit,
           minQuantity: parseFloat(i.min_stock) || 0,
-          costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || ''
+          costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || '',
+          batchQty: i.batch_qty !== undefined ? parseFloat(i.batch_qty) || 0 : null,
+          batchValue: i.batch_value !== undefined ? parseFloat(i.batch_value) || 0 : null
         }));
 
         // Склад нужен для движений; его отсутствие — тоже причина не включать
@@ -2220,6 +2222,14 @@ AUTH.requireAuth();
       else if (tab === 'reports') { loadReceiptMovements().then(renderReports); }
       else if (tab === 'production') loadProductionRuns();
       else if (tab === 'invoices') loadSupplierInvoices();
+    }
+
+    // Стоимость остатка — по партиям (по ним же считается себестоимость
+    // продаж). Часть остатка без партии с ценой — по последней закупке.
+    function stockValue(item) {
+      if (item.batchValue === null || item.batchValue === undefined) return item.quantity * (item.costPrice || 0);
+      const rest = Math.max(0, item.quantity - (item.batchQty || 0));
+      return item.batchValue * (item.quantity > 0 ? Math.min(1, item.quantity / Math.max(item.batchQty || 0, 1e-9)) : 0) + rest * (item.costPrice || 0);
     }
 
     function getItemStatus(item) {
@@ -2288,7 +2298,7 @@ AUTH.requireAuth();
         const status = getItemStatus(item);
         const percentage = (item.quantity / (item.minQuantity * 2)) * 100;
         const barClass = percentage > 60 ? 'high' : percentage > 30 ? 'medium' : 'low';
-        const totalValue = item.quantity * (item.costPrice || 0);
+        const totalValue = stockValue(item);
 
         return `
           <tr>
@@ -2333,7 +2343,7 @@ AUTH.requireAuth();
       document.getElementById('outOfStockItems').textContent = stats.outOfStock;
 
       // Calculate total inventory value
-      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
+      const totalValue = inventory.reduce((sum, item) => sum + stockValue(item), 0);
       document.getElementById('totalInventoryValueDisplay').textContent = totalValue.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
       document.getElementById('totalInventoryCount').textContent = stats.total;
     }
@@ -3060,7 +3070,7 @@ AUTH.requireAuth();
 
     function renderReports() {
       loadAnalysisReports();
-      const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
+      const totalValue = inventory.reduce((sum, item) => sum + stockValue(item), 0);
       // Закупки за месяц считаем по реальным приходам склада, а не по
       // локальным «заказам»: прежняя цифра жила в localStorage браузера.
       const now = new Date();

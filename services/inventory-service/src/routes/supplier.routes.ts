@@ -187,6 +187,9 @@ router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res:
     if (error.message === 'Invoice already confirmed' || error.message === 'Invoice not found') {
       return res.status(400).json({ error: error.message });
     }
+    if (error.name === 'InvoiceError') {
+      return res.status(400).json({ error: error.message, message: error.message });
+    }
     // Накладная выписана на склад другого предприятия (заведена мимо API —
     // скриптом или импортом). Триггер миграции 045 не даёт оприходовать товар
     // на чужой склад; это ошибка данных, а не сбой сервиса.
