@@ -58,7 +58,12 @@ router.get('/:id/cost', authenticateUser, async (req: Request, res: Response) =>
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
-    const cost = await techCardService.getCostCalculation(req.params.id, isSuper ? undefined : req.enterpriseId);
+    const warehouseId = req.query.warehouseId ? String(req.query.warehouseId) : undefined;
+    if (warehouseId && Joi.string().uuid().validate(warehouseId).error) {
+      return res.status(400).json({ error: 'Validation error', message: 'Некорректный склад' });
+    }
+    // Без склада — основной склад заведения блюда (с него спишет продажа)
+    const cost = await techCardService.getCostCalculation(req.params.id, isSuper ? undefined : req.enterpriseId, warehouseId);
     if (!cost) return res.status(404).json({ error: 'Tech card not found' });
     return res.json({ cost });
   } catch (error) {

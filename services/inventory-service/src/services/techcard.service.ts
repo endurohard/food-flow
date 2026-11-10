@@ -64,7 +64,11 @@ export class TechCardService {
     return result.rows;
   }
 
-  async getById(techCardId: string, enterpriseId?: string): Promise<any> {
+  /**
+   * warehouseId — склад, по чьим партиям считать среднюю цену остатка.
+   * Без него средняя считается по всем складам предприятия (как раньше).
+   */
+  async getById(techCardId: string, enterpriseId?: string, warehouseId?: string | null): Promise<any> {
     const conds = ['tc.id = $1'];
     const values: any[] = [techCardId];
     if (enterpriseId) { conds.push(`tc.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
@@ -100,7 +104,11 @@ export class TechCardService {
           WHERE b.inventory_item_id = tci.inventory_item_id
             AND b.is_depleted = false
             AND b.quantity > 0
-            AND b.cost_price IS NOT NULL) AS avg_cost_price,
+            AND b.cost_price IS NOT NULL
+            AND ($2::uuid IS NULL OR b.warehouse_id = $2::uuid)) AS avg_cost_price,
+        -- Цена последнего прихода как есть: ею FIFO закрывает списание, когда
+        -- партий на складе не хватает (lastCost в inventory.service)
+        ii.cost_price AS last_purchase_price,
         -- Плановая себестоимость по собственной техкарте выпуска (миграция
         -- 042). Нужна для заготовки, которую ещё ни разу не производили: у
         -- неё нет ни партий, ни цены прихода — покупать её не у кого, — и
@@ -109,7 +117,7 @@ export class TechCardService {
        FROM tech_card_ingredients tci
        INNER JOIN inventory_items ii ON tci.inventory_item_id = ii.id
        WHERE tci.tech_card_id = $1`,
-      [techCardId]
+      [techCardId, warehouseId || null]
     );
 
     return { ...result.rows[0], ingredients: ingredients.rows };
@@ -395,8 +403,38 @@ export class TechCardService {
     return r.rows;
   }
 
-  async getCostCalculation(techCardId: string, enterpriseId?: string): Promise<any> {
-    const card = await this.getById(techCardId, enterpriseId);
+  /**
+   * Склад, с которого продажа блюда спишет ингредиенты: основной склад
+   * заведения, к которому относится блюдо (так выбирает order-service при
+   * закрытии заказа). Явно переданный склад проверяется на принадлежность
+   * предприятию. null — склад не определить, считаем по всем складам.
+   */
+  async resolveCostWarehouse(techCardId: string, enterpriseId?: string, warehouseId?: string):
+      Promise<{ id: string; name: string } | null> {
+    if (warehouseId) {
+      const r = await this.pool.query(
+        `SELECT id, name FROM warehouses WHERE id = $1${enterpriseId ? ' AND enterprise_id = $2' : ''}`,
+        enterpriseId ? [warehouseId, enterpriseId] : [warehouseId]
+      );
+      return r.rows[0] || null;
+    }
+    const r = await this.pool.query(
+      `SELECT w.id, w.name
+         FROM tech_cards tc
+         JOIN menu_items mi ON mi.id = tc.menu_item_id
+         JOIN warehouses w ON w.restaurant_id = mi.restaurant_id AND COALESCE(w.is_active, true)
+        WHERE tc.id = $1
+        ORDER BY (w.warehouse_type = 'main') DESC, w.created_at ASC
+        LIMIT 1`,
+      [techCardId]
+    );
+    return r.rows[0] || null;
+  }
+
+  async getCostCalculation(techCardId: string, enterpriseId?: string, warehouseId?: string): Promise<any> {
+    const wh = await this.resolveCostWarehouse(techCardId, enterpriseId, warehouseId);
+    if (warehouseId && !wh) return null;
+    const card = await this.getById(techCardId, enterpriseId, wh ? wh.id : null);
     if (!card) return null;
 
     let totalCost = 0;
@@ -414,7 +452,11 @@ export class TechCardService {
       // производили: партий нет, прихода нет, но стоимость известна из
       // состава. Без неё строка считалась по нулю.
       const planned = parseFloat(ing.effective_cost_price);
-      const fallback = parseFloat(ing.cost_price) || 0;
+      // По конкретному складу: нет партий на нём — цена последнего прихода,
+      // как и при списании по FIFO, а не средняя по чужим складам (которую
+      // даёт item_effective_cost)
+      const lastPurchase = parseFloat(ing.last_purchase_price) || 0;
+      const fallback = wh ? lastPurchase : (parseFloat(ing.cost_price) || 0);
       const unitPrice = Number.isFinite(avg) ? avg
         : (fallback > 0 ? fallback : (Number.isFinite(planned) ? planned : 0));
       const priceSource = Number.isFinite(avg) ? 'stock_avg'
@@ -465,6 +507,10 @@ export class TechCardService {
       outputQuantity: outputQty,
       menuPrice,
       totalCost,
+      // По какому складу посчитана средняя цена остатка
+      warehouseId: wh ? wh.id : null,
+      warehouseName: wh ? wh.name : null,
+      priceScope: wh ? 'warehouse' : 'enterprise',
       // Итоги по массе: брутто взяли со склада, выход — вес готового блюда.
       // Именно выход сверяется с нормой в техкарте.
       totalGross: Math.round(ingredientCosts.reduce((s: number, i: any) => s + i.grossQuantity, 0) * 1000) / 1000,

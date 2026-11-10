@@ -30,6 +30,9 @@ function makeService(card: any, ingredients: any[]) {
       if (/FROM tech_card_ingredients/.test(sql)) {
         return { rows: ingredients, rowCount: ingredients.length };
       }
+      // Склад заведения не определён — расчёт по всему предприятию (как до
+      // привязки к складу); сценарий со складом — в techcard.warehouse.test
+      if (/JOIN warehouses w/.test(sql)) return { rows: [], rowCount: 0 };
       return { rows: [card], rowCount: 1 };
     })
   };
