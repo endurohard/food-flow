@@ -129,3 +129,21 @@ describe('addStockMovement внутри чужой транзакции', () => 
     expect(c.release).toHaveBeenCalled();
   });
 });
+
+describe('ошибки приёмки — по-русски и с кодом', () => {
+  it('уже принятая накладная — 409 «Накладная уже принята», движений нет', async () => {
+    const client = makeClient([item('1')], { ...INVOICE, status: 'received' });
+    const inv = new InventoryService('postgresql://test');
+    const spy = jest.spyOn(inv, 'addStockMovement');
+    await expect(supplierWith(client).confirmInvoice('inv-1', 'u', inv, 'e'))
+      .rejects.toMatchObject({ name: 'InvoiceError', status: 409, message: 'Накладная уже принята' });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('нет накладной (или чужая) — 404 «Накладная не найдена»', async () => {
+    const client = makeClient([], undefined as any);
+    client.query = jest.fn(async () => ({ rows: [], rowCount: 0 }));
+    await expect(supplierWith(client).confirmInvoice('inv-x', 'u', new InventoryService('postgresql://test'), 'e'))
+      .rejects.toMatchObject({ name: 'InvoiceError', status: 404, message: 'Накладная не найдена' });
+  });
+});

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { InvoiceItemService, InvoiceItemError } from '../services/invoice-item.service';
 import { authenticateUser } from '../middleware/auth.middleware';
+import { requireStockWriter } from '../middleware/stock-writer';
 import { config } from '../config';
 
 /**
@@ -54,7 +55,7 @@ function body(req: Request, res: Response): any | null {
   return value;
 }
 
-router.post('/invoices/:id/items', authenticateUser, scope, async (req: Request, res: Response) => {
+router.post('/invoices/:id/items', authenticateUser, requireStockWriter, scope, async (req: Request, res: Response) => {
   try {
     const value = body(req, res); if (!value) return;
     const item = await service.add(req.params.id, (req as any).scopeEnterprise, value);
@@ -62,7 +63,7 @@ router.post('/invoices/:id/items', authenticateUser, scope, async (req: Request,
   } catch (e) { return fail(res, e, 'Add invoice item error:'); }
 });
 
-router.put('/invoices/:id/items/:itemId', authenticateUser, scope, async (req: Request, res: Response) => {
+router.put('/invoices/:id/items/:itemId', authenticateUser, requireStockWriter, scope, async (req: Request, res: Response) => {
   try {
     const value = body(req, res); if (!value) return;
     const item = await service.update(req.params.id, (req as any).scopeEnterprise, req.params.itemId, value);
@@ -70,7 +71,7 @@ router.put('/invoices/:id/items/:itemId', authenticateUser, scope, async (req: R
   } catch (e) { return fail(res, e, 'Update invoice item error:'); }
 });
 
-router.delete('/invoices/:id/items/:itemId', authenticateUser, scope, async (req: Request, res: Response) => {
+router.delete('/invoices/:id/items/:itemId', authenticateUser, requireStockWriter, scope, async (req: Request, res: Response) => {
   try {
     await service.remove(req.params.id, (req as any).scopeEnterprise, req.params.itemId);
     return res.json({ ok: true });

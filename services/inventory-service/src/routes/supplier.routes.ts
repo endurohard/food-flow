@@ -4,6 +4,7 @@ import { SupplierService } from '../services/supplier.service';
 import { InventoryService } from '../services/inventory.service';
 import express from 'express';
 import { authenticateUser, authenticateInternal } from '../middleware/auth.middleware';
+import { requireStockWriter, requireSupplierPayer } from '../middleware/stock-writer';
 import { PHOTO_MIME } from '../services/supplier.service';
 import { config } from '../config';
 
@@ -56,7 +57,7 @@ router.post('/invoices/from-photo',
       }, config.invoiceUploadDir);
       return res.status(result.duplicate ? 200 : 201).json(result);
     } catch (error: any) {
-      if (error.name === 'InvoiceError') return res.status(400).json({ error: error.message, message: error.message });
+      if (error.name === 'InvoiceError') return res.status(error.status || 400).json({ error: error.message, message: error.message });
       console.error('Invoice from photo error:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
@@ -89,7 +90,7 @@ router.get('/', authenticateUser, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/', authenticateUser, async (req: Request, res: Response) => {
+router.post('/', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       name: Joi.string().min(1).max(255).required(),
@@ -111,7 +112,7 @@ router.post('/', authenticateUser, async (req: Request, res: Response) => {
   }
 });
 
-router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/:id', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const supplier = await supplierService.update(req.params.id, req.body, req.enterpriseId);
     if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
@@ -122,7 +123,7 @@ router.put('/:id', authenticateUser, async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/:id', authenticateUser, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const deleted = await supplierService.delete(req.params.id, req.enterpriseId);
     if (!deleted) return res.status(404).json({ error: 'Supplier not found' });
@@ -167,7 +168,7 @@ router.get('/invoices/next-number', authenticateUser, async (req: Request, res: 
   }
 });
 
-router.post('/invoices', authenticateUser, async (req: Request, res: Response) => {
+router.post('/invoices', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {
@@ -197,7 +198,7 @@ const draftHeaderSchema = Joi.object({
   notes: Joi.string().max(1000).allow(null, '').optional()
 }).min(1);
 
-router.put('/invoices/:id', authenticateUser, async (req: Request, res: Response) => {
+router.put('/invoices/:id', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {
@@ -218,7 +219,7 @@ router.put('/invoices/:id', authenticateUser, async (req: Request, res: Response
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
     return res.json({ invoice });
   } catch (error: any) {
-    if (error.name === 'InvoiceError') return res.status(400).json({ error: error.message, message: error.message });
+    if (error.name === 'InvoiceError') return res.status(error.status || 400).json({ error: error.message, message: error.message });
     console.error('Update invoice error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -243,7 +244,7 @@ router.get('/invoices/:id/items', authenticateUser, async (req: Request, res: Re
 
 // POST /invoices/:id/items — в invoice-item.routes.ts (фасовки, сумма считается сервером)
 
-router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res: Response) => {
+router.post('/invoices/:id/confirm', authenticateUser, requireStockWriter, async (req: Request, res: Response) => {
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) {
@@ -252,11 +253,8 @@ router.post('/invoices/:id/confirm', authenticateUser, async (req: Request, res:
     const invoice = await supplierService.confirmInvoice(req.params.id, req.userId!, inventoryService, isSuper ? undefined : req.enterpriseId);
     return res.json({ invoice });
   } catch (error: any) {
-    if (error.message === 'Invoice already confirmed' || error.message === 'Invoice not found') {
-      return res.status(400).json({ error: error.message });
-    }
     if (error.name === 'InvoiceError') {
-      return res.status(400).json({ error: error.message, message: error.message });
+      return res.status(error.status || 400).json({ error: error.message, message: error.message });
     }
     // Накладная выписана на склад другого предприятия (заведена мимо API —
     // скриптом или импортом). Триггер миграции 045 не даёт оприходовать товар
@@ -287,7 +285,7 @@ router.get('/:id/balance', authenticateUser, async (req: Request, res: Response)
 });
 
 // Оплата поставщику (по накладной или погашение долга)
-router.post('/:id/payments', authenticateUser, async (req: Request, res: Response) => {
+router.post('/:id/payments', authenticateUser, requireSupplierPayer, async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
       amount: Joi.number().positive().required(),
@@ -322,7 +320,7 @@ router.post('/:id/payments', authenticateUser, async (req: Request, res: Respons
 
     return res.status(201).json(result);
   } catch (error: any) {
-    if (error.message && /not found/i.test(error.message)) return res.status(400).json({ error: error.message });
+    if (error.name === 'InvoiceError') return res.status(error.status || 400).json({ error: error.message, message: error.message });
     console.error('Pay supplier error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }

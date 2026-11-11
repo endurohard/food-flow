@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 import { PurchaseOrderService, PurchaseOrderError } from '../services/purchase-order.service';
-import { authenticateUser, requireRole } from '../middleware/auth.middleware';
+import { authenticateUser } from '../middleware/auth.middleware';
+import { requireStockWriter } from '../middleware/stock-writer';
 import { config } from '../config';
 
 /**
@@ -11,7 +12,8 @@ import { config } from '../config';
  */
 const router = Router();
 const service = new PurchaseOrderService(config.database.url);
-const WRITE = requireRole('admin', 'owner', 'manager', 'operator');
+// Закупщик (is_purchaser) тоже: заказывать поставщику — его работа
+const WRITE = requireStockWriter;
 
 const uuid = Joi.string().uuid();
 const itemSchema = Joi.object({

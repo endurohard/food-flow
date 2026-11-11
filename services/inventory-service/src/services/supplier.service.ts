@@ -9,7 +9,8 @@ import { logger } from '../utils/logger';
 
 /** Ошибка накладной, понятная пользователю (отдаётся как 400). */
 export class InvoiceError extends Error {
-  constructor(message: string) { super(message); this.name = 'InvoiceError'; }
+  // status: 400 — неверные данные, 404 — нет такой, 409 — уже принята
+  constructor(message: string, public status = 400) { super(message); this.name = 'InvoiceError'; }
 }
 
 const PHOTO_EXT: Record<string, string> = {
@@ -156,9 +157,9 @@ export class SupplierService {
         `SELECT status FROM supply_invoices WHERE id = $1 FOR UPDATE`,
         [invoiceId]
       );
-      if (!inv.rows[0]) throw new Error('Invoice not found');
+      if (!inv.rows[0]) throw new InvoiceError('Накладная не найдена', 404);
       if (inv.rows[0].status === 'received') {
-        throw new Error('Invoice already confirmed — состав изменить нельзя');
+        throw new InvoiceError('Накладная уже принята — состав изменить нельзя', 409);
       }
 
       const result = await client.query(
@@ -316,8 +317,8 @@ export class SupplierService {
       const invVals: any[] = [invoiceId];
       if (enterpriseId) { invConds.push('enterprise_id = $2'); invVals.push(enterpriseId); }
       const invoice = await client.query(`SELECT * FROM supply_invoices WHERE ${invConds.join(' AND ')} FOR UPDATE`, invVals);
-      if (!invoice.rows[0]) throw new Error('Invoice not found');
-      if (invoice.rows[0].status === 'received') throw new Error('Invoice already confirmed');
+      if (!invoice.rows[0]) throw new InvoiceError('Накладная не найдена', 404);
+      if (invoice.rows[0].status === 'received') throw new InvoiceError('Накладная уже принята', 409);
 
       const items = await client.query('SELECT * FROM supply_invoice_items WHERE invoice_id = $1', [invoiceId]);
 
@@ -453,7 +454,7 @@ export class SupplierService {
       const supVals: any[] = [supplierId];
       if (enterpriseId) { supConds.push('enterprise_id = $2'); supVals.push(enterpriseId); }
       const sup = await client.query(`SELECT * FROM suppliers WHERE ${supConds.join(' AND ')} FOR UPDATE`, supVals);
-      if (!sup.rows[0]) throw new Error('Supplier not found');
+      if (!sup.rows[0]) throw new InvoiceError('Поставщик не найден', 404);
 
       let invoice: any = null;
       if (data.invoiceId) {
@@ -462,7 +463,7 @@ export class SupplierService {
           [data.invoiceId, supplierId]
         );
         invoice = inv.rows[0];
-        if (!invoice) throw new Error('Invoice not found for this supplier');
+        if (!invoice) throw new InvoiceError('Накладная этого поставщика не найдена', 404);
         const newPaid = (parseFloat(invoice.paid_amount) || 0) + data.amount;
         const total = parseFloat(invoice.total_amount) || 0;
         const paymentStatus = newPaid >= total - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
