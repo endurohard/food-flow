@@ -56,7 +56,9 @@ export class InventoryService {
          WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL${batchWh}) AS batch_value,
        (SELECT COALESCE(json_agg(json_build_object('warehouseId', s2.warehouse_id, 'name', w2.name, 'qty', s2.quantity) ORDER BY w2.name), '[]'::json)
           FROM inventory_stock s2 JOIN warehouses w2 ON w2.id = s2.warehouse_id
-         WHERE s2.inventory_item_id = i.id AND s2.quantity <> 0) AS by_warehouse
+         -- склад той же организации: у inventory_stock нет своего тенанта, и
+         -- остаток, легший на чужой склад, показал бы владельцу чужой склад
+         WHERE s2.inventory_item_id = i.id AND s2.quantity <> 0 AND w2.enterprise_id = i.enterprise_id) AS by_warehouse
        FROM inventory_items i
        LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id${stockOn}
        ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
