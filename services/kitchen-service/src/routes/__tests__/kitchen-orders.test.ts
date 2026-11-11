@@ -73,3 +73,49 @@ describe('GET /orders для экрана кухни', () => {
     expect((await run('/orders', { restaurantId: 'r1' })).status).toBe(403);
   });
 });
+
+describe('PUT /orders/:id/status — через order-service, а не прямым UPDATE', () => {
+  async function put(status: string, upstream: any) {
+    const calls: any[] = [];
+    (global as any).fetch = jest.fn(async (url: string, opt: any) => {
+      calls.push({ url, opt });
+      if (upstream instanceof Error) throw upstream;
+      return { status: upstream.status, ok: upstream.status < 300, json: async () => upstream.body || {} };
+    });
+    const layer = router.stack.find((l: any) => l.route && l.route.path === '/orders/:orderId/status' && l.route.methods.put);
+    const req: any = { params: { orderId: 'o-1' }, body: { status }, query: {}, headers: { authorization: 'Bearer T' } };
+    let code = 200; let body: any;
+    const res: any = { status(c: number) { code = c; return res; }, json(b: any) { body = b; return res; } };
+    for (const l of router.stack.filter((x: any) => !x.route)) {
+      let next = false; await l.handle(req, res, () => { next = true; }); if (!next) return { code, body, calls };
+    }
+    for (const h of layer.route.stack.map((s: any) => s.handle)) {
+      let next = false; await h(req, res, () => { next = true; }); if (!next) break;
+    }
+    return { code, body, calls };
+  }
+
+  it('«Выдан» уходит в order-service с токеном пользователя; своего UPDATE нет', async () => {
+    const r = await put('completed', { status: 200 });
+    expect(r.code).toBe(200);
+    expect(r.calls).toHaveLength(1);
+    expect(r.calls[0].url).toMatch(/\/api\/orders\/o-1\/status$/);
+    expect(r.calls[0].opt).toMatchObject({ method: 'PUT', headers: { Authorization: 'Bearer T' } });
+    expect(JSON.parse(r.calls[0].opt.body)).toEqual({ status: 'completed' });
+    expect(queries.some((q) => /UPDATE orders/i.test(q.sql))).toBe(false);
+  });
+
+  it('чужой/несуществующий заказ — 404 от order-service', async () => {
+    expect((await put('ready', { status: 404 })).code).toBe(404);
+  });
+
+  it('order-service недоступен — 502, а не «успех»', async () => {
+    expect((await put('ready', new Error('ECONNREFUSED'))).code).toBe(502);
+  });
+
+  it('недопустимый статус — 400 без обращения к order-service', async () => {
+    const r = await put('cancelled', { status: 200 });
+    expect(r.code).toBe(400);
+    expect(r.calls).toHaveLength(0);
+  });
+});

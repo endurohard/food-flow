@@ -32,6 +32,10 @@ export const config = {
     secret: process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production'
   },
 
+  // Смена статуса заказа идёт через order-service: только он пишет событие
+  // order.<статус> в outbox (баллы лояльности, освобождение стола)
+  orderServiceUrl: process.env.ORDER_SERVICE_URL || 'http://order-service:3003',
+
   printer: {
     // Printer configuration
     type: process.env.PRINTER_TYPE || 'network', // 'usb', 'network', or 'bluetooth'

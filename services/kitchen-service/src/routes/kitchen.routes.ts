@@ -127,26 +127,29 @@ router.put('/orders/:orderId/status', async (req: Request, res: Response) => {
       });
     }
 
-    const isSuper = req.userRole === 'super_admin';
-    if (!isSuper && !req.enterpriseId) {
+    if (!req.enterpriseId && req.userRole !== 'super_admin') {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
 
-    // Tenant guard: fail if JWT tenant doesn't match the order's enterprise
-    const whereConds = ['id = $2'];
-    const vals: any[] = [status, orderId];
-    if (!isSuper) {
-      whereConds.push(`enterprise_id = $3`);
-      vals.push(req.enterpriseId);
+    // Раньше здесь был прямой UPDATE orders: статус менялся без события
+    // order.<статус>, и закрытый с кухни заказ не начислял баллы и не
+    // освобождал стол. Теперь — через order-service с токеном пользователя:
+    // там та же проверка организации, и событие пишется в outbox.
+    let upstream: globalThis.Response;
+    try {
+      upstream = await fetch(`${config.orderServiceUrl}/api/orders/${encodeURIComponent(orderId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: req.headers.authorization || '' },
+        body: JSON.stringify({ status }),
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch (e: any) {
+      console.error('order-service unreachable:', e?.message || e);
+      return res.status(502).json({ error: 'Сервис заказов недоступен', message: 'Сервис заказов недоступен' });
     }
-
-    const upd = await db.query(
-      `UPDATE orders SET status = $1, updated_at = NOW() WHERE ${whereConds.join(' AND ')}`,
-      vals
-    );
-    if (upd.rowCount === 0) {
-      return res.status(404).json({ error: 'Order not found or access denied' });
-    }
+    const body: any = await upstream.json().catch(() => ({}));
+    if (upstream.status === 404) return res.status(404).json({ error: 'Order not found or access denied' });
+    if (!upstream.ok) return res.status(upstream.status).json({ error: body.error || 'Failed to update order status' });
 
     res.json({ message: 'Order status updated', orderId, status });
   } catch (error) {
