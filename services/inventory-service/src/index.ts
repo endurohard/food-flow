@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import inventoryRoutes from './routes/inventory.routes';
 import supplierRoutes from './routes/supplier.routes';
 import purchaseOrderRoutes from './routes/purchase-order.routes';
+import inventoryCountRoutes from './routes/inventory-count.routes';
 import invoiceItemRoutes from './routes/invoice-item.routes';
 import techCardRoutes from './routes/techcard.routes';
 import productionRoutes from './routes/production.routes';
@@ -53,6 +54,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // Routes
+app.use('/api/inventory', inventoryCountRoutes);
 app.use('/api/inventory', productionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 // Заказы поставщикам — раньше маршрутов поставщиков (у тех есть GET /:id)

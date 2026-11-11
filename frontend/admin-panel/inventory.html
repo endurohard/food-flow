@@ -795,6 +795,53 @@
     .search-icon svg { display: block; }
     .supplier-info a { color: var(--color-primary); }
 
+    /* ── Инвентаризация ── */
+    .cnt-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+    .cnt-draft { background: #E3ECF8; color: #1D4E89; }
+    .cnt-posted { background: #E7F1E9; color: #1F5C39; }
+    .cnt-cancelled { background: #ECECEC; color: #5A5A5A; }
+    .cnt-minus { color: #9E3420; font-weight: 600; }
+    .cnt-plus { color: #1D4E89; font-weight: 600; }
+    .cnt-zero { color: #1F5C39; }
+    .cnt-muted { color: var(--color-text-secondary); }
+    .cnt-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .cnt-bar .search-box { min-width: 200px; flex: 1; }
+    .cnt-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+    .cnt-sum div { background: var(--admin-content-bg); border-radius: 10px; padding: 10px 14px; }
+    .cnt-sum small { display: block; font-size: 12px; color: var(--color-text-secondary); }
+    .cnt-sum b { font-size: 20px; }
+    .cnt-table { min-width: 0 !important; font-size: 14px; }
+    .cnt-table td, .cnt-table th { padding: 8px 10px !important; vertical-align: middle; }
+    .cnt-table td.cnt-in { white-space: nowrap; }
+    .cnt-table input { width: 110px; min-height: 40px; padding: 6px 10px; text-align: right; }
+    .cnt-table tr.cnt-group td { background: var(--admin-content-bg); font-size: 12px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .03em; }
+    .cnt-save { font-size: 13px; color: var(--color-text-secondary); min-width: 110px; }
+    .cnt-footer { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+    .cnt-footer .spacer { flex: 1; }
+    .cnt-zero-opt { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+    #countModal .table-wrapper { padding: 0; max-height: max(240px, calc(100vh - 430px)); overflow: auto; }
+    .cnt-unit { font-size: 13px; color: var(--color-text-secondary); margin-left: 6px; }
+    .cnt-warn { display: block; font-size: 12px; color: #9E3420; font-weight: 600; white-space: normal; }
+    #countModal thead th { position: sticky; top: 0; z-index: 1; }
+    @media (max-width: 760px) {
+      .cnt-sum { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .cnt-sum b { font-size: 17px; }
+      .cnt-table thead { display: none; }
+      .cnt-table, .cnt-table tbody { display: block; }
+      .cnt-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border-bottom: 1px solid var(--admin-border); }
+      .cnt-table td { display: block; padding: 0 !important; border: 0 !important; }
+      .cnt-table td.cnt-name { grid-column: 1; }
+      .cnt-table td.cnt-in { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+      .cnt-table td.cnt-meta { grid-column: 1; font-size: 13px; }
+      .cnt-table td[data-l]::before { content: attr(data-l) ': '; color: var(--color-text-secondary); }
+      #countModal .table-wrapper { max-height: none; overflow: visible; }
+      .cnt-table input { width: 88px; }
+      .cnt-unit { margin-left: 4px; }
+      .cnt-table tr.cnt-group { display: block; padding: 6px 12px; }
+      #countsTableBody td:nth-child(3) { display: none; }
+      #countsTab thead th:nth-child(3) { display: none; }
+    }
+
     /* ── Остатки по складам, сроки годности ── */
     .wh-pick { display: flex; align-items: center; gap: 8px; }
     .wh-pick label { font-size: 14px; font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; }
@@ -1454,6 +1501,7 @@ AUTH.requireAuth();
       <button class="tab" onclick="switchTab('suppliers')">Поставщики</button>
       <button class="tab" onclick="switchTab('purchases')">Заказы поставщикам</button>
       <button class="tab" onclick="switchTab('invoices')">Накладные</button>
+      <button class="tab" onclick="switchTab('counts')">Инвентаризация</button>
       <button class="tab" onclick="switchTab('orders')">Журнал движений</button>
       <button class="tab" onclick="switchTab('reports')">Отчёты</button>
     </div>
@@ -1740,6 +1788,23 @@ AUTH.requireAuth();
           <tbody id="invoicesTableBody" data-cards="1">
             <tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Инвентаризация: пересчёт склада -->
+    <div id="countsTab" class="tab-content">
+      <div style="display:flex;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:20px;font-weight:700;">Инвентаризация</h2>
+          <div style="font-size:14px;color:var(--color-text-secondary);margin-top:4px;">Посчитайте товар на полке — система покажет недостачу и излишки в рублях и поправит остатки.</div>
+        </div>
+        <button class="btn btn-primary" onclick="openNewCount()">Новая инвентаризация</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Номер</th><th>Склад</th><th>Посчитано</th><th>Недостача</th><th>Излишек</th><th>Статус</th></tr></thead>
+          <tbody id="countsTableBody"><tr><td colspan="6" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -2410,6 +2475,73 @@ AUTH.requireAuth();
     </div>
   </div>
 
+  <!-- Новая инвентаризация -->
+  <div class="modal" id="newCountModal">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Новая инвентаризация</h2>
+        <button class="close-btn" onclick="closeNewCount()" aria-label="Закрыть">&times;</button>
+      </div>
+      <form onsubmit="createCount(event)">
+        <div class="form-group">
+          <label class="form-label" for="newCountWarehouse">Склад</label>
+          <select class="form-select" id="newCountWarehouse" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newCountCategory">Что считаем</label>
+          <select class="form-select" id="newCountCategory"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newCountNotes">Комментарий</label>
+          <input type="text" class="form-input" id="newCountNotes" maxlength="1000" placeholder="Например: плановая, конец месяца">
+        </div>
+        <div id="newCountError" style="color:#9E3420;min-height:18px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeNewCount()">Отмена</button>
+          <button type="submit" class="btn btn-primary" id="newCountSubmit">Начать пересчёт</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Документ инвентаризации -->
+  <div class="modal" id="countModal">
+    <div class="modal-content" style="max-width:1000px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="countTitle">Инвентаризация</h2>
+        <button class="close-btn" onclick="closeCount()" aria-label="Закрыть">&times;</button>
+      </div>
+      <div id="countSub" style="font-size:14px;color:var(--color-text-secondary);margin:-6px 0 12px;"></div>
+      <div class="cnt-bar">
+        <div class="search-box">
+          <span class="search-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="display:block"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg></span>
+          <input type="text" class="search-input" id="countSearch" placeholder="Найти товар…" oninput="renderCountRows()" aria-label="Поиск товара">
+        </div>
+        <div class="filter-buttons" id="countFilters">
+          <button type="button" class="filter-btn active" data-f="all" onclick="setCountFilter('all')">Все</button>
+          <button type="button" class="filter-btn" data-f="todo" onclick="setCountFilter('todo')">Не посчитано</button>
+          <button type="button" class="filter-btn" data-f="diff" onclick="setCountFilter('diff')">С расхождением</button>
+        </div>
+        <span class="cnt-save" id="countSave" aria-live="polite"></span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table cnt-table">
+          <thead><tr><th>Товар</th><th>По учёту</th><th>Факт</th><th>Разница</th><th>Сумма</th></tr></thead>
+          <tbody id="countRows"></tbody>
+        </table>
+      </div>
+      <div class="cnt-sum" id="countSum"></div>
+      <div id="countError" style="color:#9E3420;min-height:18px;"></div>
+      <div class="cnt-footer">
+        <button type="button" class="btn btn-danger" id="countCancelBtn" onclick="cancelCount(this)">Отменить документ</button>
+        <span class="spacer"></span>
+        <label class="cnt-zero-opt" id="countZeroWrap"><input type="checkbox" id="countZero"> Непосчитанное — это ноль</label>
+        <button type="button" class="btn btn-secondary" onclick="closeCount()">Закрыть</button>
+        <button type="button" class="btn btn-primary" id="countPostBtn" onclick="postCount(this)">Провести</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Notification -->
   <div class="notification" id="notification"></div>
 
@@ -2688,6 +2820,7 @@ AUTH.requireAuth();
       else if (tab === 'production') loadProductionRuns();
       else if (tab === 'invoices') loadSupplierInvoices();
       else if (tab === 'purchases') loadPurchaseOrders();
+      else if (tab === 'counts') loadCounts();
     }
 
     // Стоимость остатка — по партиям (по ним же считается себестоимость
@@ -4649,6 +4782,298 @@ AUTH.requireAuth();
       } catch (e) {
         showNotification('❌ ' + (made ? `Создано ${made}, дальше ошибка: ` : '') + e.message);
       } finally { btn.disabled = false; loadPurchaseOrders(); }
+    }
+
+
+    // ===== Инвентаризация =====
+    // Черновик: вводим факт, он сохраняется сам. «Провести» — расхождение от
+    // остатка на момент проведения превращается в корректировки склада.
+    const CNT_STATUS = { draft: 'Идёт пересчёт', posted: 'Проведена', cancelled: 'Отменена' };
+    let countsList = [];
+    let currentCount = null;
+    let countFilter = 'all';
+    const countDirty = new Map();
+    let countTimer = null;
+    let countSaving = null;
+
+    const cntChip = (st) => `<span class="cnt-chip cnt-${esc(st)}">${esc(CNT_STATUS[st] || st)}</span>`;
+    const numRu = (v, d = 3) => (parseFloat(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: d });
+
+    async function loadCounts() {
+      const tbody = document.getElementById('countsTableBody');
+      try {
+        const res = await AUTH.fetch('/api/inventory/counts');
+        if (!res.ok) throw new Error(await apiError(res));
+        countsList = (await res.json()).counts || [];
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9E3420;">Ошибка загрузки: ' + esc(e.message) + '</td></tr>';
+        return;
+      }
+      if (!countsList.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-secondary);padding:28px;">Инвентаризаций ещё не было. Начните первую — это 15–30 минут на небольшой склад.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = countsList.map(c => {
+        const done = c.status === 'posted';
+        return `<tr style="cursor:pointer" tabindex="0" onkeydown="if(event.key==='Enter')this.click()" onclick="openCount(${jsArg(c.id)})">
+          <td class="po-num"><strong>${esc(c.count_number)}</strong><div style="font-size:12px;color:var(--color-text-secondary)">${dateRu(c.posted_at || c.created_at)}${c.category ? ' · ' + esc(getCategoryName(c.category)) : ''}</div></td>
+          <td>${esc(c.warehouse_name || '—')}</td>
+          <td class="nowrap">${c.items_counted} из ${c.items_total}</td>
+          <td class="nowrap">${done ? (parseFloat(c.shortage_value) > 0 ? `<span class="cnt-minus">−${money(c.shortage_value)}</span>` : '—') : '<span class="cnt-muted">после проведения</span>'}</td>
+          <td class="nowrap">${done ? (parseFloat(c.surplus_value) > 0 ? `<span class="cnt-plus">+${money(c.surplus_value)}</span>` : '—') : ''}</td>
+          <td>${cntChip(c.status)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function openNewCount() {
+      if (!requireServer('инвентаризация')) return;
+      document.getElementById('newCountError').textContent = '';
+      document.getElementById('newCountNotes').value = '';
+      document.getElementById('newCountWarehouse').innerHTML = warehouses.map(w => `<option value="${esc(w.id)}">${esc(w.name || 'Склад')}</option>`).join('');
+      if (stockWarehouse) document.getElementById('newCountWarehouse').value = stockWarehouse;
+      const cats = [...new Set(inventory.map(i => i.category).filter(Boolean))].sort((a, b) => getCategoryName(a).localeCompare(getCategoryName(b), 'ru'));
+      document.getElementById('newCountCategory').innerHTML = '<option value="">Все товары</option>'
+        + cats.map(c => `<option value="${esc(c)}">Только «${esc(getCategoryName(c))}»</option>`).join('');
+      document.getElementById('newCountModal').classList.add('active');
+    }
+    function closeNewCount() { document.getElementById('newCountModal').classList.remove('active'); }
+
+    async function createCount(ev) {
+      ev.preventDefault();
+      const btn = document.getElementById('newCountSubmit');
+      btn.disabled = true;
+      try {
+        const res = await AUTH.fetch('/api/inventory/counts', jsonOpts('POST', {
+          warehouseId: document.getElementById('newCountWarehouse').value,
+          category: document.getElementById('newCountCategory').value || null,
+          notes: document.getElementById('newCountNotes').value.trim() || null
+        }));
+        if (!res.ok) throw new Error(await apiError(res));
+        const { count } = await res.json();
+        closeNewCount();
+        loadCounts();
+        await openCount(count.id);
+      } catch (e) {
+        document.getElementById('newCountError').textContent = e.message;
+      } finally { btn.disabled = false; }
+    }
+
+    async function openCount(id) {
+      try {
+        const res = await AUTH.fetch('/api/inventory/counts/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error(await apiError(res));
+        currentCount = (await res.json()).count;
+      } catch (e) { showNotification('❌ ' + e.message); return; }
+      countDirty.clear();
+      countFilter = 'all';
+      document.querySelectorAll('#countFilters .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.f === 'all'));
+      document.getElementById('countSearch').value = '';
+      document.getElementById('countError').textContent = '';
+      document.getElementById('countSave').textContent = '';
+      document.getElementById('countZero').checked = false;
+      renderCountHead();
+      renderCountRows();
+      document.getElementById('countModal').classList.add('active');
+      if (currentCount.status === 'draft') {
+        const first = document.querySelector('#countRows input');
+        if (first) setTimeout(() => first.focus(), 60);
+      }
+    }
+
+    async function closeCount() {
+      await flushCountSave();
+      document.getElementById('countModal').classList.remove('active');
+      currentCount = null;
+      loadCounts();
+    }
+
+    function renderCountHead() {
+      const c = currentCount;
+      const draft = c.status === 'draft';
+      document.getElementById('countTitle').innerHTML = 'Инвентаризация № ' + esc(c.count_number) + ' ' + cntChip(c.status);
+      document.getElementById('countSub').textContent = [c.warehouse_name, c.category ? 'только «' + getCategoryName(c.category) + '»' : 'все товары',
+        c.posted_at ? 'проведена ' + new Date(c.posted_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+        c.notes || ''].filter(Boolean).join(' · ');
+      document.getElementById('countPostBtn').style.display = draft ? '' : 'none';
+      document.getElementById('countCancelBtn').style.display = draft ? '' : 'none';
+      document.getElementById('countZeroWrap').style.display = draft ? '' : 'none';
+    }
+
+    // Строка: у черновика — живой остаток и цена, у проведённого — зафиксированные
+    function countLine(it) {
+      const draft = currentCount.status === 'draft';
+      const key = it.inventory_item_id;
+      const raw = countDirty.has(key) ? countDirty.get(key) : (it.counted_qty === null || it.counted_qty === undefined ? null : parseFloat(it.counted_qty));
+      const expected = draft ? parseFloat(it.current_qty) || 0 : parseFloat(it.expected_qty) || 0;
+      const cost = draft ? parseFloat(it.current_cost) || 0 : parseFloat(it.unit_cost) || 0;
+      const counted = raw === null || raw === '' || Number.isNaN(raw) ? null : Number(raw);
+      const diff = counted === null ? null : (draft ? Math.round((counted - expected) * 1000) / 1000 : parseFloat(it.diff_qty) || 0);
+      const value = diff === null ? null : (draft ? Math.round(diff * cost * 100) / 100 : parseFloat(it.diff_value) || 0);
+      return { key, counted, expected, cost, diff, value };
+    }
+
+    function setCountFilter(f) {
+      countFilter = f;
+      document.querySelectorAll('#countFilters .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+      renderCountRows();
+    }
+
+    function renderCountRows() {
+      const c = currentCount;
+      if (!c) return;
+      const draft = c.status === 'draft';
+      const q = document.getElementById('countSearch').value.trim().toLowerCase();
+      let lastCat = null;
+      const html = [];
+      for (const it of c.items) {
+        const l = countLine(it);
+        if (q && !String(it.name).toLowerCase().includes(q)) continue;
+        if (countFilter === 'todo' && l.counted !== null) continue;
+        if (countFilter === 'diff' && !(l.diff !== null && Math.abs(l.diff) > 1e-9)) continue;
+        if (!c.category && it.category !== lastCat) {
+          lastCat = it.category;
+          html.push(`<tr class="cnt-group"><td colspan="5">${esc(getCategoryName(it.category || 'other'))}</td></tr>`);
+        }
+        const unit = window.Units ? Units.norm(it.unit) : it.unit;
+        html.push(`<tr data-item="${esc(l.key)}">
+          <td class="cnt-name"><strong>${esc(it.name)}</strong></td>
+          <td class="cnt-meta nowrap" data-l="по учёту">${baseQty(l.expected, it.unit)}</td>
+          <td class="cnt-in">${draft
+            ? `<input type="number" class="form-input" inputmode="decimal" step="0.001" min="0" value="${l.counted === null ? '' : l.counted}"
+                 aria-label="Факт: ${esc(it.name)}, ${esc(unit)}" placeholder="—" oninput="countInput(this, ${jsArg(l.key)})" onkeydown="countKey(event, this)"><span class="cnt-unit">${esc(unit)}</span>`
+            : (l.counted === null ? '<span class="cnt-muted">не считали</span>' : baseQty(l.counted, it.unit))}</td>
+          <td class="cnt-meta" data-cell="diff">${diffHtml(l, it.unit)}</td>
+          <td class="cnt-meta nowrap" data-cell="value">${valueHtml(l)}</td>
+        </tr>`);
+      }
+      document.getElementById('countRows').innerHTML = html.length ? html.join('')
+        : '<tr><td colspan="5" style="text-align:center;color:var(--color-text-secondary);padding:18px;">Ничего не найдено</td></tr>';
+      renderCountSum();
+    }
+
+    // В бланке всё в единице склада (кг, л, шт) — в ней же вводится факт.
+    // «400 г» рядом с полем «кг» провоцировало ввести 400 вместо 0,4.
+    const baseQty = (v, unit) => numRu(v) + ' ' + esc(window.Units ? Units.norm(unit) : (unit || ''));
+    function diffHtml(l, unit) {
+      if (l.diff === null) return '<span class="cnt-muted">—</span>';
+      if (Math.abs(l.diff) < 1e-9) return '<span class="cnt-zero">сходится</span>';
+      const warn = l.expected > 0 && l.counted > l.expected * 20
+        ? `<span class="cnt-warn">в ${Math.round(l.counted / l.expected)} раз больше учёта — проверьте единицу</span>` : '';
+      return (l.diff < 0 ? `<span class="cnt-minus">−${baseQty(-l.diff, unit)}</span>` : `<span class="cnt-plus">+${baseQty(l.diff, unit)}</span>`) + warn;
+    }
+    function valueHtml(l) {
+      if (l.value === null || Math.abs(l.value) < 0.005) return '';
+      return l.value < 0 ? `<span class="cnt-minus">−${money(-l.value)}</span>` : `<span class="cnt-plus">+${money(l.value)}</span>`;
+    }
+
+    function renderCountSum() {
+      let counted = 0, short = 0, surplus = 0;
+      for (const it of currentCount.items) {
+        const l = countLine(it);
+        if (l.counted === null) continue;
+        counted++;
+        if (l.value < 0) short += -l.value; else surplus += l.value || 0;
+      }
+      const draft = currentCount.status === 'draft';
+      document.getElementById('countSum').innerHTML =
+        `<div><small>Посчитано</small><b>${counted} из ${currentCount.items.length}</b></div>`
+        + `<div><small>Недостача${draft ? ' (сейчас)' : ''}</small><b class="${short > 0 ? 'cnt-minus' : ''}">${short > 0 ? '−' + money(short) : '0 ₽'}</b></div>`
+        + `<div><small>Излишек${draft ? ' (сейчас)' : ''}</small><b class="${surplus > 0 ? 'cnt-plus' : ''}">${surplus > 0 ? '+' + money(surplus) : '0 ₽'}</b></div>`;
+    }
+
+    function countInput(el, key) {
+      const v = el.value.trim();
+      countDirty.set(key, v === '' ? null : parseFloat(v));
+      const it = currentCount.items.find(x => x.inventory_item_id === key);
+      const tr = el.closest('tr');
+      const l = countLine(it);
+      tr.querySelector('[data-cell="diff"]').innerHTML = diffHtml(l, it.unit);
+      tr.querySelector('[data-cell="value"]').innerHTML = valueHtml(l);
+      renderCountSum();
+      document.getElementById('countSave').textContent = 'Не сохранено…';
+      clearTimeout(countTimer);
+      countTimer = setTimeout(flushCountSave, 900);
+    }
+
+    // Enter — к следующему товару, как в бланке
+    function countKey(ev, el) {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      const all = [...document.querySelectorAll('#countRows input')];
+      const next = all[all.indexOf(el) + 1];
+      if (next) { next.focus(); next.select(); } else flushCountSave();
+    }
+
+    async function flushCountSave() {
+      clearTimeout(countTimer);
+      if (countSaving) await countSaving;
+      if (!currentCount || currentCount.status !== 'draft' || !countDirty.size) return true;
+      const batch = [...countDirty.entries()].map(([inventoryItemId, v]) => ({ inventoryItemId, countedQty: v === null || Number.isNaN(v) ? null : v }));
+      const saveEl = document.getElementById('countSave');
+      saveEl.textContent = 'Сохраняю…';
+      countSaving = (async () => {
+        try {
+          const res = await AUTH.fetch('/api/inventory/counts/' + encodeURIComponent(currentCount.id) + '/items', jsonOpts('PUT', { items: batch }));
+          if (!res.ok) throw new Error(await apiError(res));
+          for (const b of batch) {
+            const it = currentCount.items.find(x => x.inventory_item_id === b.inventoryItemId);
+            if (it) it.counted_qty = b.countedQty;
+            if (countDirty.get(b.inventoryItemId) === b.countedQty || (b.countedQty === null && countDirty.get(b.inventoryItemId) === null)) countDirty.delete(b.inventoryItemId);
+          }
+          saveEl.textContent = 'Сохранено';
+          return true;
+        } catch (e) {
+          saveEl.textContent = '';
+          document.getElementById('countError').textContent = 'Не сохранено: ' + e.message;
+          return false;
+        } finally { countSaving = null; }
+      })();
+      return countSaving;
+    }
+
+    async function postCount(btn) {
+      const ok = await flushCountSave();
+      if (ok === false) return;
+      // Подтверждение вторым нажатием: проведение меняет остатки
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.textContent = 'Точно провести? Остатки изменятся';
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = 'Провести'; } }, 4000);
+        return;
+      }
+      btn.dataset.armed = ''; btn.textContent = 'Провести'; btn.disabled = true;
+      document.getElementById('countError').textContent = '';
+      try {
+        const res = await AUTH.fetch('/api/inventory/counts/' + encodeURIComponent(currentCount.id) + '/post',
+          jsonOpts('POST', { zeroUncounted: document.getElementById('countZero').checked }));
+        if (!res.ok) throw new Error(await apiError(res));
+        const { count } = await res.json();
+        const s = parseFloat(count.shortage_value) || 0, p = parseFloat(count.surplus_value) || 0;
+        showNotification('✅ Инвентаризация проведена' + (s ? ', недостача ' + money(s) : '') + (p ? ', излишек ' + money(p) : '') + (!s && !p ? ' — всё сходится' : ''));
+        await openCount(count.id);
+        reloadInventoryFromAPI();
+      } catch (e) {
+        document.getElementById('countError').textContent = e.message;
+      } finally { btn.disabled = false; }
+    }
+
+    async function cancelCount(btn) {
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.textContent = 'Отменить? Нажмите ещё раз';
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = 'Отменить документ'; } }, 4000);
+        return;
+      }
+      btn.dataset.armed = ''; btn.textContent = 'Отменить документ';
+      try {
+        const res = await AUTH.fetch('/api/inventory/counts/' + encodeURIComponent(currentCount.id) + '/cancel', jsonOpts('POST'));
+        if (!res.ok) throw new Error(await apiError(res));
+        countDirty.clear();
+        document.getElementById('countModal').classList.remove('active');
+        currentCount = null;
+        loadCounts();
+        showNotification('Инвентаризация отменена — остатки не менялись');
+      } catch (e) { document.getElementById('countError').textContent = e.message; }
     }
 
     function showNotification(message) {
