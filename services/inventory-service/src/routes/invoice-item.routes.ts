@@ -28,7 +28,8 @@ const itemSchema = Joi.object({
   pricePerUnit: Joi.number().min(0).max(1e9).optional(),
   // Сумму считает сервер; старые клиенты её присылают — принимаем и игнорируем
   totalPrice: Joi.any().strip(),
-  pack: packSchema.allow(null).optional()
+  pack: packSchema.allow(null).optional(),
+  expiryDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null, '').optional()
 }).or('pack', 'quantity');
 
 /** Своё предприятие; супер-админ без контекста видит любую накладную. */

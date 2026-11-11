@@ -34,11 +34,14 @@ router.get('/stock-alerts', authenticateUser, async (req: Request, res: Response
 
 router.get('/items', authenticateUser, requireRole('admin', 'owner', 'manager', 'operator'), async (req: Request, res: Response) => {
   try {
+    const wh = typeof req.query.warehouseId === 'string' && !Joi.string().uuid().validate(req.query.warehouseId).error
+      ? req.query.warehouseId : undefined;
     const items = await inventoryService.listItems({
       enterpriseId: req.enterpriseId,
       category: req.query.category as string,
       search: req.query.search as string,
-      lowStock: req.query.lowStock === 'true'
+      lowStock: req.query.lowStock === 'true',
+      warehouseId: wh
     });
     return res.json({ items });
   } catch (error) {
@@ -362,9 +365,13 @@ router.get('/expiring', authenticateUser, requireRole('admin', 'owner', 'manager
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
-    const warehouseId = req.query.warehouseId as string;
-    if (!warehouseId) return res.status(400).json({ error: 'warehouseId is required' });
-    const days = req.query.days ? parseInt(req.query.days as string, 10) : undefined;
+    // Склад необязателен: без него — по всем складам своего предприятия
+    const raw = req.query.warehouseId as string | undefined;
+    if (raw && Joi.string().uuid().validate(raw).error) return res.status(400).json({ error: 'warehouseId: неверный id склада' });
+    const warehouseId = raw || undefined;
+    if (!warehouseId && isSuper && !req.enterpriseId) return res.status(400).json({ error: 'warehouseId is required' });
+    const parsed = req.query.days ? parseInt(req.query.days as string, 10) : NaN;
+    const days = Number.isFinite(parsed) ? parsed : undefined;
     const items = await inventoryService.getExpiringItems(warehouseId, days, isSuper ? undefined : req.enterpriseId);
     return res.json({ items });
   } catch (error) {

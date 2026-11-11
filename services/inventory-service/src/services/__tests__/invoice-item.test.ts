@@ -57,10 +57,17 @@ describe('add', () => {
     const c = client(draft());
     await svcWith(c).add('inv', ENT, { inventoryItemId: 'i1', name: 'чужое имя', pack: { name: ' мешок ', size: 50, count: 3, price: 2400 } });
     const ins = c.log.find((q) => /INSERT INTO supply_invoice_items/.test(q.sql))!;
-    expect(ins.params).toEqual(['inv', 'i1', 'Мука', 150, 'кг', 48, 7200, 'мешок', 50, 3, 2400]);
+    expect(ins.params).toEqual(['inv', 'i1', 'Мука', 150, 'кг', 48, 7200, 'мешок', 50, 3, 2400, null]);
     const pk = c.log.find((q) => /INSERT INTO item_packages/.test(q.sql))!;
     expect(pk.params).toEqual([ENT, 'i1', 'sup', 'мешок', 50, 2400]);
     expect(c.log.some((q) => /UPDATE supply_invoices\s+SET total_amount/.test(q.sql))).toBe(true);
+  });
+
+  it('срок годности сохраняется в позиции', async () => {
+    const c = client(draft());
+    await svcWith(c).add('inv', ENT, { inventoryItemId: 'i1', quantity: 2, pricePerUnit: 10, expiryDate: '2026-11-20' });
+    const ins = c.log.find((q) => /INSERT INTO supply_invoice_items/.test(q.sql))!;
+    expect(ins.params[11]).toBe('2026-11-20');
   });
 
   it('товар другого предприятия — 404 и откат', async () => {
@@ -87,7 +94,7 @@ describe('update / remove', () => {
     const c = client(draft());
     await svcWith(c).update('inv', ENT, 'row', { quantity: 8, pricePerUnit: 70 });
     const up = c.log.find((q) => /UPDATE supply_invoice_items/.test(q.sql))!;
-    expect(up.params).toEqual(['row', 'inv', 'i9', 'Сахар', 'кг', 8, 70, 560, null, null, null, null]);
+    expect(up.params).toEqual(['row', 'inv', 'i9', 'Сахар', 'кг', 8, 70, 560, null, null, null, null, null]);
     expect(c.log.some((q) => /INSERT INTO item_packages/.test(q.sql))).toBe(false);
   });
 

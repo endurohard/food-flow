@@ -24,10 +24,21 @@ export class InventoryService {
 
   // ========== INVENTORY ITEMS ==========
 
-  async listItems(filters: { enterpriseId?: string; category?: string; search?: string; lowStock?: boolean }): Promise<any[]> {
+  async listItems(filters: { enterpriseId?: string; category?: string; search?: string; lowStock?: boolean; warehouseId?: string }): Promise<any[]> {
     const conditions: string[] = [];
     const values: any[] = [];
     let p = 1;
+
+    // Остаток по одному складу: условие — в JOIN, чтобы товар без остатка
+    // на этом складе остался в списке с нулём, а не пропал.
+    let stockOn = '';
+    let batchWh = '';
+    if (filters.warehouseId) {
+      values.push(filters.warehouseId);
+      stockOn = ` AND s.warehouse_id = $${p}`;
+      batchWh = ` AND b.warehouse_id = $${p}`;
+      p++;
+    }
 
     if (filters.enterpriseId) { conditions.push(`i.enterprise_id = $${p++}`); values.push(filters.enterpriseId); }
     if (filters.category) { conditions.push(`i.category = $${p++}`); values.push(filters.category); }
@@ -36,13 +47,18 @@ export class InventoryService {
     // batch_qty / batch_value — что лежит в партиях и по каким ценам. Стоимость
     // склада считается по ним (по ним же идёт себестоимость продаж), а не
     // «остаток × цена последней накладной», которая завышала или занижала её.
+    // by_warehouse — остаток на каждом складе: в режиме «все склады» видно,
+    // сколько молока в баре, а сколько на основном.
     let query = `SELECT i.*, COALESCE(SUM(s.quantity), 0) as total_stock,
        (SELECT COALESCE(SUM(b.quantity), 0) FROM inventory_batches b
-         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL) AS batch_qty,
+         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL${batchWh}) AS batch_qty,
        (SELECT COALESCE(SUM(b.quantity * b.cost_price), 0) FROM inventory_batches b
-         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL) AS batch_value
+         WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0 AND b.cost_price IS NOT NULL${batchWh}) AS batch_value,
+       (SELECT COALESCE(json_agg(json_build_object('warehouseId', s2.warehouse_id, 'name', w2.name, 'qty', s2.quantity) ORDER BY w2.name), '[]'::json)
+          FROM inventory_stock s2 JOIN warehouses w2 ON w2.id = s2.warehouse_id
+         WHERE s2.inventory_item_id = i.id AND s2.quantity <> 0) AS by_warehouse
        FROM inventory_items i
-       LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id
+       LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id${stockOn}
        ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
        GROUP BY i.id
        ${filters.lowStock ? 'HAVING COALESCE(SUM(s.quantity), 0) <= i.min_stock' : ''}
@@ -1105,22 +1121,28 @@ export class InventoryService {
     }
   }
 
-  async getExpiringItems(warehouseId: string, daysAhead?: number, enterpriseId?: string): Promise<any[]> {
-    const days = daysAhead ?? 7;
+  async getExpiringItems(warehouseId: string | undefined, daysAhead?: number, enterpriseId?: string): Promise<any[]> {
+    const days = Math.min(Math.max(daysAhead ?? 7, 0), 90);
+    // Срок — дата: сравниваем с CURRENT_DATE, иначе партия «до сегодня»
+    // после полуночи по UTC считалась бы на день раньше.
     const conds = [
-      'b.warehouse_id = $1',
       'b.is_depleted = false',
+      'b.quantity > 0',
       'b.expiry_date IS NOT NULL',
-      'b.expiry_date <= NOW() + make_interval(days => $2)'
+      'b.expiry_date <= CURRENT_DATE + $1::int'
     ];
-    const values: any[] = [warehouseId, days];
-    if (enterpriseId) { conds.push(`b.enterprise_id = $${values.length + 1}`); values.push(enterpriseId); }
+    const values: any[] = [days];
+    if (warehouseId) { values.push(warehouseId); conds.push(`b.warehouse_id = $${values.length}`); }
+    if (enterpriseId) { values.push(enterpriseId); conds.push(`i.enterprise_id = $${values.length}`); }
     const result = await this.pool.query(
-      `SELECT b.*, i.name as item_name, i.unit, i.category
+      `SELECT b.*, i.name as item_name, i.unit, i.category, w.name AS warehouse_name,
+              to_char(b.expiry_date, 'YYYY-MM-DD') AS expiry,
+              (b.expiry_date - CURRENT_DATE) AS days_left
        FROM inventory_batches b
        INNER JOIN inventory_items i ON b.inventory_item_id = i.id
+       LEFT JOIN warehouses w ON w.id = b.warehouse_id
        WHERE ${conds.join(' AND ')}
-       ORDER BY b.expiry_date ASC`,
+       ORDER BY b.expiry_date ASC, i.name ASC`,
       values
     );
     return result.rows;

@@ -8,6 +8,15 @@ import { config } from '../config';
 import { logger } from '../utils/logger';
 
 /** Ошибка накладной, понятная пользователю (отдаётся как 400). */
+/** DATE из pg приходит объектом Date в полночь по местному времени — без сдвига через UTC. */
+function dateOnly(v: any): string | undefined {
+  if (!v) return undefined;
+  if (v instanceof Date) {
+    return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  }
+  return String(v).slice(0, 10);
+}
+
 export class InvoiceError extends Error {
   // status: 400 — неверные данные, 404 — нет такой, 409 — уже принята
   constructor(message: string, public status = 400) { super(message); this.name = 'InvoiceError'; }
@@ -292,7 +301,9 @@ export class SupplierService {
 
   async getInvoiceItems(invoiceId: string): Promise<any[]> {
     const result = await this.pool.query(
-      `SELECT sii.*, i.name as inventory_item_name
+      // Срок годности — строкой YYYY-MM-DD: DATE как объект Date сдвигался бы
+      // на день при переводе в JSON через UTC
+      `SELECT sii.*, to_char(sii.expiry_date, 'YYYY-MM-DD') AS expiry_date, i.name as inventory_item_name
        FROM supply_invoice_items sii
        LEFT JOIN inventory_items i ON sii.inventory_item_id = i.id
        WHERE sii.invoice_id = $1`,
@@ -352,6 +363,7 @@ export class SupplierService {
           enterpriseId: invoice.rows[0].enterprise_id,
           supplierId: invoice.rows[0].supplier_id || undefined,
           invoiceId,
+          expiryDate: dateOnly(item.expiry_date),
           notes: 'Накладная ' + (invoice.rows[0].invoice_number || '')
         }, client);
       }
