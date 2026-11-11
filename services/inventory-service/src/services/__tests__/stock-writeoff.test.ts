@@ -42,7 +42,7 @@ describe('consumeBatchesFIFO — без исключения при нехват
   it('берёт со старой партии, затем со следующей; стоимость по ценам партий', async () => {
     const conn = makeConn([batch('new', 10, 300, '2026-10-02'), batch('old', 1, 100, '2026-10-01')]);
     const r = await svcWith(conn).consumeBatchesFIFO(conn, 'w', 'i', 1.5);
-    expect(r).toEqual({ consumed: 1.5, cost: 1 * 100 + 0.5 * 300, uncovered: 0 });
+    expect(r).toEqual({ consumed: 1.5, cost: 1 * 100 + 0.5 * 300, uncovered: 0, preferredTaken: 0 });
     const u = batchUpdates(conn);
     expect(u[0].sql).toMatch(/is_depleted = true/);
     expect(u[0].params).toEqual(['old']);

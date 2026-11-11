@@ -1643,6 +1643,7 @@ AUTH.requireAuth();
             <option value="none">Не списывать — только цена в чеке</option>
             <option value="item">Позицию склада (напр. «доп. сыр»)</option>
             <option value="techcard">По техкарте — свой полуфабрикат (напр. «соус Цезарь»)</option>
+            <option value="variety">Выбор сорта ингредиента (напр. «на Эфиопии»)</option>
           </select>
           <div style="font-size: 12px; color: #888; margin-top: 4px;">
             Без списания добавка не уходит со склада: деньги в кассе есть, а остаток не меняется.
@@ -1657,6 +1658,22 @@ AUTH.requireAuth();
         <div class="form-group" id="modifierTechCardGroup" style="display: none;">
           <label class="form-label">Техкарта:</label>
           <select class="form-select" id="modifierTechCard"></select>
+        </div>
+
+        <div id="modifierVarietyGroup" style="display: none;">
+          <div class="form-group">
+            <label class="form-label" for="modifierVarietyItem">Ингредиент техкарты блюда:</label>
+            <select class="form-select" id="modifierVarietyItem" onchange="fillModifierVarietyList()"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="modifierVariety">Сорт:</label>
+            <input type="text" class="form-input" id="modifierVariety" maxlength="100" list="modifierVarietyList" placeholder="Например: Эфиопия">
+            <datalist id="modifierVarietyList"></datalist>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">
+              Количество берётся из техкарты блюда — меняется только, из каких партий списывать.
+              Сорт пишется так же, как в накладной. Если партий этого сорта не хватит, остаток спишется с других партий, и это будет видно в движении склада.
+            </div>
+          </div>
         </div>
 
         <div class="form-group" id="modifierQuantityGroup" style="display: none;">
@@ -2453,7 +2470,9 @@ AUTH.requireAuth();
             inventoryItemUnit: m.inventory_item_unit || '',
             techCardId: m.tech_card_id || null,
             techCardName: m.tech_card_name || null,
-            quantity: m.quantity !== null && m.quantity !== undefined ? Number(m.quantity) : null
+            quantity: m.quantity !== null && m.quantity !== undefined ? Number(m.quantity) : null,
+            variety: m.variety || null,
+            varietyItemName: m.variety_item_name || null
           }));
         } catch (e) { /* блюдо без модификаторов — не ошибка */ }
       }
@@ -2463,7 +2482,8 @@ AUTH.requireAuth();
       const kind = document.getElementById('modifierSourceKind').value;
       document.getElementById('modifierItemGroup').style.display = kind === 'item' ? '' : 'none';
       document.getElementById('modifierTechCardGroup').style.display = kind === 'techcard' ? '' : 'none';
-      document.getElementById('modifierQuantityGroup').style.display = kind === 'none' ? 'none' : '';
+      document.getElementById('modifierVarietyGroup').style.display = kind === 'variety' ? '' : 'none';
+      document.getElementById('modifierQuantityGroup').style.display = (kind === 'none' || kind === 'variety') ? 'none' : '';
       document.getElementById('modifierQuantityHint').textContent = kind === 'techcard'
         ? 'Сколько порций/циклов техкарты уходит на один выбор. Обычно 1.'
         : 'Брутто в единицах позиции склада. Умножается на количество блюд в строке заказа.';
@@ -2486,9 +2506,25 @@ AUTH.requireAuth();
       document.getElementById('modifierTechCard').innerHTML =
         (recipes || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('')
         || '<option value="">Нет техкарт</option>';
+      document.getElementById('modifierVarietyItem').innerHTML =
+        (stockItems || []).map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('')
+        || '<option value="">Нет позиций склада</option>';
+      fillModifierVarietyList();
 
       onModifierSourceKindChange();
       document.getElementById('modifierModal').classList.add('active');
+    }
+
+    // Сорт и названия вводит пользователь — в разметку только экранированными
+    function escapeHtml(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    // Подсказка сортов — те, что уже есть в партиях выбранного ингредиента
+    function fillModifierVarietyList() {
+      const item = (stockItems || []).find(i => i.id === document.getElementById('modifierVarietyItem').value);
+      document.getElementById('modifierVarietyList').innerHTML = ((item && item.by_variety) || [])
+        .filter(v => v.variety).map(v => `<option value="${escapeHtml(v.variety)}"></option>`).join('');
     }
 
     function closeModifierModal() {
@@ -2513,7 +2549,14 @@ AUTH.requireAuth();
       // Источник расхода: один или ни одного. Количество отправляется только
       // вместе с источником — иначе сервер отклонит по CHECK в схеме.
       const kind = document.getElementById('modifierSourceKind').value;
-      if (kind !== 'none') {
+      if (kind === 'variety') {
+        const variety = document.getElementById('modifierVariety').value.trim();
+        const varietyItemId = document.getElementById('modifierVarietyItem').value;
+        if (!varietyItemId) { showNotification('⚠️ Выберите ингредиент'); return; }
+        if (!variety) { showNotification('⚠️ Укажите сорт, например «Эфиопия»'); return; }
+        payload.varietyItemId = varietyItemId;
+        payload.variety = variety;
+      } else if (kind !== 'none') {
         const qty = parseFloat(document.getElementById('modifierQuantity').value);
         if (!(qty > 0)) {
           showNotification('⚠️ Укажите расход больше нуля');
@@ -2577,6 +2620,8 @@ AUTH.requireAuth();
                 src = `📦 ${mod.inventoryItemName || '—'} · ${mod.quantity} ${mod.inventoryItemUnit || ''}`;
               } else if (mod.techCardId) {
                 src = `📋 ${mod.techCardName || 'техкарта'} · ${mod.quantity}`;
+              } else if (mod.variety) {
+                src = `🫘 ${escapeHtml(mod.varietyItemName || 'ингредиент')} — сорт «${escapeHtml(mod.variety)}»`;
               }
               return `
               <div class="modifier-item">

@@ -2107,6 +2107,11 @@ AUTH.requireAuth();
           <label class="form-label" for="invoiceItemExpiry">Годен до (если есть на упаковке)</label>
           <input type="date" class="form-input" id="invoiceItemExpiry">
         </div>
+        <div class="form-group">
+          <label class="form-label" for="invoiceItemVariety">Сорт / происхождение (если важно)</label>
+          <input type="text" class="form-input" id="invoiceItemVariety" maxlength="100" list="invoiceVarietyList" placeholder="Например: Колумбия, Эфиопия">
+          <datalist id="invoiceVarietyList"></datalist>
+        </div>
         <div id="invoiceItemError" style="color:var(--color-danger);font-size:13px;margin-bottom:10px;"></div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
           <button type="button" class="btn" id="invoiceItemCancelEdit" style="display:none;" onclick="cancelInvoiceItemEdit()">Отмена</button>
@@ -2695,7 +2700,8 @@ AUTH.requireAuth();
         costPrice: parseFloat(i.cost_price) || 0, sku: i.sku || '',
         batchQty: i.batch_qty !== undefined ? parseFloat(i.batch_qty) || 0 : null,
         batchValue: i.batch_value !== undefined ? parseFloat(i.batch_value) || 0 : null,
-        byWarehouse: Array.isArray(i.by_warehouse) ? i.by_warehouse : []
+        byWarehouse: Array.isArray(i.by_warehouse) ? i.by_warehouse : [],
+        byVariety: Array.isArray(i.by_variety) ? i.by_variety : []
       };
     }
     function fillStockWarehouseSelect() {
@@ -2729,6 +2735,14 @@ AUTH.requireAuth();
       if (stockWarehouse || !item.byWarehouse || item.byWarehouse.length < 2) return '';
       return '<div class="inv-wh">' + item.byWarehouse
         .map(w => `<span>${esc(w.name)}: ${esc(qtyText(w.qty, item.unit))}</span>`).join(' · ') + '</div>';
+    }
+    // Партии разных сортов одного товара (Колумбия, Эфиопия): сколько какого.
+    // Показываем, только когда сорт вообще указан хоть у одной партии.
+    function varietyBreakdown(item) {
+      const v = item.byVariety || [];
+      if (!v.some(x => x.variety)) return '';
+      return '<div class="inv-wh">Сорта: ' + v
+        .map(x => `<span>${esc(x.variety || 'без сорта')}: ${esc(qtyText(parseFloat(x.qty) || 0, item.unit))}</span>`).join(' · ') + '</div>';
     }
 
     // ── Сроки годности ──
@@ -2963,7 +2977,7 @@ AUTH.requireAuth();
                 <div class="quantity-bar">
                   <div class="quantity-fill ${barClass}" style="width: ${Math.min(percentage, 100)}%"></div>
                 </div>
-              </div>${whBreakdown(item)}
+              </div>${whBreakdown(item)}${varietyBreakdown(item)}
             </td>
             <td data-label="Минимум" style="white-space:nowrap">${esc(qtyText(item.minQuantity, item.unit))}</td>
             <td data-label="Статус"><span class="stock-badge ${status}">${getStatusLabel(status)}</span></td>
@@ -4311,6 +4325,9 @@ AUTH.requireAuth();
     async function prefillInvoiceItemPrice() {
       const item = selectedInvoiceItem();
       updateInvoiceUnitLabels();
+      // Подсказка сортов: те, что уже лежат на складе у этого товара
+      document.getElementById('invoiceVarietyList').innerHTML = ((item && item.by_variety) || [])
+        .filter(v => v.variety).map(v => `<option value="${esc(v.variety)}"></option>`).join('');
       const priceEl = document.getElementById('invoiceItemPrice');
       if (item && !priceEl.value) {
         const cost = parseFloat(item.cost_price);
@@ -4409,6 +4426,7 @@ AUTH.requireAuth();
         setInvoiceItemMode('unit');
       }
       document.getElementById('invoiceItemExpiry').value = it.expiry_date ? String(it.expiry_date).slice(0, 10) : '';
+      document.getElementById('invoiceItemVariety').value = it.variety || '';
       document.getElementById('invoiceItemFormTitle').textContent = 'Изменить позицию: ' + (it.inventory_item_name || it.name || '');
       document.getElementById('invoiceItemSubmit').textContent = 'Сохранить';
       document.getElementById('invoiceItemCancelEdit').style.display = '';
@@ -4470,7 +4488,7 @@ AUTH.requireAuth();
           ? '<span class="inv-pack-note" style="color:#9E3420">не связана с товаром склада — нажмите ✎</span>' : '';
         return `<tr>
           <td class="inv-line-name"><strong>${esc(it.inventory_item_name || it.name || '—')}</strong>${unlinked}</td>
-          <td data-label="Количество">${esc(qtyText(qty, it.unit))}${pack}${it.expiry_date ? `<span class="inv-exp-note">годен до ${esc(String(it.expiry_date).slice(0, 10).split('-').reverse().join('.'))}</span>` : ''}</td>
+          <td data-label="Количество">${esc(qtyText(qty, it.unit))}${pack}${it.variety ? `<span class="inv-pack-note">сорт: ${esc(it.variety)}</span>` : ''}${it.expiry_date ? `<span class="inv-exp-note">годен до ${esc(String(it.expiry_date).slice(0, 10).split('-').reverse().join('.'))}</span>` : ''}</td>
           <td style="white-space:nowrap" data-label="Цена за ед.">${money(price)}</td>
           <td style="white-space:nowrap" data-label="Сумма">${money(sum)}</td>
           <td class="inv-line-btns">${draft ? `<div class="inv-row-btns">
@@ -4515,7 +4533,8 @@ AUTH.requireAuth();
       if (!item) { errEl.textContent = 'Выберите товар из списка'; return; }
 
       const payload = { inventoryItemId: item.id, name: item.name, unit: item.unit || undefined,
-                        expiryDate: document.getElementById('invoiceItemExpiry').value || null };
+                        expiryDate: document.getElementById('invoiceItemExpiry').value || null,
+                        variety: document.getElementById('invoiceItemVariety').value.trim() || null };
       if (invMode() === 'pack') {
         const pack = { name: document.getElementById('invPackName').value.trim(), size: numVal('invPackSize'), count: numVal('invPackCount'), price: numVal('invPackPrice') };
         if (!pack.name) { errEl.textContent = 'Назовите упаковку: мешок, коробка…'; return; }

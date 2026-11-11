@@ -39,6 +39,10 @@ export interface CreateModifierInput {
   inventoryItemId?: string | null;
   techCardId?: string | null;
   quantity?: number | null;
+  // Выбор сорта (миграция 064): «на Эфиопии» — списать ингредиент техкарты
+  // varietyItemId из партий сорта variety. Задаются только парой.
+  varietyItemId?: string | null;
+  variety?: string | null;
 }
 
 export class MenuService {
@@ -220,10 +224,12 @@ export class MenuService {
       `SELECT m.*,
               ii.name AS inventory_item_name,
               ii.unit AS inventory_item_unit,
-              tc.name AS tech_card_name
+              tc.name AS tech_card_name,
+              vi.name AS variety_item_name
          FROM menu_item_modifiers m
          LEFT JOIN inventory_items ii ON ii.id = m.inventory_item_id
          LEFT JOIN tech_cards tc ON tc.id = m.tech_card_id
+         LEFT JOIN inventory_items vi ON vi.id = m.variety_item_id
         WHERE m.menu_item_id = $1 AND m.is_available = true
         ORDER BY m.modifier_group ASC, m.display_order ASC`,
       [menuItemId]
@@ -234,14 +240,16 @@ export class MenuService {
   async createModifier(menuItemId: string, data: CreateModifierInput, enterpriseId?: string): Promise<any> {
     const result = await this.pool.query(
       `INSERT INTO menu_item_modifiers (menu_item_id, name, modifier_group, price_adjustment, is_default, enterprise_id,
-         inventory_item_id, tech_card_id, quantity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         inventory_item_id, tech_card_id, quantity, variety_item_id, variety)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         menuItemId, data.name, data.modifierGroup || null, data.priceAdjustment || 0,
         data.isDefault || false, enterpriseId || null,
         data.inventoryItemId || null, data.techCardId || null,
-        data.quantity ?? null
+        data.quantity ?? null,
+        (data.variety || '').trim() ? data.varietyItemId || null : null,
+        data.varietyItemId ? (data.variety || '').trim() || null : null
       ]
     );
     return result.rows[0];
@@ -269,6 +277,13 @@ export class MenuService {
       if (data.inventoryItemId === undefined && data.techCardId) fields.push(`inventory_item_id = NULL`);
     }
     if (data.quantity !== undefined) { fields.push(`quantity = $${p++}`); values.push(data.quantity ?? null); }
+    // Сорт — только парой: пустой сорт или ингредиент снимают выбор целиком
+    if (data.varietyItemId !== undefined || data.variety !== undefined) {
+      const v = (data.variety || '').trim();
+      const on = !!(data.varietyItemId && v);
+      fields.push(`variety_item_id = $${p++}`); values.push(on ? data.varietyItemId : null);
+      fields.push(`variety = $${p++}`); values.push(on ? v : null);
+    }
 
     if (fields.length === 0) return null;
 
@@ -286,7 +301,7 @@ export class MenuService {
   // Без неё модификатор можно привязать к складу или техкарте ЧУЖОЙ
   // организации: при продаже списание ушло бы с чужого склада.
   async modifierSourceBelongsTo(
-    source: { inventoryItemId?: string | null; techCardId?: string | null },
+    source: { inventoryItemId?: string | null; techCardId?: string | null; varietyItemId?: string | null },
     enterpriseId: string
   ): Promise<{ ok: boolean; reason?: string }> {
     if (source.inventoryItemId) {
@@ -302,6 +317,13 @@ export class MenuService {
         [source.techCardId, enterpriseId]
       );
       if (r.rowCount === 0) return { ok: false, reason: 'Техкарта не найдена в этом предприятии' };
+    }
+    if (source.varietyItemId) {
+      const r = await this.pool.query(
+        `SELECT 1 FROM inventory_items WHERE id = $1 AND enterprise_id = $2`,
+        [source.varietyItemId, enterpriseId]
+      );
+      if (r.rowCount === 0) return { ok: false, reason: 'Ингредиент для выбора сорта не найден в этом предприятии' };
     }
     return { ok: true };
   }

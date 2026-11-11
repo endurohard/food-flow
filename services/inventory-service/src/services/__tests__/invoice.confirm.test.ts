@@ -116,7 +116,10 @@ describe('addStockMovement внутри чужой транзакции', () => 
     expect((svc as any).pool.connect).not.toHaveBeenCalled();
     // партия получила поставщика и накладную
     const batchInsert = (c.query.mock.calls as any[]).find(([sql]) => /INSERT INTO inventory_batches/.test(sql));
-    expect(batchInsert[1].slice(-2)).toEqual(['s-1', 'inv-1']);
+    // по имени колонки, а не по хвосту списка: в конец добавляются новые поля
+    const cols = /inventory_batches \(([^)]*)\)/.exec(batchInsert[0])![1].split(',').map((x: string) => x.trim());
+    expect(batchInsert[1][cols.indexOf('supplier_id')]).toBe('s-1');
+    expect(batchInsert[1][cols.indexOf('invoice_id')]).toBe('inv-1');
   });
 
   it('без соединения — своя транзакция, как раньше', async () => {

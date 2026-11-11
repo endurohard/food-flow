@@ -196,7 +196,8 @@ describe('Списание модификаторов со склада', () => 
     expect(res.deducted).toHaveLength(0);
 
     // Фильтр должен стоять в самом SQL
-    const modQuery = client.queries.find((q: any) => /FROM order_item_modifiers oim/.test(q.sql));
+    // запрос расхода модификаторов (отдельно от запроса выбора сорта)
+    const modQuery = client.queries.find((q: any) => /FROM order_item_modifiers oim/.test(q.sql) && /mim\.quantity/.test(q.sql));
     expect(modQuery).toBeDefined();
     expect(modQuery.sql).toMatch(/mim\.quantity IS NOT NULL/);
     expect(modQuery.sql).toMatch(/inventory_item_id IS NOT NULL OR mim\.tech_card_id IS NOT NULL/);
@@ -351,7 +352,8 @@ describe('Списание модификаторов со склада', () => 
 
     await svc.deductByTechCards('ord-1', 'wh-1', 'user-1', 'ent-1');
 
-    const modQuery = client.queries.find((q: any) => /FROM order_item_modifiers oim/.test(q.sql));
+    // запрос расхода модификаторов (отдельно от запроса выбора сорта)
+    const modQuery = client.queries.find((q: any) => /FROM order_item_modifiers oim/.test(q.sql) && /mim\.quantity/.test(q.sql));
     expect(modQuery.sql).toMatch(/oim\.order_item_id = \$1/);
     expect(modQuery.params[0]).toBe('oi-1');
   });

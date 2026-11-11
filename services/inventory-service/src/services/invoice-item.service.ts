@@ -27,6 +27,8 @@ export interface InvoiceItemInput {
   pack?: PackInput | null;
   /** Годен до, YYYY-MM-DD — уходит в партию при приёмке */
   expiryDate?: string | null;
+  /** Сорт / происхождение (Колумбия, Эфиопия) — уходит в партию при приёмке */
+  variety?: string | null;
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -124,10 +126,11 @@ export class InvoiceItemService {
       const p = input.pack || null;
       const r = await client.query(
         `INSERT INTO supply_invoice_items
-           (invoice_id, inventory_item_id, name, quantity, unit, price_per_unit, total_price, pack_name, pack_size, pack_count, pack_price, expiry_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+           (invoice_id, inventory_item_id, name, quantity, unit, price_per_unit, total_price, pack_name, pack_size, pack_count, pack_price, expiry_date, variety)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
         [invoiceId, item.id, item.name, line.quantity, item.unit, line.pricePerUnit, line.total,
-         p ? p.name.trim() : null, p ? p.size : null, p ? p.count : null, p ? p.price : null, input.expiryDate || null]
+         p ? p.name.trim() : null, p ? p.size : null, p ? p.count : null, p ? p.price : null, input.expiryDate || null,
+         (input.variety || '').trim() || null]
       );
       await this.rememberPack(client, inv, item.id, p);
       await this.recalcTotal(client, invoiceId);
@@ -149,10 +152,11 @@ export class InvoiceItemService {
       const r = await client.query(
         `UPDATE supply_invoice_items
             SET inventory_item_id = $3, name = $4, unit = $5, quantity = $6, price_per_unit = $7, total_price = $8,
-                pack_name = $9, pack_size = $10, pack_count = $11, pack_price = $12, expiry_date = $13
+                pack_name = $9, pack_size = $10, pack_count = $11, pack_price = $12, expiry_date = $13, variety = $14
           WHERE id = $1 AND invoice_id = $2 RETURNING *`,
         [rowId, invoiceId, item.id, item.name, item.unit, line.quantity, line.pricePerUnit, line.total,
-         p ? p.name.trim() : null, p ? p.size : null, p ? p.count : null, p ? p.price : null, input.expiryDate || null]
+         p ? p.name.trim() : null, p ? p.size : null, p ? p.count : null, p ? p.price : null, input.expiryDate || null,
+         (input.variety || '').trim() || null]
       );
       await this.rememberPack(client, inv, item.id, p);
       await this.recalcTotal(client, invoiceId);

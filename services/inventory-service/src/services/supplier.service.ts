@@ -364,7 +364,8 @@ export class SupplierService {
           supplierId: invoice.rows[0].supplier_id || undefined,
           invoiceId,
           expiryDate: dateOnly(item.expiry_date),
-          notes: 'Накладная ' + (invoice.rows[0].invoice_number || '')
+          variety: item.variety || null,
+          notes: 'Накладная ' + (invoice.rows[0].invoice_number || '') + (item.variety ? ', сорт ' + item.variety : '')
         }, client);
       }
 

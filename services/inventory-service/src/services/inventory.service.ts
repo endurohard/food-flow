@@ -58,7 +58,14 @@ export class InventoryService {
           FROM inventory_stock s2 JOIN warehouses w2 ON w2.id = s2.warehouse_id
          -- склад той же организации: у inventory_stock нет своего тенанта, и
          -- остаток, легший на чужой склад, показал бы владельцу чужой склад
-         WHERE s2.inventory_item_id = i.id AND s2.quantity <> 0 AND w2.enterprise_id = i.enterprise_id) AS by_warehouse
+         WHERE s2.inventory_item_id = i.id AND s2.quantity <> 0 AND w2.enterprise_id = i.enterprise_id) AS by_warehouse,
+       -- Остаток по сортам (миграция 064): у одного товара партии разных
+       -- поставок — Колумбия, Эфиопия. Партии без сорта — «без сорта».
+       (SELECT COALESCE(json_agg(json_build_object('variety', v.variety, 'qty', v.qty) ORDER BY v.variety NULLS LAST), '[]'::json)
+          FROM (SELECT NULLIF(btrim(b.variety), '') AS variety, SUM(b.quantity) AS qty
+                  FROM inventory_batches b
+                 WHERE b.inventory_item_id = i.id AND b.is_depleted = false AND b.quantity > 0${batchWh}
+                 GROUP BY 1) v) AS by_variety
        FROM inventory_items i
        LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id${stockOn}
        ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
@@ -273,6 +280,8 @@ export class InventoryService {
     expiryDate?: string;
     supplierId?: string;
     invoiceId?: string;
+    /** Сорт / происхождение партии (Колумбия, Эфиопия) — при приходе */
+    variety?: string | null;
   }, externalClient?: any): Promise<any> {
     // externalClient — соединение с уже открытой транзакцией (приёмка
     // накладной): тогда движение входит в неё и откатывается вместе с ней.
@@ -336,12 +345,13 @@ export class InventoryService {
         }
         if (batchQty > 1e-9) {
           await client.query(
-            `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price, expiry_date, supplier_id, invoice_id, variety)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [data.inventoryItemId, data.warehouseId, data.enterpriseId || null,
              data.batchNumber || null, batchQty,
              costPrice || null, data.expiryDate || null,
-             data.supplierId || null, data.invoiceId || null]
+             data.supplierId || null, data.invoiceId || null,
+             (data.variety || '').trim() || null]
           );
         }
       }
@@ -545,7 +555,8 @@ export class InventoryService {
           totalQty: number,
           itemName: string,
           isOptional: boolean,
-          note: string
+          note: string,
+          preferVariety?: string
         ): Promise<void> => {
           // Необязательный ингредиент при нехватке просто пропускаем —
           // блюдо готовят без него. Проверяем ДО списания партий.
@@ -566,8 +577,18 @@ export class InventoryService {
           // оставался «на складе». Теперь недостающее уходит в минус и
           // всплывает предупреждением (stock_alerts): продали то, чего по учёту
           // нет, — это надо увидеть, а не потерять в логе.
-          const fifo = await this.consumeBatchesFIFO(client, warehouseId, inventoryItemId, totalQty);
+          const fifo = await this.consumeBatchesFIFO(client, warehouseId, inventoryItemId, totalQty, preferVariety);
           const cost = fifo.cost + fifo.uncovered * (await this.lastCost(client, inventoryItemId));
+          if (preferVariety) {
+            note += `, сорт «${preferVariety}»`;
+            // Гость выбрал сорт, а его партий не хватило: остальное ушло с
+            // других партий — это надо видеть, а не узнать на инвентаризации
+            if (fifo.preferredTaken < totalQty - 1e-9) {
+              const short = totalQty - fifo.preferredTaken;
+              note += ` — сорта не хватило ${short.toFixed(3)}, взято с других партий`;
+              skipped.push(`${itemName}: сорта «${preferVariety}» не хватило ${short.toFixed(3)} — списано с других партий`);
+            }
+          }
 
           const after = await client.query(
             `INSERT INTO inventory_stock (warehouse_id, inventory_item_id, quantity)
@@ -633,6 +654,25 @@ export class InventoryService {
           skipped.push(`menu_item ${orderItem.menu_item_id}: техкарта без ингредиентов`);
         }
 
+        // Выбор сорта гостем (миграция 064): модификатор «на Эфиопии» просит
+        // списать ингредиент техкарты из партий этого сорта. Сам ингредиент
+        // и его количество не меняются — меняется только, из каких партий.
+        const varietyPicks = new Map<string, string>();
+        const picks = await client.query(
+          `SELECT mim.variety_item_id, mim.variety, mim.name
+             FROM order_item_modifiers oim
+             INNER JOIN menu_item_modifiers mim ON mim.id = oim.modifier_id
+            WHERE oim.order_item_id = $1 AND mim.variety_item_id IS NOT NULL AND mim.variety IS NOT NULL`,
+          [orderItem.order_item_id]
+        );
+        for (const pk of picks.rows) {
+          if (!pk.variety_item_id || !String(pk.variety || '').trim()) continue;
+          varietyPicks.set(pk.variety_item_id, String(pk.variety).trim());
+          if (!ingredients.rows.some((i: any) => i.inventory_item_id === pk.variety_item_id)) {
+            skipped.push(`модификатор «${pk.name}»: ингредиента для выбора сорта нет в техкарте — сорт не учтён`);
+          }
+        }
+
         for (const ing of ingredients.rows) {
           // quantity — это БРУТТО (миграция 032): столько берётся со склада.
           // Потери холодной и горячей обработки влияют на выход порции,
@@ -643,7 +683,8 @@ export class InventoryService {
             totalQty,
             ing.item_name,
             !!ing.is_optional,
-            `Списание по техкарте: ${ing.item_name}`
+            `Списание по техкарте: ${ing.item_name}`,
+            varietyPicks.get(ing.inventory_item_id)
           );
         }
 
@@ -1016,17 +1057,22 @@ export class InventoryService {
    * сколько списано с партий, их стоимость и сколько не покрыто партиями
    * (остаток без партий — старые записи, ручные корректировки, уход в минус).
    */
-  async consumeBatchesFIFO(conn: any, warehouseId: string, inventoryItemId: string, quantity: number):
-      Promise<{ consumed: number; cost: number; uncovered: number }> {
+  async consumeBatchesFIFO(conn: any, warehouseId: string, inventoryItemId: string, quantity: number,
+      preferVariety?: string | null):
+      Promise<{ consumed: number; cost: number; uncovered: number; preferredTaken: number }> {
+    // preferVariety — сорт, выбранный гостем («на Эфиопии»): сначала его
+    // партии по FIFO, не хватило — остальные. Без сорта — чистый FIFO.
+    const pref = (preferVariety || '').trim().toLowerCase();
     const batches = await conn.query(
-      `SELECT id, quantity, cost_price FROM inventory_batches
+      `SELECT id, quantity, cost_price, variety FROM inventory_batches
         WHERE warehouse_id = $1 AND inventory_item_id = $2 AND is_depleted = false
-        ORDER BY received_at ASC
+        ORDER BY ${pref ? '(lower(variety) IS NOT DISTINCT FROM $3) DESC, ' : ''}received_at ASC
         FOR UPDATE`,
-      [warehouseId, inventoryItemId]
+      pref ? [warehouseId, inventoryItemId, pref] : [warehouseId, inventoryItemId]
     );
     let remaining = quantity;
     let cost = 0;
+    let preferredTaken = 0;
     for (const b of batches.rows) {
       if (remaining <= 1e-9) break;
       const available = parseFloat(b.quantity);
@@ -1037,10 +1083,11 @@ export class InventoryService {
         await conn.query('UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2', [take, b.id]);
       }
       cost += take * (parseFloat(b.cost_price) || 0);
+      if (pref && (b.variety || '').trim().toLowerCase() === pref) preferredTaken += take;
       remaining -= take;
     }
     const uncovered = Math.max(0, remaining);
-    return { consumed: quantity - uncovered, cost, uncovered };
+    return { consumed: quantity - uncovered, cost, uncovered, preferredTaken };
   }
 
   /** Последняя известная цена позиции — для части, не покрытой партиями. */

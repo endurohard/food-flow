@@ -82,6 +82,11 @@ export const modifierSchema = Joi.object({
     }
   )
 })
+  .append({
+    // Выбор сорта: ингредиент техкарты + сорт его партий («на Эфиопии»)
+    varietyItemId: Joi.string().uuid().allow(null, '').optional(),
+    variety: Joi.string().trim().max(100).allow(null, '').optional()
+  })
   .oxor('inventoryItemId', 'techCardId')
   .messages({
     'object.oxor': 'Укажите либо позицию склада, либо техкарту — но не оба источника сразу',
@@ -427,7 +432,7 @@ router.post('/menu-items/:itemId/modifiers', authenticateUser, requireRole('admi
     }
     // Источник расхода должен принадлежать своему предприятию, иначе продажа
     // списала бы продукты с чужого склада.
-    if (req.enterpriseId && (value.inventoryItemId || value.techCardId)) {
+    if (req.enterpriseId && (value.inventoryItemId || value.techCardId || value.varietyItemId)) {
       const own = await menuService.modifierSourceBelongsTo(value, req.enterpriseId);
       if (!own.ok) {
         return res.status(400).json({ error: 'Validation error', message: own.reason });
@@ -455,7 +460,13 @@ router.put('/modifiers/:id', authenticateUser, requireRole('admin', 'owner', 'ma
     if (!isSuper && !req.enterpriseId) {
       return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
     }
-    if (req.enterpriseId && (req.body.inventoryItemId || req.body.techCardId)) {
+    if (req.body.variety != null && (typeof req.body.variety !== 'string' || req.body.variety.trim().length > 100)) {
+      return res.status(400).json({ error: 'Validation error', message: 'Сорт — строка не длиннее 100 символов' });
+    }
+    if (req.body.varietyItemId && !/^[0-9a-f-]{36}$/i.test(String(req.body.varietyItemId))) {
+      return res.status(400).json({ error: 'Validation error', message: 'Неверный ингредиент для выбора сорта' });
+    }
+    if (req.enterpriseId && (req.body.inventoryItemId || req.body.techCardId || req.body.varietyItemId)) {
       const own = await menuService.modifierSourceBelongsTo(req.body, req.enterpriseId);
       if (!own.ok) {
         return res.status(400).json({ error: 'Validation error', message: own.reason });
