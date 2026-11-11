@@ -795,6 +795,60 @@
     .search-icon svg { display: block; }
     .supplier-info a { color: var(--color-primary); }
 
+    /* ── Вёрстка, этап 1 ── */
+    /* На широком экране таблицы помещаются целиком: раньше min-width 1000px
+       плюс поля обрезали колонку «Действия» за правым краем. */
+    @media (min-width: 1100px) {
+      .data-table { min-width: 0; }
+      .data-table th, .data-table td { padding: 12px 12px; }
+      .data-table th { white-space: normal; }
+    }
+    .inv-row-actions { white-space: nowrap; width: 1%; }
+    #invoicesTableBody td:last-child { width: 1%; }
+    .inv-act-btns { display: flex; gap: 6px; flex-wrap: nowrap; justify-content: flex-end; }
+    #invoicesTableBody .inv-act-btns { flex-direction: column; align-items: stretch; }
+    #invoicesTableBody .inv-act-btns .btn { white-space: nowrap; text-align: center; }
+    .nowrap { white-space: nowrap; }
+    .prod-ings { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+    .prod-ings span { white-space: nowrap; }
+
+    /* Поставщики — сеткой карточек */
+    #suppliersList { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+    #suppliersList .supplier-card { margin-bottom: 0; }
+
+    @media (max-width: 760px) {
+      /* Вкладки: все семь видны сразу, без скрытой прокрутки вбок */
+      /* перебиваем admin-shell.css: там вкладки всегда в одну строку с прокруткой */
+      html body .main-wrapper .tabs.inv-tabs { flex-wrap: wrap !important; overflow: visible !important; gap: 6px !important; border-bottom: 0; padding-bottom: 0; margin-bottom: 18px; }
+      html body .main-wrapper .tabs.inv-tabs > .tab { margin-bottom: 0; border: 1px solid var(--admin-border); border-radius: 999px; padding: 8px 12px !important; font-size: 13px !important; background: var(--admin-card-bg); min-height: 38px; }
+      html body .main-wrapper .tabs.inv-tabs > .tab.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+      /* Остатки: компактная карточка — название и кнопки, ниже остаток, статус, стоимость */
+      .inv-table tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 10px; padding: 10px 0; }
+      .inv-table td.inv-name { grid-column: 1 / 3; grid-row: 1; }
+      .inv-table td.inv-row-actions { grid-column: 3; grid-row: 1; width: auto; }
+      .inv-table td.inv-row-actions > div { justify-content: flex-end; }
+      .inv-table td[data-label="Минимум"], .inv-table td[data-label="Цена"] { display: none; }
+      .inv-table .inv-icon-btn { width: 32px; height: 32px; }
+      .inv-table tr { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+      .inv-table .stock-badge { text-transform: none; font-size: 12px; padding: 3px 8px; white-space: nowrap; }
+
+      /* Накладные: карточками, кнопка «Принять» видна без прокрутки */
+      .inv-cards { min-width: 0 !important; }
+      .inv-cards thead { display: none; }
+      .inv-cards, .inv-cards tbody { display: block; }
+      .inv-cards tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--admin-border); }
+      .inv-cards td { display: block; padding: 0 !important; border: 0 !important; }
+      .inv-cards td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--color-text-secondary); }
+      .inv-cards td.ic-head { grid-column: 1 / -1; }
+      .inv-cards td.ic-actions { grid-column: 1 / -1; width: auto; }
+      .inv-cards td.ic-actions .inv-act-btns { justify-content: stretch; flex-direction: row !important; }
+      .inv-cards td.ic-actions .btn { flex: 1; justify-content: center; }
+      .inv-cards td[colspan] { grid-column: 1 / -1; }
+      .table-wrapper:has(.inv-cards) { padding: 4px 16px; }
+      #suppliersList { grid-template-columns: minmax(0, 1fr); }
+    }
+
     /* Заказы поставщикам */
     .po-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
     .po-draft { background: #EFE8D6; color: #4A443A; }
@@ -1368,7 +1422,7 @@ AUTH.requireAuth();
     </div>
 
     <!-- Tabs -->
-    <div class="tabs">
+    <div class="tabs inv-tabs">
       <button class="tab active" onclick="switchTab('inventory')">Остатки</button>
       <button class="tab" onclick="switchTab('production')">Производство</button>
       <button class="tab" onclick="switchTab('suppliers')">Поставщики</button>
@@ -1635,7 +1689,7 @@ AUTH.requireAuth();
       </div>
 
       <div class="table-wrapper">
-        <table class="data-table">
+        <table class="data-table inv-cards">
           <thead>
             <tr>
               <th>Номер</th>
@@ -1650,7 +1704,7 @@ AUTH.requireAuth();
               <th>Действия</th>
             </tr>
           </thead>
-          <tbody id="invoicesTableBody">
+          <tbody id="invoicesTableBody" data-cards="1">
             <tr><td colspan="7" style="text-align:center;color:var(--color-grey-5);">Загрузка...</td></tr>
           </tbody>
         </table>
@@ -2567,7 +2621,7 @@ AUTH.requireAuth();
             </td>
             <td data-label="Минимум" style="white-space:nowrap">${esc(qtyText(item.minQuantity, item.unit))}</td>
             <td data-label="Статус"><span class="stock-badge ${status}">${getStatusLabel(status)}</span></td>
-            <td data-label="Цена" style="white-space:nowrap">${money(item.costPrice)}/${esc(item.unit)}</td>
+            <td data-label="Цена" style="white-space:nowrap">${money(item.costPrice)}/${esc(window.Units ? Units.norm(item.unit) : item.unit)}</td>
             <td data-label="Стоимость" style="white-space:nowrap; font-weight: 600;">${money(totalValue)}</td>
             <td class="inv-row-actions">
               <div style="display:flex;gap:4px;">
@@ -3308,9 +3362,9 @@ AUTH.requireAuth();
         if (itemRes.ok) {
           const rows = (await itemRes.json()).items || [];
           document.getElementById('itemAnalysisBody').innerHTML = rows.length ? rows.map(i => `<tr>
-            <td><strong>${esc(i.name)}</strong></td><td>${fmt(i.received_qty)}</td><td>${fmt(i.sold_qty)}</td>
-            <td>${parseFloat(i.written_off_qty) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + fmt(i.written_off_qty) + '</span>' : '0'}</td>
-            <td>${fmt(i.write_off_cost)} ₽</td><td>${fmt(i.stock)} ${esc(i.unit || '')}</td>
+            <td><strong>${esc(i.name)}</strong></td><td class="nowrap">${esc(qtyText(i.received_qty, i.unit))}</td><td class="nowrap">${esc(qtyText(i.sold_qty, i.unit))}</td>
+            <td class="nowrap">${parseFloat(i.written_off_qty) > 0 ? '<span style="color:var(--color-danger);font-weight:700;">' + esc(qtyText(i.written_off_qty, i.unit)) + '</span>' : '—'}</td>
+            <td class="nowrap">${parseFloat(i.write_off_cost) > 0 ? fmt(i.write_off_cost) + ' ₽' : '—'}</td><td class="nowrap">${esc(qtyText(i.stock, i.unit))}</td>
           </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--color-grey-5);">Нет данных</td></tr>';
         }
         if (dishRes.ok) {
@@ -3392,18 +3446,18 @@ AUTH.requireAuth();
       }
       tbody.innerHTML = productionRuns.map(r => {
         const ings = (r.ingredients || []).map(i =>
-          `${esc(i.itemName)}: ${parseFloat(i.quantity).toLocaleString('ru-RU', {maximumFractionDigits: 3})}`
+          `<span>${esc(i.itemName)} — ${esc(qtyText(i.quantity, i.unit))}</span>`
         ).join(', ');
         const cancelled = r.status === 'cancelled';
         return `<tr${cancelled ? ' style="opacity:.55"' : ''}>
           <td>${new Date(r.produced_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
           <td><strong>${esc(r.output_name || '')}</strong></td>
-          <td>${parseFloat(r.quantity).toLocaleString('ru-RU')} ${esc(r.output_unit || '')}</td>
-          <td>${(parseFloat(r.total_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
-          <td>${(parseFloat(r.unit_cost) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2})} ₽</td>
-          <td style="font-size:12px;color:var(--color-text-secondary);">${ings}</td>
+          <td class="nowrap">${esc(qtyText(r.quantity, r.output_unit))}</td>
+          <td class="nowrap">${money(r.total_cost)}</td>
+          <td class="nowrap">${money(r.unit_cost)}${r.output_unit ? ' / ' + esc(window.Units ? Units.norm(r.output_unit) : r.output_unit) : ''}</td>
+          <td class="prod-ings">${ings}</td>
           <td>${cancelled ? '<span style="color:var(--color-danger);">Отменён</span>' : '<span style="color:var(--color-success);">Выполнен</span>'}</td>
-          <td>${cancelled ? '' : `<button class="btn btn-small" onclick="cancelProductionRun('${r.id}')">↩️ Отменить</button>`}</td>
+          <td>${cancelled ? '' : `<button class="btn btn-small btn-secondary" onclick="cancelProductionRun(${jsArg(r.id)})">Отменить</button>`}</td>
         </tr>`;
       }).join('');
     }
@@ -3589,9 +3643,9 @@ AUTH.requireAuth();
           ? inv.items_count
           : '<span class="invoice-items-count" data-invoice="' + inv.id + '" style="color:var(--color-text-secondary);">…</span>';
         const actions = isReceived
-          ? `<button class="btn btn-small" onclick="openInvoiceItemsModal('${inv.id}')">👁 Позиции</button>`
-          : `<button class="btn btn-small btn-secondary" onclick="openInvoiceItemsModal('${inv.id}')">📝 Позиции</button>
-             <button class="btn btn-small btn-primary" onclick="confirmSupplierInvoice('${inv.id}')">📥 Принять</button>`;
+          ? `<button class="btn btn-small btn-secondary" onclick="openInvoiceItemsModal(${jsArg(inv.id)})">Открыть</button>`
+          : `<button class="btn btn-small btn-secondary" onclick="openInvoiceItemsModal(${jsArg(inv.id)})">Позиции</button>
+             <button class="btn btn-small btn-primary" onclick="confirmSupplierInvoice(${jsArg(inv.id)})">Принять</button>`;
         // Долг и оплата имеют смысл только у принятой накладной: по черновику
         // товар ещё не получен и денег поставщику не должны.
         const money = v => (parseFloat(v) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2});
@@ -3608,16 +3662,16 @@ AUTH.requireAuth();
             ? '<strong style="color:var(--color-danger);">' + money(debt) + ' ₽</strong>'
             : '<span style="color:var(--color-success);">оплачена</span>';
         return `<tr${isReceived ? '' : ' style="opacity:.85"'}>
-          <td><strong>${esc(inv.invoice_number || '—')}</strong>${inv.source === 'telegram' ? ' <span class="mv-chip mv-adj" title="Прислано фото в Telegram">фото</span>' : ''}${!inv.supplier_id && inv.status !== 'received' ? '<div style="font-size:12px;color:#9E3420;">нет поставщика</div>' : ''}</td>
-          <td>${dateText}</td>
-          <td>${esc(inv.supplier_name || '—')}</td>
-          <td>${esc(inv.warehouse_name || '—')}</td>
-          <td>${money(inv.total_amount)} ₽</td>
-          <td>${payHtml}</td>
-          <td>${debtHtml}</td>
-          <td>${itemsCount}</td>
-          <td>${statusHtml}</td>
-          <td style="white-space:nowrap;">${actions}</td>
+          <td class="ic-head"><strong>${esc(inv.invoice_number || '—')}</strong>${inv.source === 'telegram' ? ' <span class="mv-chip mv-adj" title="Прислано фото в Telegram">фото</span>' : ''}${!inv.supplier_id && inv.status !== 'received' ? '<div style="font-size:12px;color:#9E3420;">нет поставщика</div>' : ''}</td>
+          <td data-label="Дата" class="nowrap">${dateText}</td>
+          <td data-label="Поставщик">${esc(inv.supplier_name || '—')}</td>
+          <td data-label="Склад">${esc(inv.warehouse_name || '—')}</td>
+          <td data-label="Сумма">${money(inv.total_amount)} ₽</td>
+          <td data-label="Оплачено">${payHtml}</td>
+          <td data-label="Долг">${debtHtml}</td>
+          <td data-label="Позиций">${itemsCount}</td>
+          <td data-label="Статус">${statusHtml}</td>
+          <td class="ic-actions"><div class="inv-act-btns">${actions}</div></td>
         </tr>`;
       }).join('');
     }

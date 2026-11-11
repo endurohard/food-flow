@@ -12,6 +12,14 @@
 
   // Порог перевода. 1 кг = 1000 г, поэтому всё, что меньше килограмма,
   // показываем в граммах: 0,014 кг плохо читается, 14 г — хорошо.
+  // Латинские обозначения из старых техкарт и импорта — к русским
+  var ALIAS = { kg: 'кг', g: 'г', gr: 'г', l: 'л', lt: 'л', ml: 'мл', pcs: 'шт', pc: 'шт', piece: 'шт', pieces: 'шт', 'шт.': 'шт', 'кг.': 'кг', 'л.': 'л', 'г.': 'г' };
+  function norm(unit) {
+    if (unit == null) return '';
+    var u = String(unit).trim();
+    return ALIAS[u.toLowerCase()] || u;
+  }
+
   var SMALL = {
     'кг': { small: 'г',  factor: 1000 },
     'л':  { small: 'мл', factor: 1000 }
@@ -24,6 +32,7 @@
    * @returns {{text: string, value: number, unit: string}}
    */
   function formatQty(value, unit) {
+    unit = norm(unit);
     var n = parseFloat(value);
     if (isNaN(n)) return { text: '—', value: NaN, unit: unit || '' };
 
@@ -52,7 +61,7 @@
     return s.replace('.', ',');
   }
 
-  var api = { formatQty: formatQty, qty: qty, SMALL: SMALL };
+  var api = { formatQty: formatQty, qty: qty, norm: norm, SMALL: SMALL };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   global.Units = api;
 }(typeof window !== 'undefined' ? window : globalThis));

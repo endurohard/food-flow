@@ -268,6 +268,7 @@ export class ProductionService {
                   json_build_object(
                     'inventoryItemId', pri.inventory_item_id,
                     'itemName', ii.name,
+                    'unit', ii.unit,
                     'quantity', pri.quantity,
                     'cost', pri.cost
                   )
