@@ -88,25 +88,11 @@
   async function renderCoffee(root) {
     const orders = await todayOrders();
     if (!orders) { root.innerHTML = `<div class="bf-card">${NO_DATA}</div>`; return; }
-    const hours = [];
-    for (let h = 7; h <= 22; h++) hours.push({ h, n: 0 });
-    orders.forEach((o) => {
-      const h = new Date(o.created_at).getHours();
-      const slot = hours.find((x) => x.h === h);
-      if (slot) slot.n++;
-    });
-    const max = Math.max(1, ...hours.map((x) => x.n));
-    const peak = hours.reduce((a, b) => (b.n > a.n ? b : a), hours[0]);
+    // Чеки и выручка по часам — общий график панели (с пиком); здесь — очередь
     const queue = orders.filter((o) => ['confirmed', 'preparing', 'ready'].includes(o.status))
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).slice(0, 6);
 
     root.innerHTML = `
-      <section class="bf-card wide" aria-label="Чеки по часам">
-        <div class="bf-head"><h2 class="bf-title">Чеки по часам</h2>
-          <span class="bf-note">${peak.n ? 'пик — ' + peak.h + ':00, ' + peak.n + ' ' + plural(peak.n, 'чек', 'чека', 'чеков') : 'чеков пока нет'}</span></div>
-        <div class="bf-bars">${hours.map((x) => `<div class="bf-bar${x.n === peak.n && x.n ? ' peak' : ''}"><span>${x.n || ''}</span><i style="height:${Math.round((x.n / max) * 120)}px"></i></div>`).join('')}</div>
-        <div class="bf-hours">${hours.map((x) => `<span>${x.h}</span>`).join('')}</div>
-      </section>
       <section class="bf-card" aria-label="У стойки сейчас">
         <div class="bf-head"><h2 class="bf-title">У стойки сейчас</h2><a class="bf-note bf-link" href="/admin-panel/kds.html">Очередь</a></div>
         <div class="bf-list">${queue.length ? queue.map((o) => `
