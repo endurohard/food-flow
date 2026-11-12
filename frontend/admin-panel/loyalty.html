@@ -1412,6 +1412,33 @@ AUTH.requireAuth();
           <input type="number" class="form-input" id="platinumThreshold" min="0">
         </div>
 
+        <h3 style="margin: 24px 0 8px; color: var(--color-text-primary); font-size: 18px;">Скидка по уровню карты:</h3>
+        <div style="color: var(--color-grey-5); font-size: 12px; margin-bottom: 16px;">
+          Целое число процентов от 0 до 100. Пустое поле или 0 — уровень без скидки.
+          На блюда с пометкой «без скидки» скидка по карте не действует.
+        </div>
+        <div class="form-group" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+          <div>
+            <label class="form-label" for="tierDiscountBronze">🥉 Бронза, %:</label>
+            <input type="number" class="form-input" id="tierDiscountBronze" min="0" max="100" step="1" placeholder="0">
+          </div>
+          <div>
+            <label class="form-label" for="tierDiscountSilver">🥈 Серебро, %:</label>
+            <input type="number" class="form-input" id="tierDiscountSilver" min="0" max="100" step="1" placeholder="0">
+          </div>
+          <div>
+            <label class="form-label" for="tierDiscountGold">🥇 Золото, %:</label>
+            <input type="number" class="form-input" id="tierDiscountGold" min="0" max="100" step="1" placeholder="0">
+          </div>
+          <div>
+            <label class="form-label" for="tierDiscountPlatinum">💎 Платина, %:</label>
+            <input type="number" class="form-input" id="tierDiscountPlatinum" min="0" max="100" step="1" placeholder="0">
+          </div>
+        </div>
+
+        <!-- Ошибки проверки показываем в самой форме: тост исчезает за 3 секунды -->
+        <div id="settingsError" role="alert" style="display: none; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgba(229, 57, 53, 0.08); color: var(--color-danger, #e53935); font-size: 13px;"></div>
+
         <button class="btn btn-success" onclick="saveSettings()">Сохранить настройки</button>
       </div>
     </div>
@@ -1577,7 +1604,7 @@ AUTH.requireAuth();
     // Настройки лояльности = активная программа типа points на сервере.
     // Пустые значения до загрузки: нельзя показывать выдуманные пороги уровней,
     // по ним считаются реальные обязательства перед клиентами.
-    let loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {} };
+    let loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {}, discounts: {} };
     let pointsProgramId = null;
     // Загрузка с сервера удалась? Пока false — сохранять нельзя: запись
     // ушла бы в localStorage и пропала при перезагрузке браузера.
@@ -1674,7 +1701,7 @@ AUTH.requireAuth();
       customers = [];
       discounts = [];
       campaigns = [];
-      loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {} };
+      loyaltySettings = { pointsPerRuble: null, rublePerPoint: null, tiers: {}, discounts: {} };
       pointsProgramId = null;
       dataSourceOk = false;
 
@@ -1737,7 +1764,8 @@ AUTH.requireAuth();
           loyaltySettings = {
             pointsPerRuble: pointsProgram.pointsPerCurrency,
             rublePerPoint: pointsProgram.redemptionRate,
-            tiers: pointsProgram.tierThresholds || {}
+            tiers: pointsProgram.tierThresholds || {},
+            discounts: pointsProgram.tierDiscounts || {}
           };
         }
 
@@ -1787,6 +1815,18 @@ AUTH.requireAuth();
       const rules = typeof p.rules === 'string' ? (JSON.parse(p.rules) || {}) : (p.rules || {});
       const thresholds = typeof p.tier_thresholds === 'string'
         ? (JSON.parse(p.tier_thresholds) || {}) : (p.tier_thresholds || {});
+      // Скидки по уровням приходят JSON-ом, иногда строкой — как и пороги
+      let discountsRaw = p.tier_discounts;
+      if (typeof discountsRaw === 'string') {
+        try { discountsRaw = JSON.parse(discountsRaw); } catch (e) { discountsRaw = null; }
+      }
+      const tierDiscounts = {};
+      if (discountsRaw && typeof discountsRaw === 'object') {
+        TIER_KEYS.forEach(tier => {
+          const v = Number(discountsRaw[tier]);
+          if (Number.isFinite(v) && v > 0) tierDiscounts[tier] = v;
+        });
+      }
       return {
         id: p.id,
         name: p.name,
@@ -1800,6 +1840,7 @@ AUTH.requireAuth();
         redemptionRate: p.redemption_rate === null || p.redemption_rate === undefined
           ? null : parseFloat(p.redemption_rate),
         tierThresholds: thresholds,
+        tierDiscounts,
         isActive: p.is_active !== false
       };
     }
@@ -1826,6 +1867,24 @@ AUTH.requireAuth();
       if (!value) return '—';
       const d = new Date(value);
       return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ru-RU');
+    }
+
+    const TIER_KEYS = ['bronze', 'silver', 'gold', 'platinum'];
+    const TIER_DISCOUNT_INPUTS = {
+      bronze: 'tierDiscountBronze', silver: 'tierDiscountSilver',
+      gold: 'tierDiscountGold', platinum: 'tierDiscountPlatinum'
+    };
+
+    // «скидка 10%» у уровня; пусто, если скидки по уровню нет
+    function tierDiscountText(tier) {
+      const v = Number((loyaltySettings.discounts || {})[tier]);
+      return Number.isFinite(v) && v > 0 ? `скидка ${v}%` : '';
+    }
+
+    // Название уровня для бейджей: с пометкой скидки, если она задана
+    function getTierLabel(tier) {
+      const d = tierDiscountText(tier);
+      return escapeHtml(getTierName(tier)) + (d ? ` · ${d}` : '');
     }
 
     function getTierName(tier) {
@@ -1902,7 +1961,7 @@ AUTH.requireAuth();
                 <div class="customer-name">${escapeHtml(customer.name)}</div>
                 <div class="customer-info">${escapeHtml(customer.phone)}</div>
               </div>
-              <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierName(customer.tier)}</span>
+              <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierLabel(customer.tier)}</span>
             </div>
 
             <div class="points-section">
@@ -1910,7 +1969,7 @@ AUTH.requireAuth();
               <div class="points-label">баллов</div>
               ${tierProgress && tierProgress.next ? `
                 <div style="color: var(--color-grey-5); font-size: 11px; margin-top: 8px;">
-                  До ${getTierName(tierProgress.next)}: ${tierProgress.remaining.toLocaleString('ru-RU')} ₽ покупок
+                  До ${getTierLabel(tierProgress.next)}: ${tierProgress.remaining.toLocaleString('ru-RU')} ₽ покупок
                 </div>
                 <div class="progress-bar">
                   <div class="progress-fill" style="width: ${tierProgress.progress}%"></div>
@@ -1958,7 +2017,7 @@ AUTH.requireAuth();
         <div style="text-align: center; margin-bottom: 24px;">
           <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700; color: white; margin: 0 auto 16px;">${escapeHtml(initials)}</div>
           <h2 style="margin-bottom: 8px; color: var(--color-text-primary);">${escapeHtml(customer.name)}</h2>
-          <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierName(customer.tier)}</span>
+          <span class="customer-tier ${escapeHtml(customer.tier)}">${getTierLabel(customer.tier)}</span>
         </div>
 
         <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
@@ -2258,6 +2317,13 @@ AUTH.requireAuth();
               <div style="color: var(--color-grey-5); font-size: 11px;">Бонусные баллы</div>
               <div style="color: var(--color-primary); font-weight: 700; font-size: 18px; margin-top: 4px;">${campaign.bonusPoints}</div>
             </div>
+            ${Object.keys(campaign.tierDiscounts || {}).length ? `
+            <div style="background: var(--admin-content-bg); border: 1px solid var(--admin-border); border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+              <div style="color: var(--color-grey-5); font-size: 11px;">Скидка по уровням</div>
+              <div style="color: var(--color-text-primary); font-size: 13px; margin-top: 4px; line-height: 1.5;">
+                ${TIER_KEYS.filter(t => campaign.tierDiscounts[t]).map(t => `${escapeHtml(getTierName(t))}: скидка ${Number(campaign.tierDiscounts[t])}%`).join('<br>')}
+              </div>
+            </div>` : ''}
           </div>
         </div>
       `).join('');
@@ -2359,6 +2425,10 @@ AUTH.requireAuth();
       set('silverThreshold', tiers.silver);
       set('goldThreshold', tiers.gold);
       set('platinumThreshold', tiers.platinum);
+      const discounts = loyaltySettings.discounts || {};
+      TIER_KEYS.forEach(tier => set(TIER_DISCOUNT_INPUTS[tier], discounts[tier] ? discounts[tier] : ''));
+      const errBox = document.getElementById('settingsError');
+      if (errBox) errBox.style.display = 'none';
 
       const hint = document.getElementById('settingsSourceHint');
       if (hint) {
@@ -2381,10 +2451,40 @@ AUTH.requireAuth();
         return isNaN(v) ? null : v;
       };
 
+      const errBox = document.getElementById('settingsError');
+      const formError = (msg) => {
+        errBox.textContent = '⚠️ ' + msg;
+        errBox.style.display = '';
+      };
+      errBox.style.display = 'none';
+
+      // Скидка по уровню: целые 0..100. Пусто = 0 = без скидки. Шлём все
+      // четыре уровня, чтобы очищенное поле действительно снимало скидку.
+      const tierDiscounts = {};
+      const tierRu = { bronze: 'Бронза', silver: 'Серебро', gold: 'Золото', platinum: 'Платина' };
+      for (const tier of TIER_KEYS) {
+        const input = document.getElementById(TIER_DISCOUNT_INPUTS[tier]);
+        // Нечисловой ввод поле type=number отдаёт пустой строкой — без этой
+        // проверки опечатка молча превратилась бы в «без скидки»
+        if (input.validity && input.validity.badInput) {
+          formError(`Скидка уровня «${tierRu[tier]}» — целое число от 0 до 100.`);
+          input.focus();
+          return;
+        }
+        const raw = String(input.value || '').trim();
+        if (raw === '') { tierDiscounts[tier] = 0; continue; }
+        if (!/^\d+$/.test(raw) || Number(raw) > 100) {
+          formError(`Скидка уровня «${tierRu[tier]}» — целое число от 0 до 100 (сейчас: ${raw}).`);
+          document.getElementById(TIER_DISCOUNT_INPUTS[tier]).focus();
+          return;
+        }
+        tierDiscounts[tier] = Number(raw);
+      }
+
       const pointsPerRuble = num('pointsPerRuble');
       const rublePerPoint = num('rublePerPoint');
       if (pointsPerRuble === null || pointsPerRuble < 0 || rublePerPoint === null || rublePerPoint < 0) {
-        showNotification('⚠️ Укажите курс начисления и стоимость балла (неотрицательные числа)');
+        formError('Укажите курс начисления и стоимость балла (неотрицательные числа).');
         return;
       }
 
@@ -2403,6 +2503,7 @@ AUTH.requireAuth();
         pointsPerCurrency: pointsPerRuble,
         redemptionRate: rublePerPoint,
         tierThresholds,
+        tierDiscounts,
         isActive: true
       };
 
@@ -2415,6 +2516,7 @@ AUTH.requireAuth();
               pointsPerCurrency: payload.pointsPerCurrency,
               redemptionRate: payload.redemptionRate,
               tierThresholds: payload.tierThresholds,
+              tierDiscounts: payload.tierDiscounts,
               isActive: true
             })
           });

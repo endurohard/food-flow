@@ -748,7 +748,20 @@ const POS = {
       });
     });
     document.getElementById('cartClear').addEventListener('click', () => {
-      if (this.cart.length && confirm('Очистить чек?')) { this.cart = []; this.renderCart(); }
+      // confirm() заблокирован во встроенном браузере VS Code — подтверждение вторым нажатием
+      if (!this.cart.length) return;
+      const btn = document.getElementById('cartClear');
+      if (!this._clearArmed) {
+        this._clearArmed = true;
+        btn.textContent = 'Точно очистить?';
+        clearTimeout(this._clearT);
+        this._clearT = setTimeout(() => { this._clearArmed = false; btn.textContent = 'Очистить чек'; }, 4000);
+        return;
+      }
+      clearTimeout(this._clearT);
+      this._clearArmed = false;
+      btn.textContent = 'Очистить чек';
+      this.cart = []; this.renderCart();
     });
     document.getElementById('payCash').addEventListener('click', () => this.openCash());
     document.getElementById('payCard').addEventListener('click', () => this.pay('card'));
@@ -820,21 +833,35 @@ const POS = {
     });
     document.getElementById('modTitle').textContent = item.name;
     document.getElementById('modSub').textContent = this.money(Number(item.price) || 0);
-    document.getElementById('modGroups').innerHTML = Object.keys(groups).map(g =>
-      '<div class="mod-group"><div class="mod-group-title">' + this.esc(g) + '</div>' +
-      groups[g].map(m =>
-        '<label class="mod-opt"><input type="checkbox" value="' + m.id + '"' + (m.is_default ? ' checked' : '') + '>' +
-        '<span>' + this.esc(m.name) + '</span>' +
-        '<span class="mod-opt-price">' + (Number(m.price_adjustment) ? (Number(m.price_adjustment) > 0 ? '+' : '') + this.money(Number(m.price_adjustment)) : '—') + '</span>' +
-        '</label>'
-      ).join('') + '</div>'
-    ).join('');
+    document.getElementById('modGroups').innerHTML = Object.keys(groups).map((g, gi) => {
+      const list = groups[g];
+      // Группа, где у каждого варианта задан сорт ингредиента, — выбор ровно
+      // одного сорта (зерно «Эфиопия» или «Бразилия»): два сорта одного
+      // ингредиента в строке сервер отвергнет 400, поэтому рисуем radio.
+      // Предвыбран вариант «по умолчанию»; если такого нет — ничего.
+      const single = list.every(m => m.variety && String(m.variety).trim() !== '');
+      let defaultTaken = false;
+      return '<div class="mod-group"><div class="mod-group-title">' + this.esc(g) +
+        (single ? ' <span style="text-transform:none;font-weight:400;">· один на выбор</span>' : '') + '</div>' +
+        list.map(m => {
+          let checked = !!m.is_default;
+          // Если по ошибке «по умолчанию» отмечено у нескольких сортов — берём первый
+          if (single && checked) { if (defaultTaken) checked = false; else defaultTaken = true; }
+          return '<label class="mod-opt"><input type="' + (single ? 'radio' : 'checkbox') + '"' +
+            (single ? ' name="modg_' + gi + '"' : '') +
+            ' value="' + this.esc(m.id) + '"' + (checked ? ' checked' : '') + '>' +
+            '<span>' + this.esc(m.name) + '</span>' +
+            '<span class="mod-opt-price">' + (Number(m.price_adjustment) ? (Number(m.price_adjustment) > 0 ? '+' : '') + this.money(Number(m.price_adjustment)) : '—') + '</span>' +
+            '</label>';
+        }).join('') + '</div>';
+    }).join('');
     const add = document.getElementById('modAdd');
     add.onclick = () => {
+      // :checked отбирает и галочки, и выбранный radio сортовой группы
       const chosen = Array.from(document.querySelectorAll('#modGroups input:checked')).map(cb => {
-        const m = mods.find(x => x.id === cb.value);
-        return { modifierId: m.id, name: m.name, priceAdjustment: Number(m.price_adjustment) || 0 };
-      });
+        const m = mods.find(x => String(x.id) === cb.value);
+        return m ? { modifierId: m.id, name: m.name, priceAdjustment: Number(m.price_adjustment) || 0 } : null;
+      }).filter(Boolean);
       this.closeMods();
       this.addLine(item, chosen);
     };

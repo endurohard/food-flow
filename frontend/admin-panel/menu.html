@@ -249,7 +249,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#49B20D">
+    <meta name="theme-color" content="#2E7D4F">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Управление меню - FoodFlow</title>
   <style>
@@ -1557,6 +1557,10 @@ AUTH.requireAuth();
             <input type="checkbox" id="dishIsSpicy">
             <label>Острое</label>
           </div>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishNoDiscount">
+            <label for="dishNoDiscount">Без скидки (скидки по карте и акции на чек не действуют)</label>
+          </div>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
@@ -1609,10 +1613,18 @@ AUTH.requireAuth();
 
       <form id="modifierForm" onsubmit="saveModifier(event)">
         <div class="form-group">
-          <label class="form-label">Блюдо:</label>
-          <select class="form-select" id="modifierDish" required></select>
+          <label class="form-label" for="modifierDishFilter">Блюда:</label>
+          <input type="text" class="form-input" id="modifierDishFilter" placeholder="Быстрый фильтр по названию, напр. «латте»" oninput="renderModifierDishList()" autocomplete="off">
+          <div style="display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; font-size: 13px;">
+            <button type="button" class="btn btn-secondary btn-small" onclick="setModifierDishesShown(true)">Отметить показанные</button>
+            <button type="button" class="btn btn-secondary btn-small" onclick="setModifierDishesShown(false)">Снять показанные</button>
+            <span id="modifierDishCount" style="color: var(--color-grey-5);"></span>
+          </div>
+          <div id="modifierDishList" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--admin-border); border-radius: 8px; padding: 6px 10px;"></div>
           <div style="font-size: 12px; color: #888; margin-top: 4px;">
             Модификатор принадлежит блюду — он появится при его продаже в кассе.
+            Отметьте несколько блюд, чтобы добавить одинаковый модификатор ко всем сразу
+            (например, группу «Зерно» ко всем кофейным напиткам).
           </div>
         </div>
 
@@ -1624,6 +1636,16 @@ AUTH.requireAuth();
         <div class="form-group">
           <label class="form-label">Цена (₽):</label>
           <input type="number" class="form-input" id="modifierPrice" required step="0.01" min="0">
+        </div>
+
+        <div class="form-group">
+          <div class="form-checkbox">
+            <input type="checkbox" id="modifierIsDefault">
+            <label for="modifierIsDefault">Выбран по умолчанию</label>
+          </div>
+          <div style="font-size: 12px; color: #888; margin-top: 4px;">
+            В кассе отмечен сразу при добавлении блюда — кассир снимает, если гость попросил иначе.
+          </div>
         </div>
 
         <div class="form-group">
@@ -1685,9 +1707,12 @@ AUTH.requireAuth();
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 20px;">
-          <button type="submit" class="btn btn-primary" style="flex: 1;">Сохранить</button>
+          <button type="submit" class="btn btn-primary" style="flex: 1;" id="modifierSaveBtn">Сохранить</button>
           <button type="button" class="btn btn-secondary" onclick="closeModifierModal()">Отмена</button>
         </div>
+        <!-- Итог массового добавления: ошибки по конкретным блюдам видны здесь,
+             тост за 3 секунды их не покажет -->
+        <div id="modifierSaveResult" style="display: none; margin-top: 12px; font-size: 13px; padding: 10px; border-radius: 8px; background: var(--admin-content-bg);"></div>
       </form>
     </div>
   </div>
@@ -1924,7 +1949,8 @@ AUTH.requireAuth();
           isNew: i.is_new || false,
           isSpicy: i.is_spicy || false,
           icon: i.icon || null,
-          iconColor: i.icon_color || null
+          iconColor: i.icon_color || null,
+          noDiscount: i.no_discount === true
         }));
 
         // Стоп-лист необязателен: его отсутствие не повод гасить весь экран
@@ -2103,14 +2129,15 @@ AUTH.requireAuth();
               ` : ''}
             </div>
             <div class="dish-content">
-              <div class="dish-name">${dish.name}</div>
-              <div class="dish-description">${dish.description}</div>
+              <div class="dish-name">${escapeHtml(dish.name)}</div>
+              <div class="dish-description">${escapeHtml(dish.description)}</div>
               <div class="dish-info">
                 ${dish.weight ? `<span class="info-tag">⚖️ ${dish.weight}</span>` : ''}
                 ${dish.calories ? `<span class="info-tag">🔥 ${dish.calories} ккал</span>` : ''}
                 ${dish.cookTime ? `<span class="info-tag">⏱️ ${dish.cookTime} мин</span>` : ''}
                 ${dish.isVegetarian ? '<span class="info-tag">🌱</span>' : ''}
                 ${dish.isSpicy ? '<span class="info-tag">🌶️</span>' : ''}
+                ${dish.noDiscount ? '<span class="info-tag" title="Скидки по карте и акции на чек на это блюдо не действуют">без скидки</span>' : ''}
               </div>
               ${recipe ? `
                 <div style="margin: 12px 0; padding: 8px; background: var(--admin-content-bg); border-radius: 8px;">
@@ -2252,6 +2279,7 @@ AUTH.requireAuth();
       document.getElementById('dishIsHot').checked = dish.isHot || false;
       document.getElementById('dishIsVegetarian').checked = dish.isVegetarian || false;
       document.getElementById('dishIsSpicy').checked = dish.isSpicy || false;
+      document.getElementById('dishNoDiscount').checked = dish.noDiscount || false;
       document.getElementById('dishModal').classList.add('active');
     }
 
@@ -2293,7 +2321,9 @@ AUTH.requireAuth();
           isVegetarian: formData.isVegetarian,
           weightGrams: formData.weight ? parseInt(formData.weight) : undefined,
           icon: formData.icon,
-          iconColor: formData.icon ? formData.iconColor : null
+          iconColor: formData.icon ? formData.iconColor : null,
+          // Флаг шлём всегда (и false): иначе снять «без скидки» было бы нельзя
+          noDiscount: document.getElementById('dishNoDiscount').checked
         };
 
         if (editingDishId) {
@@ -2472,7 +2502,8 @@ AUTH.requireAuth();
             techCardName: m.tech_card_name || null,
             quantity: m.quantity !== null && m.quantity !== undefined ? Number(m.quantity) : null,
             variety: m.variety || null,
-            varietyItemName: m.variety_item_name || null
+            varietyItemName: m.variety_item_name || null,
+            isDefault: m.is_default === true
           }));
         } catch (e) { /* блюдо без модификаторов — не ошибка */ }
       }
@@ -2491,10 +2522,11 @@ AUTH.requireAuth();
 
     async function openAddModifierModal() {
       document.getElementById('modifierForm').reset();
-
-      const dishSel = document.getElementById('modifierDish');
-      dishSel.innerHTML = dishes.map(d => `<option value="${d.id}">${d.name}</option>`).join('')
-        || '<option value="">Сначала создайте блюдо</option>';
+      modifierSelectedDishes = new Set();
+      renderModifierDishList();
+      const result = document.getElementById('modifierSaveResult');
+      result.style.display = 'none';
+      result.innerHTML = '';
 
       // Склад и техкарты уже загружаются для вкладки техкарт — переиспользуем
       if (!stockItems || stockItems.length === 0) await loadStockItems();
@@ -2513,6 +2545,47 @@ AUTH.requireAuth();
 
       onModifierSourceKindChange();
       document.getElementById('modifierModal').classList.add('active');
+    }
+
+    // Блюда, к которым добавляется модификатор (id). Живёт отдельно от DOM,
+    // чтобы фильтр по названию не сбрасывал уже отмеченные галочки.
+    let modifierSelectedDishes = new Set();
+
+    function renderModifierDishList() {
+      const box = document.getElementById('modifierDishList');
+      const q = document.getElementById('modifierDishFilter').value.trim().toLowerCase();
+      if (!dishes.length) {
+        box.innerHTML = '<div style="padding: 6px 0; color: var(--color-grey-5);">Сначала создайте блюдо</div>';
+      } else {
+        const shown = dishes.filter(d => !q || String(d.name || '').toLowerCase().includes(q));
+        box.innerHTML = shown.length ? shown.map(d => `
+          <label style="display: flex; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer;">
+            <input type="checkbox" data-dish-id="${escapeHtml(d.id)}" ${modifierSelectedDishes.has(String(d.id)) ? 'checked' : ''}
+              onchange="toggleModifierDish(this)">
+            <span>${escapeHtml(d.name)}</span>
+            ${d.categoryName ? `<span style="color: var(--color-grey-5); font-size: 12px;">· ${escapeHtml(d.categoryName)}</span>` : ''}
+          </label>`).join('')
+          : '<div style="padding: 6px 0; color: var(--color-grey-5);">Ничего не найдено</div>';
+      }
+      updateModifierDishCount();
+    }
+
+    function toggleModifierDish(cb) {
+      const id = cb.getAttribute('data-dish-id');
+      if (cb.checked) modifierSelectedDishes.add(id); else modifierSelectedDishes.delete(id);
+      updateModifierDishCount();
+    }
+
+    // Отметить/снять все блюда, видимые после фильтра
+    function setModifierDishesShown(on) {
+      document.querySelectorAll('#modifierDishList input[data-dish-id]').forEach(cb => {
+        cb.checked = on;
+        toggleModifierDish(cb);
+      });
+    }
+
+    function updateModifierDishCount() {
+      document.getElementById('modifierDishCount').textContent = 'Выбрано блюд: ' + modifierSelectedDishes.size;
     }
 
     // Сорт и названия вводит пользователь — в разметку только экранированными
@@ -2534,16 +2607,22 @@ AUTH.requireAuth();
     async function saveModifier(event) {
       event.preventDefault();
 
-      const menuItemId = document.getElementById('modifierDish').value;
-      if (!menuItemId) {
-        showNotification('⚠️ Сначала создайте блюдо');
+      const resultBox = document.getElementById('modifierSaveResult');
+      const showResult = (html) => { resultBox.innerHTML = html; resultBox.style.display = ''; };
+      resultBox.style.display = 'none';
+
+      // Только существующие блюда: выбранное могло пропасть после перезагрузки меню
+      const targets = dishes.filter(d => modifierSelectedDishes.has(String(d.id)));
+      if (!targets.length) {
+        showResult('⚠️ Отметьте хотя бы одно блюдо');
         return;
       }
 
       const payload = {
         name: document.getElementById('modifierName').value,
         priceAdjustment: parseFloat(document.getElementById('modifierPrice').value) || 0,
-        modifierGroup: document.getElementById('modifierType').value
+        modifierGroup: document.getElementById('modifierType').value,
+        isDefault: document.getElementById('modifierIsDefault').checked
       };
 
       // Источник расхода: один или ни одного. Количество отправляется только
@@ -2552,14 +2631,14 @@ AUTH.requireAuth();
       if (kind === 'variety') {
         const variety = document.getElementById('modifierVariety').value.trim();
         const varietyItemId = document.getElementById('modifierVarietyItem').value;
-        if (!varietyItemId) { showNotification('⚠️ Выберите ингредиент'); return; }
-        if (!variety) { showNotification('⚠️ Укажите сорт, например «Эфиопия»'); return; }
+        if (!varietyItemId) { showResult('⚠️ Выберите ингредиент'); return; }
+        if (!variety) { showResult('⚠️ Укажите сорт, например «Эфиопия»'); return; }
         payload.varietyItemId = varietyItemId;
         payload.variety = variety;
       } else if (kind !== 'none') {
         const qty = parseFloat(document.getElementById('modifierQuantity').value);
         if (!(qty > 0)) {
-          showNotification('⚠️ Укажите расход больше нуля');
+          showResult('⚠️ Укажите расход больше нуля');
           return;
         }
         payload.quantity = qty;
@@ -2567,23 +2646,58 @@ AUTH.requireAuth();
         else payload.techCardId = document.getElementById('modifierTechCard').value;
       }
 
-      try {
-        const res = await AUTH.fetch('/api/restaurants/menu-items/' + menuItemId + '/modifiers', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          showNotification('❌ ' + (err.message || err.error || 'Не удалось сохранить'));
-          return;
+      // По одному блюду последовательно: ошибка одного не прерывает остальные,
+      // а в итоге видно, к каким именно блюдам модификатор не добавился.
+      const saveBtn = document.getElementById('modifierSaveBtn');
+      saveBtn.disabled = true;
+      const okIds = [];
+      const failed = [];
+      for (let i = 0; i < targets.length; i++) {
+        const dish = targets[i];
+        saveBtn.textContent = `Сохранение ${i + 1} из ${targets.length}…`;
+        try {
+          const res = await AUTH.fetch('/api/restaurants/menu-items/' + dish.id + '/modifiers', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            failed.push({ dish, reason: err.message || err.error || ('HTTP ' + res.status) });
+          } else {
+            okIds.push(String(dish.id));
+          }
+        } catch (e) {
+          failed.push({ dish, reason: 'сервер недоступен: ' + e.message });
         }
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить';
+
+      if (okIds.length) {
         await loadModifiers();
         renderModifiersManagement();
-        closeModifierModal();
-        showNotification('✅ Добавлено');
-      } catch (e) {
-        showNotification('❌ Сервер недоступен: ' + e.message);
       }
+      if (!failed.length) {
+        closeModifierModal();
+        showNotification(`✅ Добавлено к ${okIds.length} ${dishWord(okIds.length)}`);
+        return;
+      }
+      // Успешные снимаем с отметки: повторное «Сохранить» дошлёт только упавшие,
+      // а не создаст дубли у тех, где уже получилось.
+      okIds.forEach(id => modifierSelectedDishes.delete(id));
+      renderModifierDishList();
+      showResult(
+        (okIds.length ? `✅ Добавлено к ${okIds.length} ${dishWord(okIds.length)}.<br>` : '')
+        + `❌ Не добавлено к ${failed.length} ${dishWord(failed.length)}:`
+        + '<ul style="margin: 6px 0 0 18px; padding: 0;">'
+        + failed.map(f => `<li><b>${escapeHtml(f.dish.name)}</b> — ${escapeHtml(f.reason)}</li>`).join('')
+        + '</ul><div style="margin-top: 6px; color: var(--color-grey-5);">Они остались отмеченными — исправьте и нажмите «Сохранить» ещё раз.</div>'
+      );
+    }
+
+    // «к 1 блюду», «к 3 блюдам» — дательный падеж после «к»
+    function dishWord(n) {
+      return n % 10 === 1 && n % 100 !== 11 ? 'блюду' : 'блюдам';
     }
 
     function renderModifiersManagement() {
@@ -2626,16 +2740,49 @@ AUTH.requireAuth();
               return `
               <div class="modifier-item">
                 <div>
-                  <div class="modifier-name">${mod.name}</div>
-                  <div class="modifier-price">+${mod.price} ₽ · ${mod.dishName || ''}</div>
+                  <div class="modifier-name">${escapeHtml(mod.name)}${mod.isDefault ? ' <span style="font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: rgba(67, 160, 71, 0.12); color: var(--color-success);">по умолчанию</span>' : ''}</div>
+                  <div class="modifier-price">+${mod.price} ₽ · ${escapeHtml(mod.dishName || '')}</div>
                   <div style="font-size: 12px; color: var(--color-grey-5); margin-top: 2px;">${src}</div>
                 </div>
-                <button class="btn btn-danger btn-small" onclick="deleteModifier('${mod.id}')">🗑️</button>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                  <button class="btn btn-secondary btn-small" onclick="toggleModifierDefault('${mod.id}')"
+                    title="${mod.isDefault ? 'Снять выбор по умолчанию' : 'Сделать выбранным по умолчанию'}">${mod.isDefault ? '☆ снять' : '★ по умолчанию'}</button>
+                  <button class="btn btn-danger btn-small" onclick="deleteModifier('${mod.id}')">🗑️</button>
+                </div>
               </div>`;
             }).join('')}
           </div>
         </div>
       `).join('');
+    }
+
+    // «По умолчанию» у готового модификатора: поменяли зерно в бункере —
+    // переключили умолчание, без удаления и повторного создания. В одной
+    // группе одного блюда умолчание одно: у соседей оно снимается.
+    async function toggleModifierDefault(id) {
+      const mod = modifiers.find(m => m.id === id);
+      if (!mod) return;
+      const makeDefault = !mod.isDefault;
+      const others = makeDefault
+        ? modifiers.filter(m => m.id !== id && m.isDefault && m.menuItemId === mod.menuItemId && m.type === mod.type)
+        : [];
+      try {
+        for (const m of [mod, ...others]) {
+          const res = await AUTH.fetch('/api/restaurants/modifiers/' + m.id, {
+            method: 'PUT',
+            body: JSON.stringify({ isDefault: m.id === id ? makeDefault : false })
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || err.error || 'не удалось сохранить');
+          }
+        }
+        await loadModifiers();
+        renderModifiersManagement();
+        showNotification(makeDefault ? '✅ «' + mod.name + '» выбран по умолчанию' : '✅ Выбор по умолчанию снят');
+      } catch (e) {
+        showNotification('❌ ' + e.message);
+      }
     }
 
     async function deleteModifier(id) {
@@ -2788,7 +2935,7 @@ AUTH.requireAuth();
                 <div style="display: flex; gap: 16px; align-items: center;">
                   <div style="font-size: 36px;">${dish.icon || '🍽️'}</div>
                   <div>
-                    <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">${dish.name}</div>
+                    <div style="font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 4px;">${escapeHtml(dish.name)}</div>
                     <div style="color: var(--color-grey-5); font-size: 13px; margin-bottom: 4px;">${category ? category.name : ''}</div>
                     <div style="color: var(--color-danger); font-size: 13px;">Недоступно</div>
                   </div>
