@@ -253,3 +253,19 @@ html body .main-wrapper select:focus-visible {
   html body .notification,
   html body .dev-toast { right: 16px !important; bottom: 16px !important; }
 }
+
+/* ── Счётчик в пункте меню («Заказы 2»): компактная таблетка справа ───── */
+/* Без этого бейдж растягивался во всю ширину пункта красной полосой. */
+html body .sidebar .nav-item .nav-badge {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  margin-left: auto !important;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px !important;
+  border-radius: 10px !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  line-height: 20px !important;
+  text-align: center;
+}

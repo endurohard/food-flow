@@ -1095,6 +1095,107 @@
   <!-- Общий каркас админки: подключается последним, чтобы выровнять страничные стили -->
   <link rel="stylesheet" href="/css/admin-shell.css">
   <script src="js/admin-shell.js" defer></script>
+
+<style>
+  /* ── Заказы: панель фильтров, доска, карточка ── */
+  .ob-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--admin-card-bg); box-shadow: var(--shadow-card);
+    border-radius: var(--radius-lg, 16px); padding: 12px; margin-bottom: 12px; }
+  .ob-date { display: flex; align-items: center; gap: 4px; }
+  .ob-ctl { height: 40px; border: 1px solid var(--admin-border); border-radius: 10px; background: var(--admin-card-bg); color: var(--color-text-primary);
+    font: inherit; font-size: 14px; padding: 0 12px; }
+  .ob-ctl:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light); }
+  select.ob-ctl { -webkit-appearance: none; appearance: none; padding-right: 32px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 20 20' fill='none' stroke='%236b6b6b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 8l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; }
+  .ob-ico { width: 40px; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--color-text-secondary); }
+  .ob-ico:hover { color: var(--color-primary); border-color: var(--color-primary); }
+  .ob-ico svg { width: 16px; height: 16px; }
+  .ob-today { cursor: pointer; font-weight: 600; }
+  .ob-today[aria-pressed="true"] { background: var(--color-primary-light); border-color: var(--color-primary); color: var(--color-primary); }
+  .ob-times { display: none; align-items: center; gap: 6px; }
+  .ob-times.show { display: flex; }
+  .ob-search { position: relative; flex: 1; min-width: 200px; }
+  .ob-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary); }
+  .ob-search input { width: 100%; padding-left: 36px; }
+  .ob-btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--color-primary); background: var(--color-primary); color: #fff;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .ob-btn.sec { background: var(--admin-card-bg); color: var(--color-primary); }
+  .ob-btn:hover { filter: brightness(1.06); }
+  .ob-sum { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--color-text-secondary); margin: 4px 4px 14px; }
+  .ob-sum b { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+
+  .ob-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 14px; overflow-x: auto; padding-bottom: 8px;
+    align-items: start; scroll-snap-type: x proximity; }
+  .ob-col { background: var(--admin-content-bg); border-radius: 14px; padding: 10px; min-height: 240px; scroll-snap-align: start;
+    display: flex; flex-direction: column; gap: 10px; transition: box-shadow .15s; }
+  .ob-col.drop { box-shadow: inset 0 0 0 2px var(--color-primary); }
+  .ob-col-h { display: flex; align-items: center; gap: 8px; padding: 4px 4px 2px; font-size: 14px; font-weight: 700; color: var(--color-text-primary); }
+  .ob-col-h i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .ob-col-h .n { margin-left: auto; min-width: 26px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--admin-card-bg);
+    font-size: 12px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
+  .ob-empty { padding: 26px 8px; text-align: center; font-size: 13px; color: var(--color-text-secondary); }
+  .ob-more { border: 0; background: none; color: var(--color-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px; }
+
+  .oc { background: var(--admin-card-bg); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); cursor: pointer;
+    display: flex; flex-direction: column; gap: 8px; border-left: 3px solid transparent; outline: none; }
+  .oc:hover, .oc:focus-visible { box-shadow: 0 2px 10px rgba(0,0,0,.10); }
+  .oc:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+  .oc.new { border-left-color: #D99A00; }
+  .oc.dragging { opacity: .45; }
+  .oc-top { display: flex; align-items: center; gap: 8px; }
+  .oc-num { font-size: 16px; font-weight: 700; color: var(--color-text-primary); letter-spacing: .01em; }
+  .oc-type { font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; }
+  .oc-time { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .oc-time.warn { color: #8A6100; }
+  .oc-time.bad { color: #9E3420; }
+  .oc-who { font-size: 13px; color: var(--color-text-secondary); display: flex; flex-wrap: wrap; gap: 2px 8px; }
+  .oc-who b { color: var(--color-text-primary); font-weight: 600; }
+  .oc-who a { color: inherit; text-decoration: none; }
+  .oc-note { font-size: 13px; color: #6E5200; background: #FBF3D6; border-radius: 8px; padding: 6px 8px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .oc-chip { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #E3ECF8; color: #1D4E89; }
+  .oc-bot { display: flex; align-items: center; gap: 6px; }
+  .oc-sum { font-size: 16px; font-weight: 700; color: var(--color-text-primary); font-variant-numeric: tabular-nums; margin-right: auto; }
+  .oc-go { height: 32px; padding: 0 12px; border-radius: 8px; border: 0; background: var(--color-primary); color: #fff; font: inherit; font-size: 13px;
+    font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .oc-go:hover { filter: brightness(1.08); }
+  .oc-i { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--admin-border); background: transparent; color: var(--color-text-secondary);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .oc-i svg { width: 15px; height: 15px; }
+  .oc-i:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
+  .oc-i.x:hover, .oc-i.x.armed { color: #9E3420; border-color: #E8B7A8; background: #FBE3DC; }
+  .oc-done .oc-sum { font-weight: 600; }
+
+  /* карточка заказа */
+  #orderModal .modal-content { max-width: 560px; }
+  #orderModal .modal-header { display: flex; align-items: center; gap: 10px; }
+  #orderModal .close-btn { border: 0; background: none; font-size: 28px; line-height: 1; cursor: pointer; color: var(--color-text-secondary);
+    width: 40px; height: 40px; border-radius: 10px; }
+  #orderModal .close-btn:hover { background: var(--admin-content-bg); color: var(--color-text-primary); }
+  .od-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .od-h h2 { margin: 0; font-size: 22px; }
+  .od-st { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+  .od-meta { font-size: 14px; color: var(--color-text-secondary); margin: 6px 0 14px; line-height: 1.6; }
+  .od-meta a { color: var(--color-primary); }
+  .od-items { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .od-items td { padding: 8px 0; border-bottom: 1px solid var(--admin-border); vertical-align: top; }
+  .od-items td.q { width: 48px; color: var(--color-text-secondary); white-space: nowrap; }
+  .od-items td.p { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .od-items small { display: block; color: var(--color-text-secondary); }
+  .od-tot { display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; padding: 12px 0 4px; }
+  .od-note { margin-top: 10px; font-size: 14px; background: #FBF3D6; color: #4D3A00; border-radius: 10px; padding: 10px 12px; }
+  .od-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  .od-acts .sp { flex: 1; }
+
+  @media (max-width: 760px) {
+    .ob-bar { padding: 10px; }
+    .ob-date { width: 100%; }
+    .ob-date input { flex: 1; }
+    .ob-bar > select, .ob-search { flex: 1 1 100%; }
+    .ob-board { grid-auto-columns: 82%; }
+  }
+</style>
+
 </head>
 <body>
 <!-- ══ SIDEBAR OVERLAY (mobile) ══ -->
@@ -1320,258 +1421,37 @@ AUTH.requireAuth();
       <h1 class="title">Заказы</h1>
     </div>
 
-    <!-- Stats Bar -->
-    <div class="stats-bar" style="display:none" aria-hidden="true">
-      <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(251, 140, 0, 0.1);"></div>
-        <div class="stat-info">
-          <div class="stat-label">Новые</div>
-          <div class="stat-value" id="headerPending" style="color: var(--color-warning);">0</div>
-        </div>
+    <!-- Фильтры: одна строка -->
+    <div class="ob-bar" role="search">
+      <div class="ob-date">
+        <button type="button" class="ob-ctl ob-ico" onclick="shiftDay(-1)" aria-label="Предыдущий день"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l-6 6 6 6"/></svg></button>
+        <input type="date" id="filterDate" class="ob-ctl" onchange="applyFilters()" aria-label="Дата">
+        <button type="button" class="ob-ctl ob-ico" onclick="shiftDay(1)" aria-label="Следующий день"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4l6 6-6 6"/></svg></button>
+        <button type="button" class="ob-ctl ob-today" id="todayBtn" onclick="goToday()">Сегодня</button>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: var(--color-primary-light);">✓</div>
-        <div class="stat-info">
-          <div class="stat-label">Подтв.</div>
-          <div class="stat-value" id="headerConfirmed" style="color: var(--color-primary);">0</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1);"></div>
-        <div class="stat-info">
-          <div class="stat-label">Готов.</div>
-          <div class="stat-value" id="headerPreparing" style="color: #8b5cf6;">0</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(67, 160, 71, 0.1);"></div>
-        <div class="stat-info">
-          <div class="stat-label">Готовы</div>
-          <div class="stat-value" id="headerReady" style="color: var(--color-success);">0</div>
-        </div>
-      </div>
-      <div class="stat-card" data-delivery-only>
-        <div class="stat-icon" style="background: rgba(6, 182, 212, 0.1);"></div>
-        <div class="stat-info">
-          <div class="stat-label">На дост.</div>
-          <div class="stat-value" id="headerDelivery" style="color: #06b6d4;">0</div>
-        </div>
-      </div>
-      <div class="stat-card" data-delivery-only>
-        <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">✔</div>
-        <div class="stat-info">
-          <div class="stat-label">Доставл.</div>
-          <div class="stat-value" id="headerDelivered" style="color: var(--color-success);">0</div>
-        </div>
-      </div>
+      <select id="filterShift" class="ob-ctl" onchange="onShiftChange()" aria-label="Смена">
+        <option value="all">Весь день</option>
+        <option value="current">Текущая смена</option>
+        <option value="morning">Утро 08:00–16:00</option>
+        <option value="day">Вечер 16:00–24:00</option>
+        <option value="custom">Своё время…</option>
+      </select>
+      <span class="ob-times" id="customShiftTimes">
+        <input type="time" id="customShiftStart" class="ob-ctl" value="08:00" onchange="applyFilters()" aria-label="С">
+        –
+        <input type="time" id="customShiftEnd" class="ob-ctl" value="23:59" onchange="applyFilters()" aria-label="По">
+      </span>
+      <div class="ob-search"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg><input type="search" class="ob-ctl" id="searchInput" placeholder="Номер, имя или телефон" aria-label="Поиск заказа"></div>
+      <button type="button" class="ob-btn sec" id="sendAllBtn" style="display:none" onclick="sendAllToKitchen(this)"></button>
     </div>
+    <div class="ob-sum" id="obSummary" aria-live="polite"></div>
 
-    <!-- Filters -->
-    <div style="background: var(--admin-card-bg); border-radius: 12px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-        <!-- Date Filter -->
-        <div style="flex: 1; min-width: 200px;">
-          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
-            Дата
-          </label>
-          <input type="date" id="filterDate" class="search-input" style="width: 100%;" onchange="applyFilters()">
-        </div>
+    <!-- Доска: колонки строит скрипт по типу заведения -->
+    <div class="ob-board" id="obBoard"></div>
 
-        <!-- Shift Filter -->
-        <div style="flex: 1; min-width: 200px;">
-          <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
-            Смена
-          </label>
-          <select id="filterShift" class="search-input" style="width: 100%; cursor: pointer;" onchange="if (this.value !== 'custom') applyFilters()">
-            <option value="all">Все смены</option>
-            <option value="current">Текущая смена</option>
-            <option value="morning">Утренняя (08:00 - 16:00)</option>
-            <option value="day">Дневная (16:00 - 23:59)</option>
-            <option value="custom">Своя смена...</option>
-          </select>
-        </div>
-
-        <!-- Custom Shift Times -->
-        <div id="customShiftTimes" style="display: none; flex: 2; min-width: 300px; gap: 12px;">
-          <div style="display: flex; gap: 12px; align-items: flex-end;">
-            <div style="flex: 1;">
-              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
-                От
-              </label>
-              <input type="time" id="customShiftStart" class="search-input" value="08:00" style="width: 100%;">
-            </div>
-            <div style="flex: 1;">
-              <label style="display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text-primary);">
-                До
-              </label>
-              <input type="time" id="customShiftEnd" class="search-input" value="23:59" style="width: 100%;">
-            </div>
-          </div>
-        </div>
-
-        <!-- Apply Filters Button -->
-        <div>
-          <button class="btn btn-primary" onclick="applyFilters()" style="height: 44px;">
-            Применить
-          </button>
-          <button class="btn btn-secondary" onclick="resetFilters()" style="height: 44px; margin-left: 8px;">
-            ↺ Сбросить
-          </button>
-        </div>
-      </div>
-
-      <!-- Active Filters Display -->
-      <div id="activeFilters" style="margin-top: 16px; display: none;">
-        <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 8px;">Активные фильтры:</div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="activeFiltersContainer"></div>
-      </div>
-
-      <!-- Shift Statistics -->
-      <div id="shiftStats" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--admin-border); display: none;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
-          <div>
-            <div style="font-size: 13px; color: var(--color-text-secondary);">Заказов за период</div>
-            <div style="font-size: 24px; font-weight: 700; color: var(--color-primary);" id="shiftOrderCount">0</div>
-          </div>
-          <div>
-            <div style="font-size: 13px; color: var(--color-text-secondary);">Сумма заказов</div>
-            <div style="font-size: 24px; font-weight: 700; color: var(--color-success);" id="shiftTotalAmount">0 ₽</div>
-          </div>
-          <div>
-            <div style="font-size: 13px; color: var(--color-text-secondary);">Средний чек</div>
-            <div style="font-size: 24px; font-weight: 700; color: #8b5cf6;" id="shiftAvgAmount">0 ₽</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="controls">
-      <div class="search-box">
-        <input type="text" class="search-input" id="searchInput" placeholder="Поиск по номеру, имени или телефону...">
-      </div>
-      <div class="control-buttons">
-        <button class="btn btn-success" onclick="sendAllToKitchen()">
-          Отправить все на кухню
-        </button>
-      </div>
-    </div>
-
-    <!-- Kanban Board -->
-    <div class="kanban-board">
-      <!-- Новые заказы -->
-      <div class="kanban-column" data-status="pending">
-        <div class="column-header">
-          <div class="column-title" style="color: var(--color-warning);">
-            Новые
-          </div>
-          <div class="column-count" id="countPending">0</div>
-        </div>
-        <div class="cards-container" id="columnPending">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет новых заказов</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Подтвержденные -->
-      <div class="kanban-column" data-status="confirmed">
-        <div class="column-header">
-          <div class="column-title" style="color: var(--color-primary);">
-            ✓ Подтверждены
-          </div>
-          <div class="column-count" id="countConfirmed">0</div>
-        </div>
-        <div class="cards-container" id="columnConfirmed">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет подтвержденных</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Готовятся -->
-      <div class="kanban-column" data-status="preparing">
-        <div class="column-header">
-          <div class="column-title" style="color: #8b5cf6;">
-            Готовятся
-          </div>
-          <div class="column-count" id="countPreparing">0</div>
-        </div>
-        <div class="cards-container" id="columnPreparing">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Ничего не готовится</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Готовы -->
-      <div class="kanban-column" data-status="ready">
-        <div class="column-header">
-          <div class="column-title" style="color: var(--color-success);">
-            Готовы
-          </div>
-          <div class="column-count" id="countReady">0</div>
-        </div>
-        <div class="cards-container" id="columnReady">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет готовых заказов</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- На доставке: статус в БД называется delivering (out_for_delivery в enum нет) -->
-      <div class="kanban-column" data-status="delivering" data-delivery-only>
-        <div class="column-header">
-          <div class="column-title" style="color: #06b6d4;">
-            На доставке
-          </div>
-          <div class="column-count" id="countDelivery">0</div>
-        </div>
-        <div class="cards-container" id="columnOut_for_delivery">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет заказов на доставке</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Доставлено -->
-      <div class="kanban-column" data-status="delivered" data-delivery-only>
-        <div class="column-header">
-          <div class="column-title" style="color: var(--color-success);">
-            ✔ Доставлено
-          </div>
-          <div class="column-count" id="countDelivered">0</div>
-        </div>
-        <div class="cards-container" id="columnDelivered">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет доставленных заказов</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Выполнено: так закрывает заказ касса (completed). Без этой колонки
-           продажи кофейни и самовывоза не показывались на доске вовсе. -->
-      <div class="kanban-column" data-status="completed">
-        <div class="column-header">
-          <div class="column-title" style="color: var(--color-success);">
-            ✔ Выполнено
-          </div>
-          <div class="column-count" id="countCompleted">0</div>
-        </div>
-        <div class="cards-container" id="columnCompleted">
-          <div class="empty-column">
-            <div class="empty-icon"></div>
-            <div>Нет выполненных заказов</div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <!-- Карточка заказа -->
+  <div id="orderModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="odTitle">
+    <div class="modal-content" id="orderModalBody"></div>
   </div>
 
   <!-- Courier Selection Modal -->
@@ -1618,22 +1498,21 @@ AUTH.requireAuth();
   <div class="notification" id="notification"></div>
 
   <script>
-    // Запросы идут через AUTH.fetch — он сам подставляет базовый URL,
-    // Bearer-токен и обновляет истёкший токен. Без него API отвечает 401.
+    // ═══ Заказы ═══
+    // Данные за выбранный день берутся с сервера (dateFrom/dateTo), а не из
+    // последних 200 заказов: за прошлую дату раньше показывалась часть заказов.
     const API_BASE_URL = '/api';
-    let orders = [];
-    let allOrders = []; // Хранит все заказы до фильтрации
+    let orders = [];          // заказы дня после фильтра смены
+    let allOrders = [];       // заказы выбранного дня
     let searchTerm = '';
     let selectedOrderIdForCourier = null;
+    let knownIds = null;      // id уже виденных заказов — для «новый заказ»
+    let showAllDone = false;
+    let loading = false;
 
-    // Filter state
-    let filters = {
-      date: null,
-      shift: 'all',
-      customShiftStart: '08:00',
-      customShiftEnd: '23:59'
-    };
+    let filters = { date: null, shift: 'all', customShiftStart: '08:00', customShiftEnd: '23:59' };
 
+    // Курьеры пока заведены в странице (см. «Управление курьерами»)
     const allCouriers = {
       '1': { name: 'Александр Иванов', phone: '+7 (999) 111-11-11' },
       '2': { name: 'Мария Петрова', phone: '+7 (999) 222-22-22' },
@@ -1641,65 +1520,90 @@ AUTH.requireAuth();
       '4': { name: 'Елена Кузнецова', phone: '+7 (999) 444-44-44' },
       '5': { name: 'Игорь Смирнов', phone: '+7 (999) 555-55-55' }
     };
+    let couriersOnShift = [];
+    try { couriersOnShift = JSON.parse(localStorage.getItem('couriersOnShift') || '[]'); } catch (e) { couriersOnShift = []; }
 
-    // Load couriers on shift from localStorage
-    let couriersOnShift = JSON.parse(localStorage.getItem('couriersOnShift') || '[]');
+    const DONE = ['completed', 'delivered'];
+    const ACTIVE = ['pending', 'confirmed', 'preparing', 'ready', 'delivering'];
+    const STATUS_RU = { pending: 'Новый', confirmed: 'Принят', preparing: 'Готовится', ready: 'Готов', delivering: 'В пути',
+      delivered: 'Доставлен', completed: 'Выполнен', cancelled: 'Отменён' };
+    const STATUS_COLOR = { pending: '#D99A00', confirmed: '#D99A00', preparing: '#1D4E89', ready: '#2E7D4F', delivering: '#0E7490',
+      delivered: '#5A5A5A', completed: '#5A5A5A', cancelled: '#9E3420' };
 
-    // Sidebar functions
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const rub = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU') + ' ₽';
+    const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? b : c; };
+    const typeLabel = (t) => (typeof AUTH !== 'undefined' && AUTH.orderTypeLabel) ? AUTH.orderTypeLabel(t) : (t || '');
+    function jsArg(id) { return "'" + String(id).replace(/[^\w-]/g, '') + "'"; }
+    function deliveryOn() {
+      return typeof AUTH === 'undefined' || typeof AUTH.hasDelivery !== 'function' || AUTH.hasDelivery();
+    }
+    // «ORD-20261112-B15CB9» → «B15CB9»: дата уже в фильтре, хвост — то, что называют гостю
+    function shortNum(o) {
+      const n = String(o.order_number || o.id || '');
+      const m = n.match(/-([A-Z0-9]{4,})$/i);
+      return m ? m[1].toUpperCase() : n.slice(-6);
+    }
+
     function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      sidebar.classList.toggle('open');
-      overlay.classList.toggle('active');
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('active');
     }
-
     function closeSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      sidebar.classList.remove('open');
-      overlay.classList.remove('active');
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('active');
     }
 
-    // Initialize
+    function localDay(d) {
+      const x = d instanceof Date ? d : new Date(d);
+      return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+    }
+    function dayBounds(day) {
+      const [y, m, d] = day.split('-').map(Number);
+      return [new Date(y, m - 1, d, 0, 0, 0, 0), new Date(y, m - 1, d, 23, 59, 59, 999)];
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       initializeFilters();
       loadOrders();
-      setupSearch();
-      setupDragAndDrop();
-      setupShiftFilter();
-      // Auto-refresh every 5 seconds
-      setInterval(loadOrders, 5000);
-      // Play sound for new orders
-      checkForNewOrders();
-      updateNavCourierBadge();
+      document.getElementById('searchInput').addEventListener('input', (e) => { searchTerm = e.target.value.trim(); renderKanban(); });
+      setInterval(() => { if (!document.hidden) loadOrders(); }, 8000);
+      // «12 мин» на карточках идут без запроса к серверу
+      setInterval(() => { if (!document.hidden) renderKanban(); }, 60000);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOrder(); });
     });
 
-    // Load orders
     async function loadOrders() {
+      if (loading) return;
+      loading = true;
+      const day = filters.date || localDay(new Date());
+      const [from, to] = dayBounds(day);
       try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders?limit=200`);
-        if (response.ok) {
-          const data = await response.json();
-          // Роут отдаёт { orders, total }; чтение data.data давало пустую доску
-          const newOrders = (data.orders || []).map(normalizeOrder);
-
-          // Check for new orders
-          if (newOrders.length > orders.length) {
-            playNotificationSound();
-            showNotification('🔔 Новый заказ получен!');
+        const res = await AUTH.fetch(`${API_BASE_URL}/orders?limit=1000&dateFrom=${encodeURIComponent(from.toISOString())}&dateTo=${encodeURIComponent(to.toISOString())}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const list = (data.orders || []).map(normalizeOrder);
+        // Новый заказ — новый id в статусе «новый» за сегодня; при первой
+        // загрузке и смене даты не сигналим. Раньше сравнивалось число
+        // заказов дня с числом после фильтра — «Новый заказ получен!» всплывал
+        // каждые 5 секунд.
+        if (knownIds && day === localDay(new Date())) {
+          const fresh = list.filter(o => !knownIds.has(o.id) && o.status === 'pending');
+          if (fresh.length) {
+            playSound('success');
+            showNotification(fresh.length === 1 ? `Новый заказ #${shortNum(fresh[0])} — ${rub(fresh[0].total)}` : `Новых заказов: ${fresh.length}`);
           }
-
-          allOrders = newOrders; // Сохраняем все заказы
-          applyFilters(); // Применяем фильтры
         }
-      } catch (error) {
-        console.error('Error loading orders:', error);
-      }
+        knownIds = new Set(list.map(o => o.id));
+        allOrders = list;
+        orders = filterOrders(allOrders);
+        renderKanban();
+      } catch (e) {
+        document.getElementById('obSummary').innerHTML = '<span style="color:#9E3420">Не удалось обновить заказы: ' + esc(e.message) + '. Повторим через несколько секунд.</span>';
+      } finally { loading = false; }
     }
 
-    // Строка API → вид карточки. Поля в базе snake_case, total — строка
-    // numeric (без приведения сумма смены склеивалась как текст), состава
-    // в списке нет.
+    // Строка API → вид карточки. total — numeric строкой
     function normalizeOrder(o) {
       const name = [o.first_name, o.last_name].filter(Boolean).join(' ');
       return {
@@ -1707,7 +1611,7 @@ AUTH.requireAuth();
         orderNumber: o.order_number || String(o.id).slice(-4),
         createdAt: o.created_at,
         total: Number(o.total) || 0,
-        customer: { name: name || 'Гость', phone: o.customer_phone || '' },
+        customer: { name: name || '', phone: o.customer_phone || '' },
         deliveryAddress: o.delivery_address || '',
         courierName: o.courier_name || '',
         specialInstructions: o.special_instructions || '',
@@ -1715,340 +1619,276 @@ AUTH.requireAuth();
       };
     }
 
-    // Доставку показываем только заведениям, у которых она есть (AUTH.hasDelivery)
-    function deliveryOn() {
-      return typeof AUTH === 'undefined' || typeof AUTH.hasDelivery !== 'function' || AUTH.hasDelivery();
+    function columns() {
+      const cols = [
+        { key: 'new', title: 'Новые', st: ['pending', 'confirmed'], drop: 'confirmed', color: STATUS_COLOR.pending, empty: 'Новых заказов нет' },
+        { key: 'preparing', title: 'Готовятся', st: ['preparing'], drop: 'preparing', color: STATUS_COLOR.preparing, empty: 'Ничего не готовится' },
+        { key: 'ready', title: 'Готовы', st: ['ready'], drop: 'ready', color: STATUS_COLOR.ready, empty: 'Готовых нет' }
+      ];
+      if (deliveryOn()) cols.push({ key: 'delivering', title: 'В пути', st: ['delivering'], drop: 'delivering', color: STATUS_COLOR.delivering, empty: 'Никого в пути' });
+      cols.push({ key: 'done', title: deliveryOn() ? 'Выданы и доставлены' : 'Выданы', st: DONE, drop: deliveryOn() ? null : 'completed', color: STATUS_COLOR.completed, empty: 'Пока ничего' });
+      return cols;
     }
 
-    function jsArg(id) {
-      return "'" + String(id).replace(/[^\w-]/g, '') + "'";
+    function matches(o) {
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return String(o.orderNumber).toLowerCase().includes(q) || o.customer.name.toLowerCase().includes(q)
+        || o.customer.phone.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§');
     }
 
-    // Подтверждение вторым нажатием вместо confirm(): во встроенном браузере
-    // VS Code confirm() заблокирован и кнопка выглядела мёртвой
-    const pendingConfirm = {};
-    function confirmTwice(key, text) {
-      if (pendingConfirm[key]) { delete pendingConfirm[key]; return true; }
-      pendingConfirm[key] = true;
-      showNotification('⚠️ ' + text + ' — нажмите ещё раз для подтверждения', 'error');
-      setTimeout(() => { delete pendingConfirm[key]; }, 5000);
-      return false;
-    }
-
-    // Update statistics
-    function updateStats() {
-      const pending = orders.filter(o => o.status === 'pending').length;
-      const confirmed = orders.filter(o => o.status === 'confirmed').length;
-      const preparing = orders.filter(o => o.status === 'preparing').length;
-      const ready = orders.filter(o => o.status === 'ready').length;
-      const delivery = orders.filter(o => o.status === 'delivering').length;
-      const completed = orders.filter(o => o.status === 'completed').length;
-      const delivered = orders.filter(o => o.status === 'delivered').length;
-
-      document.getElementById('headerPending').textContent = pending;
-      document.getElementById('headerConfirmed').textContent = confirmed;
-      document.getElementById('headerPreparing').textContent = preparing;
-      document.getElementById('headerReady').textContent = ready;
-      document.getElementById('headerDelivery').textContent = delivery;
-      document.getElementById('headerDelivered').textContent = delivered;
-
-      document.getElementById('countPending').textContent = pending;
-      document.getElementById('countConfirmed').textContent = confirmed;
-      document.getElementById('countPreparing').textContent = preparing;
-      document.getElementById('countReady').textContent = ready;
-      document.getElementById('countDelivery').textContent = delivery;
-      document.getElementById('countDelivered').textContent = delivered;
-      document.getElementById('countCompleted').textContent = completed;
-    }
-
-    // Render Kanban board
     function renderKanban() {
-      const hasDelivery = deliveryOn();
-      document.querySelectorAll('[data-delivery-only]').forEach(el => {
-        el.style.display = hasDelivery ? '' : 'none';
-      });
-      const statuses = ['pending', 'confirmed', 'preparing', 'ready']
-        .concat(hasDelivery ? ['delivering', 'delivered'] : [], ['completed']);
-
-      statuses.forEach(status => {
-        let containerId;
-        if (status === 'delivering') {
-          containerId = 'columnOut_for_delivery';
-        } else {
-          containerId = `column${status.charAt(0).toUpperCase() + status.slice(1)}`;
+      const board = document.getElementById('obBoard');
+      const visible = orders.filter(matches);
+      board.innerHTML = columns().map(c => {
+        let list = visible.filter(o => c.st.includes(o.status));
+        // активные — старые сверху (их ждут дольше), выданные — свежие сверху
+        list.sort((a, b) => c.key === 'done' ? new Date(b.createdAt) - new Date(a.createdAt) : new Date(a.createdAt) - new Date(b.createdAt));
+        const total = list.length;
+        let more = '';
+        if (c.key === 'done' && !showAllDone && total > 12) {
+          list = list.slice(0, 12);
+          more = `<button type="button" class="ob-more" onclick="showAllDone=true;renderKanban()">Показать ещё ${total - 12}</button>`;
         }
-
-        const container = document.getElementById(containerId);
-        const filtered = orders.filter(o => {
-          const matchesStatus = o.status === status;
-          const matchesSearch = !searchTerm ||
-            String(o.orderNumber).includes(searchTerm) ||
-            o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            o.customer.phone.includes(searchTerm);
-          return matchesStatus && matchesSearch;
-        });
-
-        if (filtered.length === 0) {
-          const emojis = {
-            pending: '📭',
-            confirmed: '📋',
-            preparing: '🍳',
-            ready: '🎉',
-            delivering: '🚗',
-            delivered: '🎉',
-            completed: '✔'
-          };
-          const texts = {
-            pending: 'Нет новых заказов',
-            confirmed: 'Нет подтвержденных',
-            preparing: 'Ничего не готовится',
-            ready: 'Нет готовых заказов',
-            delivering: 'Нет заказов на доставке',
-            delivered: 'Нет доставленных заказов',
-            completed: 'Нет выполненных заказов'
-          };
-          container.innerHTML = `
-            <div class="empty-column">
-              <div class="empty-icon">${emojis[status]}</div>
-              <div>${texts[status]}</div>
-            </div>
-          `;
-        } else {
-          container.innerHTML = filtered.map(order => renderOrderCard(order)).join('');
-        }
-      });
-
+        return `<section class="ob-col" data-drop="${c.drop || ''}" aria-label="${esc(c.title)}">
+          <div class="ob-col-h"><i style="background:${c.color}"></i>${esc(c.title)}<span class="n">${total}</span></div>
+          ${list.length ? list.map(renderOrderCard).join('') + more : `<div class="ob-empty">${esc(searchTerm ? 'Ничего не найдено' : c.empty)}</div>`}
+        </section>`;
+      }).join('');
+      board.style.gridTemplateColumns = '';
+      renderSummary();
       setupDragAndDrop();
+      const pend = allOrders.filter(o => o.status === 'pending').length;
+      document.title = (pend ? `(${pend}) ` : '') + 'Заказы — FoodFlow';
+      const badge = document.getElementById('navOrdersBadge');
+      if (badge) { badge.textContent = pend || ''; badge.style.display = pend ? '' : 'none'; }
+      const top = document.getElementById('topbarOrderCount');
+      if (top) top.textContent = pend;
     }
 
-    // Render order card
-    function renderOrderCard(order) {
-      const isNew = order.status === 'pending';
-      const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+    function renderSummary() {
+      const live = orders.filter(o => o.status !== 'cancelled');
+      const paid = orders.filter(o => DONE.includes(o.status));
+      const revenue = paid.reduce((a, o) => a + o.total, 0);
+      const cancelled = orders.filter(o => o.status === 'cancelled').length;
+      const inWork = orders.filter(o => ACTIVE.includes(o.status)).length;
+      document.getElementById('obSummary').innerHTML =
+        `<span><b>${live.length}</b> ${plural(live.length, 'заказ', 'заказа', 'заказов')}</span>`
+        + (inWork ? `<span>в работе <b>${inWork}</b></span>` : '')
+        + `<span>выручка <b>${rub(revenue)}</b></span>`
+        + (paid.length ? `<span>средний чек <b>${rub(revenue / paid.length)}</b></span>` : '')
+        + (cancelled ? `<span>отменено <b>${cancelled}</b></span>` : '');
+      const toSend = orders.filter(o => o.status === 'pending' || o.status === 'confirmed').length;
+      const btn = document.getElementById('sendAllBtn');
+      btn.style.display = toSend > 1 ? '' : 'none';
+      if (btn.dataset.armed !== '1') btn.textContent = `Все новые на кухню (${toSend})`;
+      document.getElementById('todayBtn').setAttribute('aria-pressed', String(filters.date === localDay(new Date())));
+    }
 
-      return `
-        <div class="order-card" draggable="true" data-order-id="${order.id}">
-          ${isNew ? '<div class="new-order-badge">NEW</div>' : ''}
-          <div class="card-header">
-            <div class="order-number">#${order.orderNumber}</div>
-            <div class="order-time">
-              <span class="time-value">${elapsed} мин назад</span>
-            </div>
-          </div>
-          <div class="customer-info">
-            <div class="customer-name">👤 ${order.customer.name}</div>
-            <div class="customer-phone">📞 ${order.customer.phone}</div>
-            ${order.deliveryAddress ? `
-              <div class="customer-address">📍 ${order.deliveryAddress}</div>
-            ` : ''}
-            ${order.courierName ? `
-              <div class="customer-address" style="color: #06b6d4;">🚚 Курьер: ${order.courierName}</div>
-            ` : ''}
-          </div>
-          <div class="order-items">
-            ${order.items.slice(0, 3).map(item => `
-              <div class="item">
-                <div>
-                  <span class="item-name">${item.name}</span>
-                  <span class="item-qty">×${item.quantity}</span>
-                </div>
-                <span class="item-price">${item.price * item.quantity} ₽</span>
-              </div>
-            `).join('')}
-            ${order.items.length > 3 ? `<div class="item" style="color: var(--color-grey-5); font-size: 12px;">... и еще ${order.items.length - 3} поз.</div>` : ''}
-          </div>
-          ${order.specialInstructions ? `
-            <div class="comment-badge">💬 Есть комментарий</div>
-          ` : ''}
-          <div class="card-footer">
-            <div class="order-total">${order.total} ₽</div>
-            <div class="card-actions">
-              ${order.status === 'pending' || order.status === 'confirmed' ? `
-                <button class="action-icon-btn btn-kitchen" onclick="sendToKitchen(${jsArg(order.id)})" title="Отправить на кухню">
-                  👨‍🍳
-                </button>
-              ` : ''}
-              ${order.status === 'preparing' ? `
-                <button class="action-icon-btn btn-ready" onclick="markAsReady(${jsArg(order.id)})" title="Готово">
-                  ✅
-                </button>
-              ` : ''}
-              ${order.status === 'ready' && deliveryOn() && order.order_type === 'delivery' ? `
-                <button class="action-icon-btn btn-delivery" onclick="openCourierModal(${jsArg(order.id)})" title="Передать курьеру">
-                  🚚
-                </button>
-              ` : ''}
-              ${order.status === 'ready' && order.order_type !== 'delivery' ? `
-                <button class="action-icon-btn btn-delivered" onclick="markAsCompleted(${jsArg(order.id)})" title="Выдан гостю">
-                  ✔️
-                </button>
-              ` : ''}
-              ${order.status === 'delivering' ? `
-                <button class="action-icon-btn btn-delivered" onclick="markAsDelivered(${jsArg(order.id)})" title="Доставлено">
-                  ✔️
-                </button>
-              ` : ''}
-              <button class="action-icon-btn btn-print" onclick="printOrder(${jsArg(order.id)})" title="Печать чека">
-                🖨️
-              </button>
-              ${!['delivered', 'completed', 'cancelled'].includes(order.status) ? `
-                <button class="action-icon-btn btn-cancel" onclick="cancelOrder(${jsArg(order.id)})" title="Отменить">
-                  ✕
-                </button>
-              ` : ''}
-            </div>
-          </div>
+    function nextAction(o) {
+      if (o.status === 'pending' || o.status === 'confirmed') return ['На кухню', `sendToKitchen(${jsArg(o.id)})`];
+      if (o.status === 'preparing') return ['Готово', `markAsReady(${jsArg(o.id)})`];
+      if (o.status === 'ready') return o.order_type === 'delivery' && deliveryOn()
+        ? ['Курьеру', `openCourierModal(${jsArg(o.id)})`] : ['Выдать', `markAsCompleted(${jsArg(o.id)})`];
+      if (o.status === 'delivering') return ['Доставлен', `markAsDelivered(${jsArg(o.id)})`];
+      return null;
+    }
+
+    const ICON_PRINT = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V2h10v5"/><rect x="2" y="7" width="16" height="7" rx="1.5"/><path d="M5 12h10v6H5z"/></svg>';
+    const ICON_X = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>';
+
+    function renderOrderCard(o) {
+      const active = ACTIVE.includes(o.status);
+      const min = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
+      const time = active
+        ? `<span class="oc-time ${min >= 30 ? 'bad' : min >= 15 ? 'warn' : ''}" title="Создан ${new Date(o.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}">${min < 60 ? min + ' мин' : Math.floor(min / 60) + ' ч ' + (min % 60) + ' мин'}</span>`
+        : `<span class="oc-time">${new Date(o.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>`;
+      const who = [
+        o.customer.name ? `<b>${esc(o.customer.name)}</b>` : '',
+        o.customer.phone ? `<a href="tel:${esc(o.customer.phone.replace(/[^\d+]/g, ''))}" onclick="event.stopPropagation()">${esc(o.customer.phone)}</a>` : '',
+        o.table_number ? `стол ${esc(o.table_number)}` : '',
+        o.deliveryAddress ? esc(o.deliveryAddress) : '',
+        o.courierName ? 'курьер ' + esc(o.courierName) : ''
+      ].filter(Boolean).join('<span aria-hidden="true">·</span>');
+      const act = nextAction(o);
+      return `<article class="oc ${o.status === 'pending' ? 'new' : ''} ${active ? '' : 'oc-done'}" draggable="${active}" tabindex="0"
+          data-order-id="${esc(o.id)}" onclick="openOrder(${jsArg(o.id)})" onkeydown="if(event.key==='Enter'&&event.target===this)openOrder(${jsArg(o.id)})"
+          aria-label="Заказ ${esc(shortNum(o))}, ${esc(STATUS_RU[o.status] || o.status)}, ${rub(o.total)}">
+        <div class="oc-top"><span class="oc-num">#${esc(shortNum(o))}</span><span class="oc-type">${esc(typeLabel(o.order_type))}</span>
+          ${o.status === 'confirmed' ? '<span class="oc-chip">принят</span>' : ''}${time}</div>
+        ${who ? `<div class="oc-who">${who}</div>` : ''}
+        ${o.specialInstructions ? `<div class="oc-note">${esc(o.specialInstructions)}</div>` : ''}
+        <div class="oc-bot" onclick="event.stopPropagation()">
+          <span class="oc-sum">${rub(o.total)}</span>
+          ${act ? `<button type="button" class="oc-go" onclick="${act[1]}">${act[0]}</button>` : ''}
+          <button type="button" class="oc-i" onclick="printOrder(${jsArg(o.id)})" title="Печать чека" aria-label="Печать чека">${ICON_PRINT}</button>
+          ${active ? `<button type="button" class="oc-i x" onclick="cancelOrder(${jsArg(o.id)}, this)" title="Отменить заказ" aria-label="Отменить заказ">${ICON_X}</button>` : ''}
         </div>
-      `;
+      </article>`;
     }
 
-    // Send to kitchen
-    async function sendToKitchen(orderId) {
-      try {
-        await updateStatus(orderId, 'preparing');
-        showNotification(`Заказ #${orderId} отправлен на кухню! 👨‍🍳`);
-        playSound('success');
-      } catch (error) {
-        showNotification('Ошибка отправки на кухню', 'error');
-      }
+    function orderLabel(id) {
+      const o = allOrders.find(x => x.id === id);
+      return o ? '#' + shortNum(o) : 'Заказ';
     }
 
-    // Mark order as ready
-    async function markAsReady(orderId) {
-      try {
-        await updateStatus(orderId, 'ready');
-        showNotification(`Заказ #${orderId} готов! ✅`);
-        playSound('success');
-      } catch (error) {
-        showNotification('Ошибка обновления статуса', 'error');
-      }
-    }
+    async function sendToKitchen(id) { if (await updateStatus(id, 'preparing')) showNotification(orderLabel(id) + ' — на кухне'); }
+    async function markAsReady(id) { if (await updateStatus(id, 'ready')) showNotification(orderLabel(id) + ' готов'); }
+    async function markAsDelivered(id) { if (await updateStatus(id, 'delivered')) showNotification(orderLabel(id) + ' доставлен'); }
+    async function markAsCompleted(id) { if (await updateStatus(id, 'completed')) showNotification(orderLabel(id) + ' выдан'); }
 
-    // Mark order as delivered
-    async function markAsDelivered(orderId) {
-      try {
-        await updateStatus(orderId, 'delivered');
-        showNotification(`Заказ #${orderId} доставлен! ✔️`);
-        playSound('success');
-      } catch (error) {
-        showNotification('Ошибка обновления статуса', 'error');
-      }
-    }
-
-    // Самовывоз и заказ у стойки: выдан гостю — заказ закрыт
-    async function markAsCompleted(orderId) {
-      await updateStatus(orderId, 'completed');
-    }
-
-    // Send all pending/confirmed orders to kitchen
-    async function sendAllToKitchen() {
+    async function sendAllToKitchen(btn) {
       const toSend = orders.filter(o => o.status === 'pending' || o.status === 'confirmed');
-      if (toSend.length === 0) {
-        showNotification('Нет заказов для отправки на кухню', 'error');
+      if (!toSend.length) return;
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.textContent = `Отправить ${toSend.length} на кухню?`;
+        setTimeout(() => { btn.dataset.armed = ''; renderSummary(); }, 4000);
         return;
       }
+      btn.dataset.armed = ''; btn.disabled = true;
+      let ok = 0;
+      for (const o of toSend) { if (await updateStatus(o.id, 'preparing', true)) ok++; }
+      btn.disabled = false;
+      await loadOrders();
+      showNotification(`На кухню отправлено: ${ok}` + (ok < toSend.length ? `, не удалось: ${toSend.length - ok}` : ''), ok < toSend.length ? 'error' : 'success');
+    }
 
-      if (!confirmTwice('all-kitchen', `Отправить ${toSend.length} заказов на кухню`)) return;
-
-      for (const order of toSend) {
-        await updateStatus(order.id, 'preparing');
+    async function cancelOrder(id, btn) {
+      if (btn && btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.classList.add('armed'); btn.title = 'Нажмите ещё раз, чтобы отменить';
+        showNotification('Нажмите ✕ ещё раз, чтобы отменить ' + orderLabel(id), 'error');
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.title = 'Отменить заказ'; } }, 4000);
+        return;
       }
-
-      showNotification(`${toSend.length} заказов отправлено на кухню! 👨‍🍳`);
-      playSound('success');
+      if (await updateStatus(id, 'cancelled')) { showNotification(orderLabel(id) + ' отменён'); closeOrder(); }
     }
 
-    // Print order
-    async function printOrder(orderId) {
-      showNotification(`Печать чека для заказа #${orderId}... 🖨️`);
-      // TODO: Integrate with printer API
-      playSound('print');
-    }
-
-    // Cancel order
-    async function cancelOrder(orderId) {
-      if (!confirmTwice('cancel-' + orderId, 'Отменить заказ')) return;
-
-      await updateStatus(orderId, 'cancelled');
-      showNotification(`Заказ #${orderId} отменен`);
-    }
-
-    // Update order status
-    async function updateStatus(orderId, newStatus) {
+    async function updateStatus(orderId, newStatus, quiet) {
       try {
-        const response = await AUTH.fetch(`${API_BASE_URL}/orders/${orderId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status: newStatus })
-        });
-
-        if (response.ok) {
-          await loadOrders();
-        } else {
-          showNotification('Не удалось изменить статус заказа', 'error');
+        const res = await AUTH.fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}`, { method: 'PUT', body: JSON.stringify({ status: newStatus }) });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || d.message || 'HTTP ' + res.status);
         }
-      } catch (error) {
-        console.error('Error updating status:', error);
-        showNotification('Ошибка связи с сервером', 'error');
+        if (!quiet) await loadOrders();
+        if (!quiet && currentOrderId === orderId) openOrder(orderId);
+        return true;
+      } catch (e) {
+        showNotification('Статус не изменён: ' + e.message, 'error');
+        return false;
       }
     }
 
-    // Setup drag and drop
+    // Перетаскивание: только активные карточки и только в колонку со статусом
     function setupDragAndDrop() {
-      const cards = document.querySelectorAll('.order-card');
-      const containers = document.querySelectorAll('.cards-container');
-
-      cards.forEach(card => {
-        card.addEventListener('dragstart', (e) => {
-          card.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/html', card.innerHTML);
-        });
-
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-        });
+      document.querySelectorAll('.oc[draggable="true"]').forEach(card => {
+        card.addEventListener('dragstart', (e) => { card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', card.dataset.orderId); });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
       });
-
-      containers.forEach(container => {
-        container.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          const column = container.closest('.kanban-column');
-          column.style.background = 'var(--color-primary-light)';
-        });
-
-        container.addEventListener('dragleave', () => {
-          const column = container.closest('.kanban-column');
-          column.style.background = '';
-        });
-
-        container.addEventListener('drop', async (e) => {
-          e.preventDefault();
-          const column = container.closest('.kanban-column');
-          column.style.background = '';
-
-          const dragging = document.querySelector('.dragging');
-          if (dragging) {
-            const orderId = dragging.dataset.orderId;
-            const newStatus = column.dataset.status;
-            // id — UUID: parseInt превращал его в NaN и перенос молча не работал
-            await updateStatus(orderId, newStatus);
-            showNotification(`Заказ #${orderId} перемещен в "${getStatusName(newStatus)}"`);
-          }
+      document.querySelectorAll('.ob-col').forEach(col => {
+        const target = col.dataset.drop;
+        if (!target) return;
+        col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop'); });
+        col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
+        col.addEventListener('drop', async (e) => {
+          e.preventDefault(); col.classList.remove('drop');
+          const id = e.dataTransfer.getData('text/plain');
+          const o = allOrders.find(x => x.id === id);
+          if (!o || o.status === target) return;
+          if (target === 'delivering') { openCourierModal(id); return; }
+          if (await updateStatus(id, target)) showNotification(orderLabel(id) + ' — ' + (STATUS_RU[target] || target).toLowerCase());
         });
       });
     }
 
-    function getStatusName(status) {
-      const names = {
-        pending: 'Новые',
-        confirmed: 'Подтверждены',
-        preparing: 'Готовятся',
-        ready: 'Готовы',
-        delivering: 'На доставке',
-        delivered: 'Доставлено',
-        completed: 'Выполнено'
-      };
-      return names[status] || status;
+    function getStatusName(status) { return STATUS_RU[status] || status; }
+
+    // ── Карточка заказа: состав, комментарий, действия ──
+    let currentOrderId = null;
+    async function openOrder(id) {
+      currentOrderId = id;
+      const box = document.getElementById('orderModalBody');
+      const base = allOrders.find(x => x.id === id);
+      if (!document.getElementById('orderModal').classList.contains('active')) {
+        box.innerHTML = '<div style="padding:30px;text-align:center;color:var(--color-text-secondary)">Загрузка…</div>';
+        document.getElementById('orderModal').classList.add('active');
+      }
+      let o = base;
+      try {
+        const res = await AUTH.fetch(`${API_BASE_URL}/orders/${encodeURIComponent(id)}`);
+        if (res.ok) { const d = await res.json(); o = normalizeOrder(d.data || d.order || d); }
+      } catch (e) { /* покажем то, что есть в списке */ }
+      if (!o || currentOrderId !== id) return;
+      const items = Array.isArray(o.items) ? o.items : [];
+      const act = nextAction(o);
+      const created = new Date(o.createdAt);
+      box.innerHTML = `
+        <div class="modal-header" style="margin-bottom:0">
+          <div class="od-h"><h2 id="odTitle">Заказ #${esc(shortNum(o))}</h2>
+            <span class="od-st" style="background:${STATUS_COLOR[o.status]}1f;color:${STATUS_COLOR[o.status]}">${esc(STATUS_RU[o.status] || o.status)}</span></div>
+          <button class="close-btn" onclick="closeOrder()" aria-label="Закрыть" style="margin-left:auto">&times;</button>
+        </div>
+        <div class="od-meta">
+          ${esc(typeLabel(o.order_type))} · ${created.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · № ${esc(o.orderNumber)}
+          ${o.customer.name ? '<br>' + esc(o.customer.name) : ''}${o.customer.phone ? ` · <a href="tel:${esc(o.customer.phone.replace(/[^\d+]/g, ''))}">${esc(o.customer.phone)}</a>` : ''}
+          ${o.deliveryAddress ? '<br>' + esc(o.deliveryAddress) : ''}${o.courierName ? '<br>Курьер: ' + esc(o.courierName) : ''}
+        </div>
+        ${items.length ? `<table class="od-items"><tbody>${items.map(it => {
+          const q = Number(it.quantity) || 1;
+          const sum = Number(it.total_price ?? it.subtotal ?? ((Number(it.unit_price ?? it.price) || 0) * q)) || 0;
+          const mods = Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name || m.modifier_name).filter(Boolean).join(', ') : '';
+          return `<tr><td class="q">${q} ×</td><td>${esc(it.item_name || it.name || 'Позиция')}${mods ? `<small>${esc(mods)}</small>` : ''}${it.notes ? `<small>${esc(it.notes)}</small>` : ''}</td><td class="p">${rub(sum)}</td></tr>`;
+        }).join('')}</tbody></table>` : '<div style="color:var(--color-text-secondary);font-size:14px">Состав заказа недоступен</div>'}
+        <div class="od-tot"><span>Итого</span><span>${rub(o.total)}</span></div>
+        ${o.specialInstructions ? `<div class="od-note"><b>Комментарий:</b> ${esc(o.specialInstructions)}</div>` : ''}
+        <div class="od-acts">
+          ${ACTIVE.includes(o.status) ? `<button type="button" class="ob-btn sec" style="color:#9E3420;border-color:#E8B7A8" onclick="cancelOrder(${jsArg(o.id)}, this)">Отменить заказ</button>` : ''}
+          <span class="sp"></span>
+          <button type="button" class="ob-btn sec" onclick="printOrder(${jsArg(o.id)})">Печать чека</button>
+          ${act ? `<button type="button" class="ob-btn" onclick="${act[1]}">${act[0]}</button>` : ''}
+        </div>`;
+      window._lastOrderDetail = o;
+    }
+    function closeOrder() {
+      currentOrderId = null;
+      document.getElementById('orderModal').classList.remove('active');
+    }
+    document.addEventListener('click', (e) => { if (e.target && e.target.id === 'orderModal') closeOrder(); });
+
+    // Печать чека в браузере: раньше кнопка только показывала «Печать…»
+    // и ничего не печатала (TODO). Состав берём из карточки заказа.
+    async function printOrder(id) {
+      let o = (window._lastOrderDetail && window._lastOrderDetail.id === id) ? window._lastOrderDetail : null;
+      if (!o) {
+        try {
+          const res = await AUTH.fetch(`${API_BASE_URL}/orders/${encodeURIComponent(id)}`);
+          if (res.ok) { const d = await res.json(); o = normalizeOrder(d.data || d.order || d); }
+        } catch (e) { /* ниже — из списка */ }
+      }
+      o = o || allOrders.find(x => x.id === id);
+      if (!o) return;
+      const items = (o.items || []).map(it => {
+        const q = Number(it.quantity) || 1;
+        const sum = Number(it.total_price ?? it.subtotal ?? ((Number(it.unit_price ?? it.price) || 0) * q)) || 0;
+        return `<tr><td>${esc(it.item_name || it.name || 'Позиция')} × ${q}</td><td style="text-align:right">${rub(sum)}</td></tr>`;
+      }).join('');
+      const ent = (() => { try { return JSON.parse(localStorage.getItem('ff_enterprise') || 'null'); } catch (e) { return null; } })();
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Чек ${esc(shortNum(o))}</title>
+        <style>body{font:13px/1.4 -apple-system,Arial,sans-serif;width:72mm;margin:0 auto;padding:4mm 0}h1{font-size:15px;text-align:center;margin:0 0 4px}
+        .c{text-align:center}table{width:100%;border-collapse:collapse;margin:8px 0}td{padding:2px 0;vertical-align:top}.t{border-top:1px dashed #000;padding-top:6px;font-weight:700;font-size:15px}
+        @page{size:80mm auto;margin:0}</style></head><body>
+        <h1>${esc((ent && ent.name) || 'FoodFlow')}</h1>
+        <div class="c">Заказ #${esc(shortNum(o))} · ${esc(typeLabel(o.order_type))}</div>
+        <div class="c">${new Date(o.createdAt).toLocaleString('ru-RU')}</div>
+        <table>${items || '<tr><td>Состав недоступен</td></tr>'}</table>
+        <table><tr><td class="t">Итого</td><td class="t" style="text-align:right">${rub(o.total)}</td></tr></table>
+        ${o.specialInstructions ? `<div>Комментарий: ${esc(o.specialInstructions)}</div>` : ''}
+        <div class="c" style="margin-top:8px">Спасибо!</div></body></html>`;
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+      document.body.appendChild(f);
+      f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+      setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => f.remove(), 1500); } }, 150);
     }
 
     // Open courier modal
@@ -2249,23 +2089,13 @@ AUTH.requireAuth();
       }
     }
 
-    // Setup search
-    function setupSearch() {
-      document.getElementById('searchInput').addEventListener('input', (e) => {
-        searchTerm = e.target.value;
-        renderKanban();
-      });
-    }
 
-    // Show notification
     function showNotification(message, type = 'success') {
-      const notification = document.getElementById('notification');
-      notification.textContent = message;
-      notification.className = `notification show ${type}`;
-
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, 3000);
+      const n = document.getElementById('notification');
+      n.textContent = message;
+      n.className = `notification show ${type}`;
+      clearTimeout(showNotification.t);
+      showNotification.t = setTimeout(() => n.classList.remove('show'), 3500);
     }
 
     // Play sound
@@ -2299,279 +2129,67 @@ AUTH.requireAuth();
       playSound('success');
     }
 
-    // Check for new orders
-    function checkForNewOrders() {
-      setInterval(() => {
-        const newOrdersCount = orders.filter(o => o.status === 'pending').length;
-        if (newOrdersCount > 0) {
-          document.title = `(${newOrdersCount}) Новые заказы - FoodFlow`;
-        } else {
-          document.title = 'Управление заказами - FoodFlow';
-        }
-      }, 1000);
-    }
 
-    // ===== ФИЛЬТРАЦИЯ ЗАКАЗОВ =====
-
-    // Дата YYYY-MM-DD по местному времени (toISOString дал бы UTC)
-    function localDay(d) {
-      const x = d instanceof Date ? d : new Date(d);
-      return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
-    }
-
-    // Initialize filters
+    // ── Фильтр: день и смена ──
     function initializeFilters() {
-      // Set today's date as default
-      const today = localDay(new Date());
-      document.getElementById('filterDate').value = today;
-      filters.date = today;
-
-      // Load saved filters from localStorage
-      const savedFilters = localStorage.getItem('orderFilters');
-      if (savedFilters) {
-        const parsed = JSON.parse(savedFilters);
-        delete parsed.date; // дата по умолчанию — всегда сегодня
-        filters = { ...filters, ...parsed };
-
-        if (filters.date) {
-          document.getElementById('filterDate').value = filters.date;
+      filters.date = localDay(new Date());   // по умолчанию — всегда сегодня
+      try {
+        const saved = JSON.parse(localStorage.getItem('orderFilters') || 'null');
+        if (saved) {
+          filters.shift = saved.shift || 'all';
+          filters.customShiftStart = saved.customShiftStart || '08:00';
+          filters.customShiftEnd = saved.customShiftEnd || '23:59';
         }
-        if (filters.shift) {
-          document.getElementById('filterShift').value = filters.shift;
-        }
-        if (filters.customShiftStart) {
-          document.getElementById('customShiftStart').value = filters.customShiftStart;
-        }
-        if (filters.customShiftEnd) {
-          document.getElementById('customShiftEnd').value = filters.customShiftEnd;
-        }
-      }
+      } catch (e) { /* без сохранённых фильтров */ }
+      document.getElementById('filterDate').value = filters.date;
+      document.getElementById('filterShift').value = filters.shift;
+      document.getElementById('customShiftStart').value = filters.customShiftStart;
+      document.getElementById('customShiftEnd').value = filters.customShiftEnd;
+      document.getElementById('customShiftTimes').classList.toggle('show', filters.shift === 'custom');
     }
-
-    // Setup shift filter dropdown handler
-    function setupShiftFilter() {
-      const shiftSelect = document.getElementById('filterShift');
-      const customTimes = document.getElementById('customShiftTimes');
-
-      shiftSelect.addEventListener('change', (e) => {
-        if (e.target.value === 'custom') {
-          customTimes.style.display = 'flex';
-        } else {
-          customTimes.style.display = 'none';
-        }
-      });
-
-      // Trigger on load if custom is selected
-      if (shiftSelect.value === 'custom') {
-        customTimes.style.display = 'flex';
-      }
-    }
-
-    // Apply filters
-    function applyFilters() {
-      // Get filter values
-      const dateInput = document.getElementById('filterDate').value;
-      const shiftSelect = document.getElementById('filterShift').value;
-      const customStart = document.getElementById('customShiftStart').value;
-      const customEnd = document.getElementById('customShiftEnd').value;
-
-      // Update filters state
-      filters = {
-        date: dateInput || null,
-        shift: shiftSelect,
-        customShiftStart: customStart,
-        customShiftEnd: customEnd
-      };
-
-      // Save to localStorage
-      localStorage.setItem('orderFilters', JSON.stringify(filters));
-
-      // Filter orders
-      orders = filterOrders(allOrders);
-
-      // Update UI
-      updateStats();
-      renderKanban();
-      updateActiveFiltersDisplay();
-      updateShiftStatistics();
-    }
-
-    // Filter orders based on current filters
-    function filterOrders(ordersList) {
-      let filtered = [...ordersList];
-
-      // Filter by date
-      if (filters.date) {
-        filtered = filtered.filter(order => {
-          const orderDate = localDay(order.createdAt || order.created_at);
-          return orderDate === filters.date;
-        });
-      }
-
-      // Filter by shift
-      if (filters.shift !== 'all') {
-        filtered = filtered.filter(order => {
-          return isOrderInShift(order, filters.shift);
-        });
-      }
-
-      return filtered;
-    }
-
-    // Check if order is in specified shift
-    function isOrderInShift(order, shiftType) {
-      const orderDate = new Date(order.createdAt || order.created_at);
-      const orderTime = orderDate.toTimeString().slice(0, 5); // HH:MM
-
-      let shiftStart, shiftEnd;
-
-      switch (shiftType) {
-        case 'current':
-          // Current shift - from start of current shift to now
-          const now = new Date();
-          const currentHour = now.getHours();
-
-          if (currentHour >= 8 && currentHour < 16) {
-            // Morning shift
-            shiftStart = '08:00';
-            shiftEnd = '16:00';
-          } else if (currentHour >= 16 || currentHour < 8) {
-            // Day/Night shift
-            shiftStart = '16:00';
-            shiftEnd = '23:59';
-          }
-          break;
-
-        case 'morning':
-          shiftStart = '08:00';
-          shiftEnd = '16:00';
-          break;
-
-        case 'day':
-          shiftStart = '16:00';
-          shiftEnd = '23:59';
-          break;
-
-        case 'custom':
-          shiftStart = filters.customShiftStart;
-          shiftEnd = filters.customShiftEnd;
-          break;
-
-        default:
-          return true;
-      }
-
-      // Handle shifts that span midnight
-      if (shiftStart > shiftEnd) {
-        return orderTime >= shiftStart || orderTime <= shiftEnd;
-      } else {
-        return orderTime >= shiftStart && orderTime <= shiftEnd;
-      }
-    }
-
-    // Reset filters
-    function resetFilters() {
-      // Reset to defaults
-      const today = localDay(new Date());
-
-      filters = {
-        date: today,
-        shift: 'all',
-        customShiftStart: '08:00',
-        customShiftEnd: '23:59'
-      };
-
-      // Update UI
-      document.getElementById('filterDate').value = today;
-      document.getElementById('filterShift').value = 'all';
-      document.getElementById('customShiftStart').value = '08:00';
-      document.getElementById('customShiftEnd').value = '23:59';
-      document.getElementById('customShiftTimes').style.display = 'none';
-
-      // Clear localStorage
-      localStorage.removeItem('orderFilters');
-
-      // Apply reset filters
+    function onShiftChange() {
+      document.getElementById('customShiftTimes').classList.toggle('show', document.getElementById('filterShift').value === 'custom');
       applyFilters();
+    }
+    function shiftDay(n) {
+      const [y, m, d] = (document.getElementById('filterDate').value || localDay(new Date())).split('-').map(Number);
+      document.getElementById('filterDate').value = localDay(new Date(y, m - 1, d + n));
+      applyFilters();
+    }
+    function goToday() { document.getElementById('filterDate').value = localDay(new Date()); applyFilters(); }
 
-      showNotification('✅ Фильтры сброшены');
+    function applyFilters() {
+      const prevDate = filters.date;
+      filters = {
+        date: document.getElementById('filterDate').value || localDay(new Date()),
+        shift: document.getElementById('filterShift').value,
+        customShiftStart: document.getElementById('customShiftStart').value,
+        customShiftEnd: document.getElementById('customShiftEnd').value
+      };
+      try { localStorage.setItem('orderFilters', JSON.stringify({ shift: filters.shift, customShiftStart: filters.customShiftStart, customShiftEnd: filters.customShiftEnd })); } catch (e) { /* не страшно */ }
+      showAllDone = false;
+      if (filters.date !== prevDate) { knownIds = null; allOrders = []; orders = []; renderKanban(); loadOrders(); return; }
+      orders = filterOrders(allOrders);
+      renderKanban();
+    }
+    function resetFilters() {
+      document.getElementById('filterShift').value = 'all';
+      goToday();
     }
 
-    // Update active filters display
-    function updateActiveFiltersDisplay() {
-      const container = document.getElementById('activeFiltersContainer');
-      const activeFiltersDiv = document.getElementById('activeFilters');
-
-      const badges = [];
-
-      // Date badge
-      if (filters.date) {
-        const date = new Date(filters.date + 'T00:00:00');
-        const dateStr = date.toLocaleDateString('ru-RU', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric'
-        });
-        badges.push(dateStr);
-      }
-
-      // Shift badge
-      if (filters.shift !== 'all') {
-        let shiftLabel;
-        switch (filters.shift) {
-          case 'current':
-            shiftLabel = '🕐 Текущая смена';
-            break;
-          case 'morning':
-            shiftLabel = '🕐 Утренняя смена (08:00 - 16:00)';
-            break;
-          case 'day':
-            shiftLabel = '🕐 Дневная смена (16:00 - 23:59)';
-            break;
-          case 'custom':
-            shiftLabel = `🕐 Своя смена (${filters.customShiftStart} - ${filters.customShiftEnd})`;
-            break;
-        }
-        badges.push(shiftLabel);
-      }
-
-      // Show or hide
-      if (badges.length > 0) {
-        container.innerHTML = badges.map(badge => `
-          <span style="
-            display: inline-block;
-            padding: 6px 12px;
-            background: var(--color-primary-light);
-            color: var(--color-primary-hover);
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 600;
-          ">${badge}</span>
-        `).join('');
-        activeFiltersDiv.style.display = 'block';
-      } else {
-        activeFiltersDiv.style.display = 'none';
-      }
+    function filterOrders(list) {
+      return filters.shift === 'all' ? list.slice() : list.filter(o => isOrderInShift(o, filters.shift));
     }
 
-    // Update shift statistics
-    function updateShiftStatistics() {
-      const statsDiv = document.getElementById('shiftStats');
-
-      // Only show stats if filters are applied
-      if (filters.shift !== 'all' || filters.date) {
-        const orderCount = orders.length;
-        const totalAmount = orders.reduce((sum, order) => sum + (order.total || 0), 0);
-        const avgAmount = orderCount > 0 ? totalAmount / orderCount : 0;
-
-        document.getElementById('shiftOrderCount').textContent = orderCount;
-        document.getElementById('shiftTotalAmount').textContent = totalAmount.toLocaleString('ru-RU') + ' ₽';
-        document.getElementById('shiftAvgAmount').textContent = Math.round(avgAmount).toLocaleString('ru-RU') + ' ₽';
-
-        statsDiv.style.display = 'block';
-      } else {
-        statsDiv.style.display = 'none';
-      }
+    function isOrderInShift(order, shiftType) {
+      const t = new Date(order.createdAt || order.created_at).toTimeString().slice(0, 5);
+      let a, b;
+      if (shiftType === 'current') { const h = new Date().getHours(); [a, b] = h >= 8 && h < 16 ? ['08:00', '16:00'] : ['16:00', '23:59']; }
+      else if (shiftType === 'morning') { a = '08:00'; b = '16:00'; }
+      else if (shiftType === 'day') { a = '16:00'; b = '23:59'; }
+      else if (shiftType === 'custom') { a = filters.customShiftStart; b = filters.customShiftEnd; }
+      else return true;
+      return a > b ? (t >= a || t <= b) : (t >= a && t <= b);
     }
   </script>
 </div><!-- /main-wrapper -->
