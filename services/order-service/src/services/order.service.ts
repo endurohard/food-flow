@@ -86,6 +86,22 @@ export class OrderService {
 
       const menuMap = new Map(menuResult.rows.map(r => [r.id, r]));
 
+      // Доплата за модификатор — из меню, а не из запроса кассы: иначе
+      // «На Эфиопии +50 ₽» можно было пробить за 0 ₽ (или с минусом), подменив
+      // priceAdjustment. Модификатор должен быть доступен и принадлежать
+      // своему блюду — как в продаже Sigma (pos-sale.service).
+      const modifierIds = [...new Set(data.items.flatMap(i => (i.modifiers || []).map(m => m.modifierId)))];
+      const modifierMap = new Map<string, any>();
+      if (modifierIds.length) {
+        const modResult = await client.query(
+          `SELECT id, menu_item_id, name, price_adjustment
+             FROM menu_item_modifiers
+            WHERE id = ANY($1::uuid[]) AND is_available = true`,
+          [modifierIds]
+        );
+        modResult.rows.forEach((r: any) => modifierMap.set(r.id, r));
+      }
+
       // Calculate totals
       let subtotal = 0;
       const orderItems: any[] = [];
@@ -96,11 +112,20 @@ export class OrderService {
           throw new OrderError(`Menu item ${item.menuItemId} not found`, 400);
         }
 
-        const unitPrice = parseFloat(menuItem.price);
-        let modifierTotal = 0;
-        if (item.modifiers) {
-          modifierTotal = item.modifiers.reduce((sum, m) => sum + m.priceAdjustment, 0);
+        // Блюдо другого заведения (в т.ч. чужой организации) в чек не пускаем:
+        // цена и списание по техкарте ушли бы не туда
+        if (menuItem.restaurant_id !== data.restaurantId) {
+          throw new OrderError('Блюдо не из меню этого заведения', 400);
         }
+        const unitPrice = parseFloat(menuItem.price);
+        const modifiers = (item.modifiers || []).map(m => {
+          const row = modifierMap.get(m.modifierId);
+          if (!row || row.menu_item_id !== item.menuItemId) {
+            throw new OrderError('Модификатор недоступен или не принадлежит выбранному блюду', 400);
+          }
+          return { modifierId: row.id, name: row.name, priceAdjustment: parseFloat(row.price_adjustment) || 0 };
+        });
+        const modifierTotal = modifiers.reduce((sum, m) => sum + m.priceAdjustment, 0);
         const itemSubtotal = (unitPrice + modifierTotal) * item.quantity;
         subtotal += itemSubtotal;
 
@@ -112,7 +137,7 @@ export class OrderService {
           unitPrice: unitPrice + modifierTotal,
           subtotal: itemSubtotal,
           specialInstructions: item.specialInstructions,
-          modifiers: item.modifiers
+          modifiers
         });
       }
 
