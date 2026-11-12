@@ -1,6 +1,17 @@
 import pkg from 'pg';
 const { Pool } = pkg;
 
+/**
+ * Процент скидки уровня — та же логика, что в order-service
+ * (tierDiscountPercent): только целые 0..100, иначе 0.
+ */
+export function tierPercent(tierDiscounts: any, tier: string | null | undefined): number {
+  let map = tierDiscounts;
+  if (typeof map === 'string') { try { map = JSON.parse(map); } catch { map = {}; } }
+  const v = Number((map || {})[(tier || 'bronze').toLowerCase()]);
+  return Number.isInteger(v) && v > 0 && v <= 100 ? v : 0;
+}
+
 export class CRMService {
   private pool: InstanceType<typeof Pool>;
   constructor(connectionString: string) { this.pool = new Pool({ connectionString }); }
@@ -51,7 +62,12 @@ export class CRMService {
     }
     values.push(Math.min(Math.max(limit, 1), 50));
     const result = await this.pool.query(
-      `SELECT cp.id, u.first_name, u.last_name, u.phone, cp.loyalty_points, cp.loyalty_tier
+      `SELECT cp.id, u.first_name, u.last_name, u.phone, cp.loyalty_points, cp.loyalty_tier,
+              -- процент скидки уровня из активной программы своей организации:
+              -- касса показывает и считает скидку сразу при выборе клиента
+              (SELECT lp.tier_discounts FROM loyalty_programs lp
+                WHERE lp.enterprise_id = cp.enterprise_id AND lp.is_active = true
+                ORDER BY (lp.program_type = 'points') DESC, lp.created_at ASC LIMIT 1) AS tier_discounts
          FROM customer_profiles cp
          JOIN users u ON u.id = cp.user_id
         WHERE cp.enterprise_id = $1${filter}
@@ -66,7 +82,8 @@ export class CRMService {
         name: [r.first_name, r.last_name].filter(Boolean).join(' ') || 'Без имени',
         phoneTail: digits.length >= 4 ? digits.slice(-4) : null,
         points: Number(r.loyalty_points) || 0,
-        tier: r.loyalty_tier
+        tier: (r.loyalty_tier || 'bronze').toLowerCase(),
+        discountPercent: tierPercent(r.tier_discounts, r.loyalty_tier)
       };
     });
   }
@@ -144,8 +161,8 @@ export class CRMService {
   async createLoyaltyProgram(data: any): Promise<any> {
     const result = await this.pool.query(
       `INSERT INTO loyalty_programs
-         (enterprise_id, name, program_type, points_per_currency, redemption_rate, tier_thresholds, rules, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+         (enterprise_id, name, program_type, points_per_currency, redemption_rate, tier_thresholds, rules, is_active, tier_discounts)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         data.enterpriseId,
         data.name,
@@ -154,7 +171,8 @@ export class CRMService {
         data.redemptionRate || 0.01,
         data.tierThresholds ? JSON.stringify(data.tierThresholds) : '{}',
         data.rules ? JSON.stringify(data.rules) : '{}',
-        data.isActive !== undefined ? data.isActive : true
+        data.isActive !== undefined ? data.isActive : true,
+        data.tierDiscounts ? JSON.stringify(data.tierDiscounts) : '{}'
       ]
     );
     return result.rows[0];
@@ -164,7 +182,8 @@ export class CRMService {
     const map: Record<string, string> = {
       name: 'name', programType: 'program_type',
       pointsPerCurrency: 'points_per_currency', redemptionRate: 'redemption_rate',
-      tierThresholds: 'tier_thresholds', rules: 'rules', isActive: 'is_active'
+      tierThresholds: 'tier_thresholds', rules: 'rules', isActive: 'is_active',
+      tierDiscounts: 'tier_discounts'
     };
     const fields: string[] = []; const values: any[] = []; let p = 1;
     for (const [k, col] of Object.entries(map)) {

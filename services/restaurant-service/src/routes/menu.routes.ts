@@ -43,7 +43,8 @@ const menuItemSchema = Joi.object({
   costPrice: Joi.number().min(0).optional(),
   taxRate: Joi.number().min(0).max(100).optional(),
   unit: Joi.string().valid('кг', 'г', 'л', 'мл', 'шт', 'упак', 'порц').optional(),
-  weightGrams: Joi.number().integer().min(0).optional()
+  weightGrams: Joi.number().integer().min(0).optional(),
+  noDiscount: Joi.boolean().optional()
 });
 
 const menuItemVisualSchema = Joi.object({
@@ -235,6 +236,10 @@ router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'm
     );
     if (visualError) {
       return res.status(400).json({ error: 'Validation error', message: visualError.details[0].message });
+    }
+    // Строка «true» в boolean-колонку прошла бы молча, а мусор дал бы 500
+    if (req.body.noDiscount !== undefined && typeof req.body.noDiscount !== 'boolean') {
+      return res.status(400).json({ error: 'Validation error', message: '«Без скидки» — да или нет' });
     }
     const item = await menuService.updateItem(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!item) {

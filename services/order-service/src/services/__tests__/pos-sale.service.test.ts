@@ -37,7 +37,9 @@ function makeClient(
     modifierAvailable?: boolean;
     checkOpen?: boolean;
     /** Профили лояльности: id профиля → { enterprise, user } */
-    profiles?: Record<string, { enterprise: string; user: string; name?: string }>;
+    profiles?: Record<string, { enterprise: string; user: string; name?: string; tier?: string; tierDiscounts?: any }>;
+    /** Позиция «без скидки» (menu_items.no_discount) */
+    noDiscount?: boolean;
     /** Столы: id → { restaurant, enterprise, number, active } */
     tables?: Record<string, { restaurant: string; enterprise: string; number: string; active?: boolean }>;
   } = {}
@@ -77,7 +79,7 @@ function makeClient(
         const p = (options.profiles || {})[params[0]];
         const tenantChecked = /cp\.enterprise_id = \$2/.test(sql);
         const ok = p && (!tenantChecked || p.enterprise === params[1]);
-        return ok ? { rows: [{ user_id: p.user, name: p.name || 'Анна' }], rowCount: 1 } : { rows: [], rowCount: 0 };
+        return ok ? { rows: [{ user_id: p.user, name: p.name || 'Анна', loyalty_tier: p.tier || 'bronze', tier_discounts: p.tierDiscounts || {} }], rowCount: 1 } : { rows: [], rowCount: 0 };
       }
       if (/FROM restaurants/.test(sql)) {
         return { rows: [{ id: IDS.restaurant, name: 'Точка' }], rowCount: 1 };
@@ -92,6 +94,7 @@ function makeClient(
                   name: 'Плов',
                   price: '450.00',
                   category_id: null,
+                  no_discount: !!options.noDiscount,
                 },
               ];
         return { rows, rowCount: rows.length };
@@ -337,6 +340,22 @@ describe('PosSaleService — клиент чека и лояльность', () 
     const res = await service.create({ ...request, customerProfileId: PROFILE }, IDS.enterprise, IDS.user);
     expect(orderValue(client, 'customer_id')).toBe(CUSTOMER_USER);
     expect(res.customerName).toBe('Анна ТЕСТ');
+  });
+
+  it('скидка по уровню карты: (450 + 50) × 2 = 1000, золото 10% → итог 900', async () => {
+    const client = makeClient({ profiles: { [PROFILE]: { enterprise: IDS.enterprise, user: CUSTOMER_USER, tier: 'gold', tierDiscounts: { gold: 10 } } } });
+    const { service } = makeService(client);
+    await service.create({ ...request, customerProfileId: PROFILE }, IDS.enterprise, IDS.user);
+    expect(Number(orderValue(client, 'discount_amount'))).toBe(100);
+    expect(Number(orderValue(client, 'total'))).toBe(900);
+  });
+
+  it('позиция без скидки — скидка по карте не применяется', async () => {
+    const client = makeClient({ noDiscount: true, profiles: { [PROFILE]: { enterprise: IDS.enterprise, user: CUSTOMER_USER, tier: 'gold', tierDiscounts: { gold: 10 } } } });
+    const { service } = makeService(client);
+    await service.create({ ...request, customerProfileId: PROFILE }, IDS.enterprise, IDS.user);
+    expect(Number(orderValue(client, 'discount_amount'))).toBe(0);
+    expect(Number(orderValue(client, 'total'))).toBe(1000);
   });
 
   it('клиент чужого предприятия — 400 и откат, заказ не создаётся', async () => {

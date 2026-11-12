@@ -31,6 +31,38 @@ export interface AppliedDiscount {
   amount: number; // actual discount amount applied
 }
 
+/** Скидка по уровню карты клиента (миграция 065): процент — целое 0..100. */
+export interface LoyaltyDiscount {
+  tier: string;
+  percent: number;
+}
+
+export const TIER_NAMES: Record<string, string> = {
+  bronze: 'Бронза', silver: 'Серебро', gold: 'Золото', platinum: 'Платина'
+};
+
+/**
+ * Процент скидки уровня из tier_discounts программы. Только целые 0..100:
+ * касса Sigma считает ту же скидку оффлайн в копейках, и итог обязан
+ * совпасть до копейки — мусор в настройке даёт 0, а не странную сумму.
+ */
+export function tierDiscountPercent(tierDiscounts: any, tier: string | null | undefined): number {
+  let map = tierDiscounts;
+  if (typeof map === 'string') { try { map = JSON.parse(map); } catch { map = {}; } }
+  const v = Number((map || {})[(tier || '').toLowerCase()]);
+  return Number.isInteger(v) && v > 0 && v <= 100 ? v : 0;
+}
+
+/**
+ * Скидка по карте в рублях: по сумме позиций, на которые скидки действуют,
+ * в копейках с округлением половины вверх — та же формула, что в Sigma:
+ * (eligibleKop * percent + 50) / 100.
+ */
+export function loyaltyDiscountAmount(eligibleSubtotal: number, percent: number): number {
+  const kop = Math.round(eligibleSubtotal * 100);
+  return Math.floor((kop * percent + 50) / 100) / 100;
+}
+
 export interface DiscountCalculation {
   totalDiscount: number;
   appliedDiscounts: AppliedDiscount[];
@@ -178,9 +210,14 @@ export class DiscountService {
     client: PoolClient,
     restaurantId: string,
     subtotal: number,
-    items: Array<{ menuItemId: string; categoryId?: string; subtotal: number }>,
-    enterpriseId?: string
+    items: Array<{ menuItemId: string; categoryId?: string; subtotal: number; noDiscount?: boolean }>,
+    enterpriseId?: string,
+    loyalty?: LoyaltyDiscount | null
   ): Promise<DiscountCalculation> {
+    // Позиции «без скидки» (menu_items.no_discount) не участвуют ни в акциях,
+    // ни в скидке по карте; порог min_order_amount считается по всему чеку.
+    const eligibleItems = items.filter(i => !i.noDiscount);
+    const eligibleSubtotal = Math.round(eligibleItems.reduce((s, i) => s + i.subtotal, 0) * 100) / 100;
     // 1. Fetch active discounts for the restaurant
     const discountResult = await client.query(
       `SELECT * FROM discounts
@@ -208,16 +245,16 @@ export class DiscountService {
         if (subtotal < minOrder) continue;
 
         if (disc.discount_type === 'percentage') {
-          discountAmount = subtotal * value / 100;
+          discountAmount = eligibleSubtotal * value / 100;
         } else if (disc.discount_type === 'fixed_amount') {
-          discountAmount = value;
+          discountAmount = Math.min(value, eligibleSubtotal);
         }
         // bogo and combo are handled at item level, skip for order-level
         if (disc.discount_type === 'bogo' || disc.discount_type === 'combo') continue;
 
       } else if (disc.applicable_to === 'item') {
         // Apply to specific menu item
-        const matchingItems = items.filter(i => i.menuItemId === disc.target_id);
+        const matchingItems = eligibleItems.filter(i => i.menuItemId === disc.target_id);
         if (matchingItems.length === 0) continue;
 
         const itemTotal = matchingItems.reduce((sum, i) => sum + i.subtotal, 0);
@@ -233,7 +270,7 @@ export class DiscountService {
 
       } else if (disc.applicable_to === 'category') {
         // Apply to items in a specific category
-        const matchingItems = items.filter(i => i.categoryId === disc.target_id);
+        const matchingItems = eligibleItems.filter(i => i.categoryId === disc.target_id);
         if (matchingItems.length === 0) continue;
 
         const catTotal = matchingItems.reduce((sum, i) => sum + i.subtotal, 0);
@@ -267,9 +304,27 @@ export class DiscountService {
       totalDiscount += discountAmount;
     }
 
-    // Total discount must not exceed subtotal
-    if (totalDiscount > subtotal) {
-      totalDiscount = subtotal;
+    // Скидка по уровню карты — после акций, от суммы позиций со скидкой
+    if (loyalty && loyalty.percent > 0 && eligibleSubtotal > 0) {
+      const amount = loyaltyDiscountAmount(eligibleSubtotal, loyalty.percent);
+      if (amount > 0) {
+        appliedDiscounts.push({
+          discountId: 'loyalty',
+          name: `Скидка по карте: ${TIER_NAMES[loyalty.tier] || loyalty.tier} ${loyalty.percent}%`,
+          discountType: 'loyalty',
+          value: loyalty.percent,
+          applicableTo: 'order',
+          targetId: null,
+          amount
+        });
+        totalDiscount += amount;
+      }
+    }
+
+    // Скидки не больше суммы позиций, на которые они действуют: позиции
+    // «без скидки» оплачиваются полностью при любом наборе акций
+    if (totalDiscount > eligibleSubtotal) {
+      totalDiscount = eligibleSubtotal;
     }
 
     totalDiscount = Math.round(totalDiscount * 100) / 100;

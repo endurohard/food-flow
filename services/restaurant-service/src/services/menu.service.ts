@@ -27,6 +27,8 @@ export interface CreateMenuItemInput {
   taxRate?: number;
   unit?: string;
   weightGrams?: number;
+  /** «Без скидки» (миграция 065): скидки по карте и акции на чек не действуют */
+  noDiscount?: boolean;
 }
 
 export interface CreateModifierInput {
@@ -142,8 +144,8 @@ export class MenuService {
       `INSERT INTO menu_items (
         restaurant_id, category_id, name, description, price, image_url,
         is_vegetarian, is_vegan, is_gluten_free, calories, preparation_time,
-        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id, icon, icon_color
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id, icon, icon_color, no_discount
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *`,
       [
         restaurantId,
@@ -164,7 +166,8 @@ export class MenuService {
         data.weightGrams || null,
         enterpriseId || null,
         data.icon || null,
-        data.iconColor || null
+        data.iconColor || null,
+        data.noDiscount === true
       ]
     );
     return result.rows[0];
@@ -178,7 +181,7 @@ export class MenuService {
       calories: 'calories', preparationTime: 'preparation_time',
       sku: 'sku', costPrice: 'cost_price', taxRate: 'tax_rate',
       unit: 'unit', weightGrams: 'weight_grams',
-      icon: 'icon', iconColor: 'icon_color'
+      icon: 'icon', iconColor: 'icon_color', noDiscount: 'no_discount'
     };
 
     const fields: string[] = [];

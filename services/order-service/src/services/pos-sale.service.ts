@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import pkg from 'pg';
-import { DiscountService } from './discount.service';
+import { DiscountService, LoyaltyDiscount, tierDiscountPercent } from './discount.service';
 import { OutboxService } from './outbox.service';
 
 const { Pool } = pkg;
@@ -177,9 +177,13 @@ export class PosSaleService {
       // профиль и начисляет баллы за закрытый заказ.
       let customerUserId: string | null = null;
       let customerName: string | null = null;
+      let loyalty: LoyaltyDiscount | null = null;
       if (data.customerProfileId) {
         const cust = await client.query(
-          `SELECT cp.user_id, concat_ws(' ', u.first_name, u.last_name) AS name
+          `SELECT cp.user_id, concat_ws(' ', u.first_name, u.last_name) AS name, cp.loyalty_tier,
+                  (SELECT lp.tier_discounts FROM loyalty_programs lp
+                    WHERE lp.enterprise_id = cp.enterprise_id AND lp.is_active = true
+                    ORDER BY (lp.program_type = 'points') DESC, lp.created_at ASC LIMIT 1) AS tier_discounts
              FROM customer_profiles cp
              JOIN users u ON u.id = cp.user_id
             WHERE cp.id = $1 AND cp.enterprise_id = $2`,
@@ -190,6 +194,10 @@ export class PosSaleService {
         }
         customerUserId = cust.rows[0].user_id;
         customerName = cust.rows[0].name || null;
+        // Скидка по уровню карты — из программы организации (миграция 065)
+        const tier = (cust.rows[0].loyalty_tier || 'bronze').toLowerCase();
+        const percent = tierDiscountPercent(cust.rows[0].tier_discounts, tier);
+        loyalty = percent > 0 ? { tier, percent } : null;
       }
 
       // Стол обязан быть активным столом этой же точки и предприятия: иначе
@@ -212,7 +220,7 @@ export class PosSaleService {
 
       const itemIds = [...new Set(data.items.map((item) => item.menuItemId))];
       const menuResult = await client.query(
-        `SELECT mi.id, mi.name, mi.price, mi.category_id
+        `SELECT mi.id, mi.name, mi.price, mi.category_id, mi.no_discount
            FROM menu_items mi
           WHERE mi.id = ANY($1::uuid[])
             AND mi.restaurant_id = $2
@@ -239,7 +247,7 @@ export class PosSaleService {
       const modifiers = new Map<string, any>();
       if (modifierIds.length) {
         const modifierResult = await client.query(
-          `SELECT mm.id, mm.menu_item_id, mm.name, mm.price_adjustment
+          `SELECT mm.id, mm.menu_item_id, mm.name, mm.price_adjustment, mm.variety_item_id
              FROM menu_item_modifiers mm
             WHERE mm.id = ANY($1::uuid[])
               AND mm.enterprise_id = $2
@@ -253,6 +261,11 @@ export class PosSaleService {
         });
         if (invalid) {
           throw new PosSaleError('Модификатор недоступен или не принадлежит выбранному блюду', 400);
+        }
+        // Один сорт на ингредиент в строке чека
+        for (const item of data.items) {
+          const v = (item.modifiers || []).map((m) => modifiers.get(m.modifierId)?.variety_item_id).filter(Boolean);
+          if (new Set(v).size !== v.length) throw new PosSaleError('Выберите один сорт', 400);
         }
       }
 
@@ -290,8 +303,10 @@ export class PosSaleService {
           menuItemId: item.source.menuItemId,
           categoryId: item.menuItem.category_id || undefined,
           subtotal: item.lineTotal,
+          noDiscount: !!item.menuItem.no_discount,
         })),
-        enterpriseId
+        enterpriseId,
+        loyalty
       );
       const total = this.money(Math.max(0, subtotal - discounts.totalDiscount));
       if (total <= 0) throw new PosSaleError('Итог продажи должен быть больше нуля', 400);

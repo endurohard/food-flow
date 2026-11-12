@@ -672,6 +672,20 @@ export class InventoryService {
             skipped.push(`модификатор «${pk.name}»: ингредиента для выбора сорта нет в техкарте — сорт не учтён`);
           }
         }
+        // Сорт по умолчанию («бункер 1 — Колумбия»): если в чеке сорт для
+        // ингредиента не выбран (касса старой версии, быстрый ввод), списание
+        // идёт из партий сорта-умолчания блюда, а не из самой старой партии
+        const defaults = await client.query(
+          `SELECT variety_item_id, variety FROM menu_item_modifiers
+            WHERE menu_item_id = $1 AND is_default = true AND is_available = true
+              AND variety_item_id IS NOT NULL AND variety IS NOT NULL
+            ORDER BY display_order ASC, created_at ASC`,
+          [orderItem.menu_item_id]
+        );
+        for (const d of defaults.rows) {
+          const v = String(d.variety || '').trim();
+          if (v && !varietyPicks.has(d.variety_item_id)) varietyPicks.set(d.variety_item_id, v);
+        }
 
         for (const ing of ingredients.rows) {
           // quantity — это БРУТТО (миграция 032): столько берётся со склада.

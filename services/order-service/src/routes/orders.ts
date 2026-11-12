@@ -105,6 +105,9 @@ router.post('/', optionalAuth, idempotencyCheck, async (req: Request, res: Respo
         return res.status(403).json({ success: false, error: 'Клиента лояльности выбирает только сотрудник предприятия' });
       }
       value.customerId = await orderService.resolveLoyaltyCustomer(value.customerProfileId, req.enterpriseId);
+      // Скидка по уровню карты: процент — из программы организации, а не из
+      // запроса кассы (иначе касса могла бы прислать любой процент)
+      value.loyalty = await orderService.resolveLoyaltyDiscount(value.customerProfileId, req.enterpriseId);
     }
     delete value.customerProfileId;
 

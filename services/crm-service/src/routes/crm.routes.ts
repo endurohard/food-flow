@@ -88,6 +88,21 @@ router.get('/loyalty-programs', authenticateUser, requireRole('admin', 'owner', 
   } catch (error) { console.error('List loyalty programs error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
+// Скидка по уровню карты (миграция 065): целые 0..100 — касса Sigma считает
+// её оффлайн в копейках и обязана совпасть с сервером до копейки
+export const tierDiscountsSchema = Joi.object({
+  bronze: Joi.number().integer().min(0).max(100),
+  silver: Joi.number().integer().min(0).max(100),
+  gold: Joi.number().integer().min(0).max(100),
+  platinum: Joi.number().integer().min(0).max(100)
+}).messages({
+  'number.base': 'Скидка по уровню — целое число от 0 до 100',
+  'number.integer': 'Скидка по уровню — целое число от 0 до 100',
+  'number.min': 'Скидка по уровню — целое число от 0 до 100',
+  'number.max': 'Скидка по уровню — целое число от 0 до 100',
+  'object.unknown': 'Уровни карты: bronze, silver, gold, platinum'
+});
+
 router.post('/loyalty-programs', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {
   try {
     const schema = Joi.object({
@@ -96,6 +111,7 @@ router.post('/loyalty-programs', authenticateUser, requireRole('admin', 'owner',
       pointsPerCurrency: Joi.number().min(0).optional(),
       redemptionRate: Joi.number().min(0).optional(),
       tierThresholds: Joi.object().optional(),
+      tierDiscounts: tierDiscountsSchema.optional(),
       rules: Joi.object().optional(),
       isActive: Joi.boolean().optional()
     });
@@ -111,6 +127,11 @@ router.put('/loyalty-programs/:id', authenticateUser, requireRole('admin', 'owne
   try {
     const isSuper = req.userRole === 'super_admin';
     if (!isSuper && !req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    if (req.body.tierDiscounts !== undefined) {
+      const { error, value } = tierDiscountsSchema.validate(req.body.tierDiscounts);
+      if (error) return res.status(400).json({ error: error.details[0].message, message: error.details[0].message });
+      req.body.tierDiscounts = value;
+    }
     const program = await crmService.updateLoyaltyProgram(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!program) return res.status(404).json({ error: 'Loyalty program not found' });
     return res.json({ program });

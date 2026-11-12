@@ -73,3 +73,20 @@ it('схема принимает пару и отвергает кривой id
   expect(modifierSchema.validate({ name: 'x', varietyItemId: 'bad', variety: 'Эфиопия' }).error).toBeDefined();
   expect(modifierSchema.validate({ name: 'x', varietyItemId: BEANS, variety: 'я'.repeat(101) }).error).toBeDefined();
 });
+
+describe('блюдо «без скидки»', () => {
+  it('создание: no_discount только при явном true', async () => {
+    for (const [given, want] of [[true, true], [undefined, false], ['true' as any, false]]) {
+      const { s, calls } = svc();
+      await s.createItem('r', { name: 'Табак', price: 100, noDiscount: given } as any, 'e');
+      const cols = /\(\s*([\s\S]*?)\s*\) VALUES/.exec(calls[0].sql)![1].split(',').map((x) => x.trim());
+      expect(calls[0].params[cols.indexOf('no_discount')]).toBe(want);
+    }
+  });
+  it('изменение пишет no_discount', async () => {
+    const { s, calls } = svc();
+    await s.updateItem('i', { noDiscount: true } as any, 'e');
+    expect(calls[0].sql).toMatch(/no_discount = \$1/);
+    expect(calls[0].params[0]).toBe(true);
+  });
+});

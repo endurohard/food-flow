@@ -168,3 +168,31 @@ describe('остатки по сортам в списке позиций', () =
     expect(sql).toMatch(/b\.inventory_item_id = i\.id AND b\.is_depleted = false AND b\.quantity > 0 AND b\.warehouse_id = \$\d+\s+GROUP BY 1\) v\) AS by_variety/);
   });
 });
+
+describe('сорт по умолчанию', () => {
+  const base = (picks: any[], defaults: any[]) => client([
+    [/SELECT id FROM warehouses WHERE id = \$1 AND enterprise_id = \$2/, { rows: [{ id: 'w' }], rowCount: 1 }],
+    [/FROM order_items oi/, { rows: [{ order_item_id: 'oi-1', menu_item_id: 'esp', quantity: 1, order_date: '2026-11-12' }], rowCount: 1 }],
+    [/FROM tech_cards tc\s+LEFT JOIN inventory_items ii ON ii\.id = tc\.output_item_id\s+WHERE tc\.menu_item_id/, { rows: [{ id: 'tc', write_off_method: 'ingredients' }], rowCount: 1 }],
+    [/FROM tech_card_ingredients tci/, { rows: [{ inventory_item_id: 'beans', quantity: '0.009', item_name: 'Кофе в зёрнах', is_optional: false }], rowCount: 1 }],
+    [/mim\.variety_item_id IS NOT NULL/, { rows: picks, rowCount: picks.length }],
+    [/is_default = true AND is_available = true/, (params: any[]) => ({ rows: params[0] === 'esp' ? defaults : [], rowCount: defaults.length })],
+    [/INSERT INTO inventory_stock/, { rows: [{ quantity: '10' }], rowCount: 1 }]
+  ]);
+  const run = async (c: any) => {
+    const s = svc(c); const prefs: any[] = [];
+    (s as any).consumeBatchesFIFO = jest.fn(async (_c: any, _w: string, _i: string, qty: number, pref?: string) => { prefs.push(pref); return { consumed: qty, cost: 0, uncovered: 0, preferredTaken: qty }; });
+    (s as any).lastCost = jest.fn(async () => 0);
+    await s.deductByTechCards('ord', 'w', 'u', 'e');
+    return prefs;
+  };
+  it('сорт не выбран — берётся сорт по умолчанию блюда', async () => {
+    expect(await run(base([], [{ variety_item_id: 'beans', variety: 'Колумбия' }]))).toEqual(['Колумбия']);
+  });
+  it('выбранный в чеке сорт важнее умолчания', async () => {
+    expect(await run(base([{ variety_item_id: 'beans', variety: 'Эфиопия', name: 'На Эфиопии' }], [{ variety_item_id: 'beans', variety: 'Колумбия' }]))).toEqual(['Эфиопия']);
+  });
+  it('нет ни выбора, ни умолчания — обычный FIFO', async () => {
+    expect(await run(base([], []))).toEqual([undefined]);
+  });
+});

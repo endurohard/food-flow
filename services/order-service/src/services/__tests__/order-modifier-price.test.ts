@@ -8,6 +8,7 @@ const REST = 'rrrrrrrr-rrrr-4rrr-8rrr-rrrrrrrrrrrr';
 const ESP = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const LATTE = 'llllllll-llll-4lll-8lll-llllllllllll';
 const ETH = '99999999-9999-4999-8999-999999999999';
+const TOBACCO = 'tttttttt-tttt-4ttt-8ttt-tttttttttttt';
 
 function makeSvc(mods: any[]) {
   const svc = new OrderService('postgres://unused', {} as any);
@@ -17,6 +18,7 @@ function makeSvc(mods: any[]) {
       queries.push({ sql, params });
       if (/FROM menu_items WHERE id = ANY/.test(sql)) return { rows: [
         { id: ESP, name: 'Эспрессо', price: '120', restaurant_id: REST, category_id: null },
+        { id: TOBACCO, name: 'Табак', price: '300', restaurant_id: REST, category_id: null, no_discount: true },
         { id: LATTE, name: 'Латте', price: '200', restaurant_id: 'other-rest', category_id: null }] };
       if (/FROM menu_item_modifiers/.test(sql)) {
         // мок уважает фильтр доступности из SQL
@@ -57,4 +59,28 @@ it('модификатор чужого блюда или выключенный
 it('блюдо другого заведения — 400', async () => {
   const { svc } = makeSvc([]);
   await expect(svc.create(order([{ menuItemId: LATTE, quantity: 1 }]))).rejects.toMatchObject({ statusCode: 400, message: 'Блюдо не из меню этого заведения' });
+});
+
+describe('сорт и скидка в заказе', () => {
+  const COL = '88888888-8888-4888-8888-888888888888';
+  const BEANS = 'beans';
+  it('два сорта одного ингредиента в строке — 400 «Выберите один сорт»', async () => {
+    const { svc } = makeSvc([{ ...MOD, variety_item_id: BEANS }, { id: COL, menu_item_id: ESP, name: 'Колумбия', price_adjustment: '0', is_available: true, variety_item_id: BEANS }]);
+    await expect(svc.create(order([{ menuItemId: ESP, quantity: 1, modifiers: [{ modifierId: ETH, name: 'x', priceAdjustment: 0 }, { modifierId: COL, name: 'y', priceAdjustment: 0 }] }])))
+      .rejects.toMatchObject({ statusCode: 400, message: 'Выберите один сорт' });
+  });
+  it('скидка по карте попадает в заказ: total = subtotal − скидка', async () => {
+    const { svc, queries } = makeSvc([MOD]);
+    await svc.create({ ...order([{ menuItemId: ESP, quantity: 2, modifiers: [{ modifierId: ETH, name: 'x', priceAdjustment: 0 }] }]), loyalty: { tier: 'gold', percent: 10 } });
+    const ins = queries.find(q => /INSERT INTO orders/.test(q.sql))!;
+    expect(ins.params).toEqual(expect.arrayContaining([340, 306, 34]));
+    expect(ins.params.find((p: any) => typeof p === 'string' && p.includes('loyalty'))).toContain('Скидка по карте: Золото 10%');
+  });
+});
+
+it('позиция без скидки в заказе: скидка по карте только с остальных', async () => {
+  const { svc, queries } = makeSvc([]);
+  await svc.create({ ...order([{ menuItemId: ESP, quantity: 1 }, { menuItemId: TOBACCO, quantity: 1 }]), loyalty: { tier: 'gold', percent: 10 } });
+  const ins = queries.find(q => /INSERT INTO orders/.test(q.sql))!;
+  expect(ins.params).toEqual(expect.arrayContaining([420, 408, 12]));
 });

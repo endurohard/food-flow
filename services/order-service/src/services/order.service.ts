@@ -3,7 +3,7 @@ const { Pool } = pkg;
 import crypto from 'crypto';
 import { RabbitMQPublisher } from './rabbitmq.service';
 import { OutboxService } from './outbox.service';
-import { DiscountService } from './discount.service';
+import { DiscountService, LoyaltyDiscount, tierDiscountPercent } from './discount.service';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
@@ -36,6 +36,8 @@ export interface CreateOrderInput {
   }>;
   specialInstructions?: string;
   paymentMethod?: string;
+  /** Скидка по уровню карты клиента чека (resolveLoyaltyDiscount) */
+  loyalty?: LoyaltyDiscount | null;
 }
 
 export class OrderService {
@@ -63,6 +65,26 @@ export class OrderService {
     return r.rows[0].user_id;
   }
 
+  /**
+   * Уровень карты клиента и процент скидки активной программы организации.
+   * Профиль ищется в своей организации — как в resolveLoyaltyCustomer.
+   */
+  async resolveLoyaltyDiscount(profileId: string, enterpriseId: string): Promise<LoyaltyDiscount | null> {
+    const r = await this.pool.query(
+      `SELECT cp.loyalty_tier,
+              (SELECT lp.tier_discounts FROM loyalty_programs lp
+                WHERE lp.enterprise_id = cp.enterprise_id AND lp.is_active = true
+                ORDER BY (lp.program_type = 'points') DESC, lp.created_at ASC LIMIT 1) AS tier_discounts
+         FROM customer_profiles cp
+        WHERE cp.id = $1 AND cp.enterprise_id = $2`,
+      [profileId, enterpriseId]
+    );
+    if (!r.rows[0]) return null;
+    const tier = (r.rows[0].loyalty_tier || 'bronze').toLowerCase();
+    const percent = tierDiscountPercent(r.rows[0].tier_discounts, tier);
+    return percent > 0 ? { tier, percent } : null;
+  }
+
 
   private generateOrderNumber(): string {
     const date = new Date();
@@ -80,7 +102,7 @@ export class OrderService {
       // Fetch menu items to get prices
       const itemIds = data.items.map(i => i.menuItemId);
       const menuResult = await client.query(
-        `SELECT id, name, price, restaurant_id, category_id FROM menu_items WHERE id = ANY($1)`,
+        `SELECT id, name, price, restaurant_id, category_id, no_discount FROM menu_items WHERE id = ANY($1)`,
         [itemIds]
       );
 
@@ -94,7 +116,7 @@ export class OrderService {
       const modifierMap = new Map<string, any>();
       if (modifierIds.length) {
         const modResult = await client.query(
-          `SELECT id, menu_item_id, name, price_adjustment
+          `SELECT id, menu_item_id, name, price_adjustment, variety_item_id
              FROM menu_item_modifiers
             WHERE id = ANY($1::uuid[]) AND is_available = true`,
           [modifierIds]
@@ -125,6 +147,12 @@ export class OrderService {
           }
           return { modifierId: row.id, name: row.name, priceAdjustment: parseFloat(row.price_adjustment) || 0 };
         });
+        // Один сорт на ингредиент: «Колумбия» и «Эфиопия» разом в одной чашке —
+        // ошибка кассы, списание не поймёт, из каких партий брать
+        const varietyItems = (item.modifiers || []).map(m => modifierMap.get(m.modifierId)?.variety_item_id).filter(Boolean);
+        if (new Set(varietyItems).size !== varietyItems.length) {
+          throw new OrderError('Выберите один сорт', 400);
+        }
         const modifierTotal = modifiers.reduce((sum, m) => sum + m.priceAdjustment, 0);
         const itemSubtotal = (unitPrice + modifierTotal) * item.quantity;
         subtotal += itemSubtotal;
@@ -132,6 +160,7 @@ export class OrderService {
         orderItems.push({
           menuItemId: item.menuItemId,
           categoryId: menuItem.category_id || undefined,
+          noDiscount: !!menuItem.no_discount,
           name: menuItem.name,
           quantity: item.quantity,
           unitPrice: unitPrice + modifierTotal,
@@ -163,8 +192,9 @@ export class OrderService {
         client,
         data.restaurantId,
         subtotal,
-        orderItems.map(i => ({ menuItemId: i.menuItemId, categoryId: i.categoryId, subtotal: i.subtotal })),
-        data.enterpriseId
+        orderItems.map(i => ({ menuItemId: i.menuItemId, categoryId: i.categoryId, subtotal: i.subtotal, noDiscount: i.noDiscount })),
+        data.enterpriseId,
+        data.loyalty
       );
       const discountAmount = discountResult.totalDiscount;
       const appliedDiscounts = discountResult.appliedDiscounts;
