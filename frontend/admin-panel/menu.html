@@ -1558,8 +1558,12 @@ AUTH.requireAuth();
             <label>Острое</label>
           </div>
           <div class="form-checkbox">
-            <input type="checkbox" id="dishNoDiscount">
-            <label for="dishNoDiscount">Без скидки (скидки по карте и акции на чек не действуют)</label>
+            <input type="checkbox" id="dishLoyaltyDiscountAllowed" checked>
+            <label for="dishLoyaltyDiscountAllowed">Скидка по карте лояльности разрешена</label>
+          </div>
+          <div class="form-checkbox">
+            <input type="checkbox" id="dishPromoDiscountAllowed" checked>
+            <label for="dishPromoDiscountAllowed">Акции разрешены</label>
           </div>
         </div>
 
@@ -1950,7 +1954,10 @@ AUTH.requireAuth();
           isSpicy: i.is_spicy || false,
           icon: i.icon || null,
           iconColor: i.icon_color || null,
-          noDiscount: i.no_discount === true
+          // Разрешения скидок: по умолчанию разрешено — запрещает только явный false,
+          // иначе блюда из старого ответа без поля молча потеряли бы скидку
+          loyaltyDiscountAllowed: i.loyalty_discount_allowed !== false,
+          promoDiscountAllowed: i.promo_discount_allowed !== false
         }));
 
         // Стоп-лист необязателен: его отсутствие не повод гасить весь экран
@@ -2137,7 +2144,8 @@ AUTH.requireAuth();
                 ${dish.cookTime ? `<span class="info-tag">⏱️ ${dish.cookTime} мин</span>` : ''}
                 ${dish.isVegetarian ? '<span class="info-tag">🌱</span>' : ''}
                 ${dish.isSpicy ? '<span class="info-tag">🌶️</span>' : ''}
-                ${dish.noDiscount ? '<span class="info-tag" title="Скидки по карте и акции на чек на это блюдо не действуют">без скидки</span>' : ''}
+                ${dish.loyaltyDiscountAllowed === false ? '<span class="info-tag" title="Скидка по уровню карты лояльности на это блюдо не действует">без скидки по карте</span>' : ''}
+                ${dish.promoDiscountAllowed === false ? '<span class="info-tag" title="Акции на это блюдо не действуют">без акций</span>' : ''}
               </div>
               ${recipe ? `
                 <div style="margin: 12px 0; padding: 8px; background: var(--admin-content-bg); border-radius: 8px;">
@@ -2279,7 +2287,8 @@ AUTH.requireAuth();
       document.getElementById('dishIsHot').checked = dish.isHot || false;
       document.getElementById('dishIsVegetarian').checked = dish.isVegetarian || false;
       document.getElementById('dishIsSpicy').checked = dish.isSpicy || false;
-      document.getElementById('dishNoDiscount').checked = dish.noDiscount || false;
+      document.getElementById('dishLoyaltyDiscountAllowed').checked = dish.loyaltyDiscountAllowed !== false;
+      document.getElementById('dishPromoDiscountAllowed').checked = dish.promoDiscountAllowed !== false;
       document.getElementById('dishModal').classList.add('active');
     }
 
@@ -2322,8 +2331,10 @@ AUTH.requireAuth();
           weightGrams: formData.weight ? parseInt(formData.weight) : undefined,
           icon: formData.icon,
           iconColor: formData.icon ? formData.iconColor : null,
-          // Флаг шлём всегда (и false): иначе снять «без скидки» было бы нельзя
-          noDiscount: document.getElementById('dishNoDiscount').checked
+          // Разрешения шлём всегда (и true): иначе снятый запрет нельзя было бы
+          // вернуть — сервер оставил бы прежнее значение
+          loyaltyDiscountAllowed: document.getElementById('dishLoyaltyDiscountAllowed').checked,
+          promoDiscountAllowed: document.getElementById('dishPromoDiscountAllowed').checked
         };
 
         if (editingDishId) {

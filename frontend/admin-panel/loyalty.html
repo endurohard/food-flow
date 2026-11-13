@@ -3,6 +3,7 @@
 <head>
   <link rel="stylesheet" href="/css/tokens.css">
     <script src="js/auth.js"></script>
+    <script src="js/vendor/qrcode-generator.js"></script>
     <script src="js/stock-alerts.js" defer></script>
   <style>
     /* ══ Sedap Layout Override ══ */
@@ -1735,7 +1736,10 @@ AUTH.requireAuth();
           tier: (c.loyalty_tier || 'bronze').toLowerCase(),
           joinDate: c.created_at || null,
           totalSpent: parseFloat(c.total_spent || 0),
-          totalOrders: c.total_orders || 0
+          totalOrders: c.total_orders || 0,
+          // Номер карты гостя (customer_profiles.card_number) — его кассир
+          // вводит в поиск клиента; секрет ссылки сюда не берём
+          cardNumber: c.card_number || ''
         }));
 
         // Акции: сервис по умолчанию отдаёт только активные, поэтому
@@ -2039,6 +2043,8 @@ AUTH.requireAuth();
           <div><strong style="color: var(--color-text-primary);">Клиент с:</strong> ${formatDate(customer.joinDate)}</div>
         </div>
 
+        ${renderCardBlock(customer)}
+
         <div style="margin-top:20px;padding:16px;background:var(--admin-content-bg);border:1px solid var(--admin-border);border-radius:12px;">
           <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">Списание баллов</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -2098,6 +2104,181 @@ AUTH.requireAuth();
 
     function closeCustomerModal() {
       document.getElementById('customerModal').classList.remove('active');
+      pendingCardRotate = null;
+    }
+
+    // ── Карта клиента: ссылка на открытую страницу /card/?t=… ──
+    // Отзыв ссылки подтверждается вторым нажатием (confirm() заблокирован
+    // во встроенном браузере VS Code)
+    let pendingCardRotate = null;
+    let pendingCardRotateTimer = null;
+    let cardLinkBusy = false;
+
+    function canRotateCardLink() {
+      const role = AUTH.getRole();
+      return ['owner', 'admin', 'restaurant_owner', 'super_admin'].includes(role);
+    }
+
+    function renderCardBlock(customer) {
+      const rotateBtn = canRotateCardLink()
+        ? `<button class="btn btn-secondary btn-small" id="cardRotateBtn" onclick="rotateCardLink(${jsArg(customer.id)})">Отозвать старую ссылку</button>`
+        : '';
+      return `
+        <div id="cardBlock" style="margin-top:20px;padding:16px;background:var(--admin-content-bg);border:1px solid var(--admin-border);border-radius:12px;">
+          <div style="font-weight:600;color:var(--color-text-primary);margin-bottom:10px;font-size:14px;">Карта клиента</div>
+          <div style="color:var(--color-text-secondary);font-size:13px;margin-bottom:10px;">
+            Номер карты: <strong id="cardNumberText" style="color:var(--color-text-primary);font-family:monospace;font-size:15px;letter-spacing:1px;">${customer.cardNumber ? escapeHtml(customer.cardNumber) : '—'}</strong>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-small" id="cardLinkBtn" onclick="requestCardLink(${jsArg(customer.id)}, false)">Ссылка на карту</button>
+            ${rotateBtn}
+          </div>
+          <div id="cardLinkError" role="alert" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(229,57,53,0.08);color:var(--color-danger,#e53935);font-size:13px;"></div>
+          <div id="cardLinkResult" style="display:none;margin-top:12px;"></div>
+          <div style="color:var(--color-grey-5);font-size:11px;margin-top:8px;">
+            Ссылка открывает карту гостя без входа: баллы, уровень и QR с номером карты.
+            Отправляйте её только самому клиенту.
+          </div>
+        </div>
+      `;
+    }
+
+    // Сервисы отвечают {error:"Forbidden", message:"по-русски"}: служебное
+    // английское слово в error человеку ничего не говорит — берём message
+    async function cardLinkApiError(res) {
+      const data = await res.json().catch(() => ({}));
+      const generic = /^(forbidden|not found|unauthorized|bad request|internal server error)$/i;
+      if (data.error && !generic.test(data.error)) return data.error;
+      if (data.message) return data.message;
+      if (res.status === 403) return 'недостаточно прав для работы с картой клиента';
+      if (res.status === 404) return 'клиент не найден';
+      return 'ошибка сервера (HTTP ' + res.status + ')';
+    }
+
+    function showCardLinkError(message) {
+      const box = document.getElementById('cardLinkError');
+      if (!box) return;
+      box.textContent = message ? '⚠️ ' + message : '';
+      box.style.display = message ? 'block' : 'none';
+    }
+
+    // QR ссылки: клиент сканирует его с экрана администратора своим телефоном
+    function cardLinkQrSvg(text) {
+      if (typeof window.qrcode !== 'function') return '';
+      const qr = window.qrcode(0, 'M');
+      qr.addData(String(text));
+      qr.make();
+      const n = qr.getModuleCount(), m = 2, size = n + m * 2;
+      let d = '';
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) d += 'M' + (c + m) + ' ' + (r + m) + 'h1v1h-1z';
+        }
+      }
+      return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" style="width:180px;height:180px;display:block;background:#fff;border-radius:8px;"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+    }
+
+    // Ссылки из ответа сервера вставляем в href только с ожидаемой схемой:
+    // javascript: в href выполнился бы по клику
+    function safeHref(url, schemes) {
+      const s = String(url || '');
+      return schemes.some(p => s.toLowerCase().startsWith(p)) ? s : '';
+    }
+
+    function renderCardLink(data, rotated) {
+      const box = document.getElementById('cardLinkResult');
+      if (!box) return;
+      const url = safeHref(data.url, ['https://', 'http://']);
+      const tg = safeHref(data.telegramUrl, ['https://']);
+      const sms = safeHref(data.smsUri, ['sms:']);
+      if (data.cardNumber) {
+        const num = document.getElementById('cardNumberText');
+        if (num) num.textContent = data.cardNumber;
+      }
+      box.innerHTML = `
+        ${rotated ? '<div style="margin-bottom:8px;font-size:13px;color:var(--color-success);">✅ Старая ссылка отозвана — отправьте клиенту новую</div>' : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="text" class="form-input" id="cardLinkUrl" readonly value="${escapeHtml(url)}" style="flex:1;min-width:220px;font-size:12px;" onclick="this.select()">
+          <button class="btn btn-secondary btn-small" onclick="copyCardLink()">Скопировать</button>
+        </div>
+        <div id="cardLinkCopyMsg" style="font-size:12px;margin-top:6px;min-height:16px;color:var(--color-grey-5);"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+          ${tg ? `<a class="btn btn-primary btn-small" href="${escapeHtml(tg)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">Отправить в Telegram</a>` : ''}
+          ${sms ? `<a class="btn btn-secondary btn-small" href="${escapeHtml(sms)}" style="text-decoration:none;">Отправить SMS</a>` : ''}
+        </div>
+        ${!sms ? '<div style="font-size:11px;color:var(--color-grey-5);margin-top:6px;">SMS недоступно: у клиента не указан телефон</div>' : ''}
+        ${url ? `<div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          ${cardLinkQrSvg(url)}
+          <div style="font-size:12px;color:var(--color-grey-5);max-width:220px;">Клиент может навести камеру телефона на этот код — карта откроется у него.</div>
+        </div>` : ''}
+      `;
+      box.style.display = 'block';
+    }
+
+    async function requestCardLink(id, rotate) {
+      if (cardLinkBusy) return;
+      showCardLinkError('');
+      cardLinkBusy = true;
+      const btn = document.getElementById(rotate ? 'cardRotateBtn' : 'cardLinkBtn');
+      const oldText = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = 'Подождите…'; }
+      try {
+        const res = await AUTH.fetch(`/api/crm/customers/${encodeURIComponent(id)}/card-link`, {
+          method: 'POST',
+          body: JSON.stringify(rotate ? { rotate: true } : {})
+        });
+        if (!res.ok) throw new Error(await cardLinkApiError(res));
+        const data = await res.json();
+        const customer = customers.find(c => String(c.id) === String(id));
+        if (customer && data.cardNumber) customer.cardNumber = data.cardNumber;
+        renderCardLink(data, rotate);
+      } catch (e) {
+        showCardLinkError((rotate ? 'Ссылка не отозвана: ' : 'Ссылка не получена: ') + e.message);
+      } finally {
+        cardLinkBusy = false;
+        if (btn) { btn.disabled = false; btn.textContent = oldText; }
+      }
+    }
+
+    function rotateCardLink(id) {
+      const btn = document.getElementById('cardRotateBtn');
+      if (pendingCardRotate !== id) {
+        pendingCardRotate = id;
+        if (btn) btn.textContent = 'Нажмите ещё раз — старая ссылка перестанет работать';
+        clearTimeout(pendingCardRotateTimer);
+        pendingCardRotateTimer = setTimeout(() => {
+          pendingCardRotate = null;
+          const b = document.getElementById('cardRotateBtn');
+          if (b && !cardLinkBusy) b.textContent = 'Отозвать старую ссылку';
+        }, 5000);
+        return;
+      }
+      pendingCardRotate = null;
+      clearTimeout(pendingCardRotateTimer);
+      if (btn) btn.textContent = 'Отозвать старую ссылку';
+      requestCardLink(id, true);
+    }
+
+    async function copyCardLink() {
+      const input = document.getElementById('cardLinkUrl');
+      const msg = document.getElementById('cardLinkCopyMsg');
+      if (!input) return;
+      let ok = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(input.value);
+          ok = true;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        // Буфер недоступен (http, запрет браузера) — выделяем текст для ручного копирования
+        input.focus();
+        input.select();
+      }
+      if (msg) {
+        msg.textContent = ok ? '✅ Ссылка скопирована' : 'Не удалось скопировать автоматически — текст выделен, скопируйте вручную (Ctrl+C / ⌘C)';
+        msg.style.color = ok ? 'var(--color-success)' : 'var(--color-warning, #f57c00)';
+      }
     }
 
     // Списание баллов — это деньги клиента, поэтому только через сервер.

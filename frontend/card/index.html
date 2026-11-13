@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/favicon.ico?v=2" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">
+  <!-- manifest.json сюда намеренно не подключён: его start_url = /admin-panel/,
+       и ярлык «На главный экран» в Android открывал бы админку, а не карту
+       с токеном. Без манифеста браузер сохраняет ярлык на текущий адрес. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2E7D4F">
+  <!-- Страница открывается по секретной ссылке: не индексировать и не
+       отдавать адрес с токеном сторонним сайтам в Referer -->
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Карта гостя">
+  <title>Карта гостя</title>
+  <style>
+    :root {
+      --green: #2E7D4F;
+      --green-dark: #1F5A38;
+      --bg: #F2F4F3;
+      --text: #1B1F1D;
+      --muted: #6B7470;
+      --line: #E1E5E3;
+      --danger: #C62828;
+      --radius: 20px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
+      min-height: 100vh;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    }
+    .wrap { max-width: 440px; margin: 0 auto; }
+    .hidden { display: none !important; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; gap: 12px;
+    }
+    .topbar-title { font-size: 15px; font-weight: 600; color: var(--muted); }
+    .btn {
+      appearance: none; border: 0; cursor: pointer; font: inherit;
+      border-radius: 12px; padding: 10px 16px; font-size: 15px; font-weight: 600;
+      text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-ghost { background: #fff; color: var(--green); border: 1px solid var(--line); }
+    .btn-primary { background: var(--green); color: #fff; }
+    .btn-dark { background: #000; color: #fff; width: 100%; padding: 14px; border-radius: 14px; }
+    .btn:disabled { opacity: .6; cursor: default; }
+
+    /* Карта в духе банковской/Wallet: цвет фона зависит от уровня */
+    .card {
+      position: relative; overflow: hidden;
+      border-radius: var(--radius);
+      padding: 20px 20px 18px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+      box-shadow: 0 10px 30px rgba(31, 90, 56, .28);
+      min-height: 200px;
+    }
+    .card::after {
+      content: ''; position: absolute; right: -60px; top: -60px;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: rgba(255, 255, 255, .08);
+    }
+    .card.tier-bronze   { background: linear-gradient(135deg, #8C5A35 0%, #5E3A20 100%); box-shadow: 0 10px 30px rgba(94,58,32,.3); }
+    .card.tier-silver   { background: linear-gradient(135deg, #7D8790 0%, #4E5860 100%); box-shadow: 0 10px 30px rgba(78,88,96,.3); }
+    .card.tier-gold     { background: linear-gradient(135deg, #B8892B 0%, #7A5A12 100%); box-shadow: 0 10px 30px rgba(122,90,18,.3); }
+    .card.tier-platinum { background: linear-gradient(135deg, #3A3F4B 0%, #16181D 100%); box-shadow: 0 10px 30px rgba(22,24,29,.35); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; position: relative; z-index: 1; }
+    .card-enterprise { font-size: 18px; font-weight: 700; line-height: 1.25; word-break: break-word; }
+    .card-kind { font-size: 12px; opacity: .8; margin-top: 2px; letter-spacing: .02em; }
+    .tier-badge {
+      flex-shrink: 0; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35); white-space: nowrap;
+    }
+    .card-points { margin-top: 26px; position: relative; z-index: 1; }
+    .card-points-value { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -.01em; }
+    .card-points-label { font-size: 13px; opacity: .85; margin-top: 4px; }
+    .card-bottom { margin-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; position: relative; z-index: 1; }
+    .card-name { font-size: 16px; font-weight: 600; word-break: break-word; }
+    .card-discount { text-align: right; flex-shrink: 0; }
+    .card-discount-value { font-size: 22px; font-weight: 800; }
+    .card-discount-label { font-size: 11px; opacity: .85; }
+
+    .panel {
+      background: #fff; border-radius: 16px; padding: 16px; margin-top: 14px;
+      border: 1px solid var(--line);
+    }
+    .panel-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }
+
+    .progress-text { font-size: 14px; line-height: 1.4; }
+    .progress-text b { color: var(--green); }
+    .progress-bar { height: 8px; border-radius: 999px; background: #E6ECE9; overflow: hidden; margin-top: 10px; }
+    .progress-fill { height: 100%; background: var(--green); border-radius: 999px; width: 0; transition: width .4s ease; }
+    .progress-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    .qr-panel { text-align: center; }
+    .qr-box { width: 100%; max-width: 280px; margin: 4px auto 0; background: #fff; }
+    .qr-box svg { display: block; width: 100%; height: auto; }
+    .card-number { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin-top: 10px; }
+    .qr-hint { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+    .history-list { list-style: none; margin: 0; padding: 0; }
+    .history-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .history-item:first-child { border-top: 0; padding-top: 2px; }
+    .history-desc { font-size: 14px; font-weight: 600; word-break: break-word; }
+    .history-date { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .history-points { font-size: 15px; font-weight: 700; white-space: nowrap; }
+    .history-points.plus { color: var(--green); }
+    .history-points.minus { color: var(--danger); }
+    .empty { font-size: 14px; color: var(--muted); }
+
+    .a2hs { position: relative; background: #EAF4EE; border: 1px solid #CFE5D7; border-radius: 16px; padding: 14px 40px 14px 14px; margin-top: 14px; font-size: 14px; line-height: 1.45; }
+    .a2hs b { color: var(--green-dark); }
+    .a2hs-close { position: absolute; right: 6px; top: 6px; width: 32px; height: 32px; border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; border-radius: 8px; }
+    .a2hs p { margin: 4px 0 0; }
+
+    .state { background: #fff; border-radius: 16px; border: 1px solid var(--line); padding: 28px 20px; text-align: center; }
+    .state-icon { font-size: 40px; line-height: 1; }
+    .state-title { font-size: 18px; font-weight: 700; margin-top: 12px; }
+    .state-text { font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+    .state .btn { margin-top: 16px; }
+    .skeleton { height: 200px; border-radius: var(--radius); background: linear-gradient(90deg, #E4E9E6 25%, #EEF2F0 50%, #E4E9E6 75%); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
+    @keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+    .notice { margin-top: 12px; font-size: 13px; padding: 10px 12px; border-radius: 12px; background: #FDECEA; color: var(--danger); }
+    .updated { font-size: 12px; color: var(--muted); text-align: center; margin-top: 16px; }
+    .wallet { margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="topbar-title">Карта гостя</div>
+      <button type="button" class="btn btn-ghost" id="refreshBtn" onclick="loadCard()">↻ Обновить</button>
+    </div>
+
+    <!-- Загрузка -->
+    <div id="loadingState"><div class="skeleton"></div></div>
+
+    <!-- Ошибка: неверная/устаревшая ссылка или нет связи -->
+    <div id="errorState" class="state hidden" role="alert">
+      <div class="state-icon" id="errorIcon">⚠️</div>
+      <div class="state-title" id="errorTitle"></div>
+      <div class="state-text" id="errorText"></div>
+      <button type="button" class="btn btn-primary hidden" id="retryBtn" onclick="loadCard()">Повторить</button>
+    </div>
+
+    <!-- Сама карта -->
+    <div id="cardView" class="hidden">
+      <div class="card" id="cardFace">
+        <div class="card-top">
+          <div>
+            <div class="card-enterprise" id="cardEnterprise"></div>
+            <div class="card-kind">Карта гостя</div>
+          </div>
+          <div class="tier-badge" id="cardTier"></div>
+        </div>
+        <div class="card-points">
+          <div class="card-points-value" id="cardPoints">0</div>
+          <div class="card-points-label" id="cardPointsLabel">баллов</div>
+        </div>
+        <div class="card-bottom">
+          <div class="card-name" id="cardName"></div>
+          <div class="card-discount" id="cardDiscountBox">
+            <div class="card-discount-value" id="cardDiscount"></div>
+            <div class="card-discount-label">скидка</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="refreshNotice" class="notice hidden" role="status"></div>
+
+      <div class="panel" id="progressPanel">
+        <div class="panel-title">Уровень</div>
+        <div class="progress-text" id="progressText"></div>
+        <div id="progressBarWrap">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-meta"><span id="progressFrom"></span><span id="progressTo"></span></div>
+        </div>
+      </div>
+
+      <div class="panel qr-panel">
+        <div class="panel-title">Покажите на кассе</div>
+        <div class="qr-box" id="qrBox" aria-label="QR-код номера карты"></div>
+        <div class="card-number" id="cardNumber"></div>
+        <div class="qr-hint">Кассир отсканирует код или введёт номер карты</div>
+      </div>
+
+      <!-- Место под будущую «Добавить в Apple Wallet»: показывается, только
+           если сервер вернёт card.appleWalletUrl -->
+      <div class="wallet hidden" id="walletBox">
+        <a class="btn btn-dark" id="walletBtn" href="#" rel="noopener">Добавить в Apple Wallet</a>
+      </div>
+
+      <div class="a2hs hidden" id="a2hsHint">
+        <button type="button" class="a2hs-close" onclick="hideA2hs()" aria-label="Скрыть подсказку">×</button>
+        <b>Добавьте карту на экран «Домой»</b> — она будет всегда под рукой.
+        <p id="a2hsIos"><b>iPhone (Safari):</b> «Поделиться» → «На экран „Домой“».</p>
+        <p id="a2hsAndroid"><b>Android (Chrome):</b> меню ⋮ → «Добавить на главный экран».</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">История баллов</div>
+        <ul class="history-list" id="historyList"></ul>
+      </div>
+
+      <div class="updated" id="updatedAt"></div>
+    </div>
+  </div>
+
+  <script src="/admin-panel/js/vendor/qrcode-generator.js"></script>
+  <script>
+    // Открытая страница карты клиента: без входа, без auth.js, обычный fetch.
+    // Токен из ссылки — секрет карты; на сервер его шлём только в проверенном
+    // формате, чтобы мусор из обрезанных ссылок не долетал до API.
+    var TOKEN_RE = /^[a-f0-9]{64}$/;
+    var A2HS_KEY = 'ff_card_a2hs_hidden';
+    var token = (new URLSearchParams(window.location.search).get('t') || '').trim().toLowerCase();
+    var loading = false;
+    var lastCard = null;
+    var lastLoadedAt = 0;
+
+    function el(id) { return document.getElementById(id); }
+    function show(id, on) { el(id).classList.toggle('hidden', !on); }
+
+    function formatNumber(n, digits) {
+      var v = Number(n);
+      if (!isFinite(v)) v = 0;
+      return v.toLocaleString('ru-RU', { maximumFractionDigits: digits == null ? 2 : digits });
+    }
+
+    // Склонение «балл»: 1 балл, 2 балла, 5 баллов
+    function pointsWord(n) {
+      var a = Math.abs(Math.trunc(Number(n) || 0)) % 100, b = a % 10;
+      if (a > 10 && a < 20) return 'баллов';
+      if (b === 1) return 'балл';
+      if (b >= 2 && b <= 4) return 'балла';
+      return 'баллов';
+    }
+
+    function formatDate(value) {
+      if (!value) return '';
+      var d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+        + ', ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function showError(icon, title, text, canRetry) {
+      show('loadingState', false);
+      show('cardView', false);
+      el('errorIcon').textContent = icon;
+      el('errorTitle').textContent = title;
+      el('errorText').textContent = text;
+      show('retryBtn', !!canRetry);
+      show('errorState', true);
+    }
+
+    // QR рисуем SVG-прямоугольниками из матрицы: без canvas и без внешних
+    // сервисов. В код кладём НОМЕР карты — его кассир ищет в поиске клиента;
+    // токен в QR не попадает, иначе снимок экрана раздавал бы доступ к карте.
+    function renderQr(text) {
+      var box = el('qrBox');
+      box.textContent = '';
+      if (typeof window.qrcode !== 'function') {
+        box.textContent = 'QR-код не загрузился — назовите номер карты';
+        return;
+      }
+      var qr = window.qrcode(0, 'M');
+      qr.addData(String(text));
+      qr.make();
+      var n = qr.getModuleCount();
+      var margin = 2;
+      var size = n + margin * 2;
+      var d = '';
+      for (var r = 0; r < n; r++) {
+        for (var c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) d += 'M' + (c + margin) + ' ' + (r + margin) + 'h1v1h-1z';
+        }
+      }
+      var ns = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+      svg.setAttribute('shape-rendering', 'crispEdges');
+      svg.setAttribute('role', 'img');
+      var bg = document.createElementNS(ns, 'rect');
+      bg.setAttribute('width', size); bg.setAttribute('height', size); bg.setAttribute('fill', '#fff');
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', d); path.setAttribute('fill', '#000');
+      svg.appendChild(bg); svg.appendChild(path);
+      box.appendChild(svg);
+    }
+
+    var TX_LABELS = { earn: 'Начисление', redeem: 'Списание', adjust: 'Корректировка', expire: 'Сгорание баллов' };
+
+    function renderHistory(recent) {
+      var list = el('historyList');
+      list.textContent = '';
+      if (!Array.isArray(recent) || recent.length === 0) {
+        var empty = document.createElement('li');
+        empty.className = 'empty';
+        empty.textContent = 'Операций с баллами пока не было';
+        list.appendChild(empty);
+        return;
+      }
+      recent.forEach(function (tx) {
+        var pts = Number(tx && tx.points) || 0;
+        // Списание и сгорание всегда со знаком минус, даже если сервер
+        // прислал модуль; корректировка — по знаку числа
+        var minus = pts < 0 || tx.type === 'redeem' || tx.type === 'expire';
+        var li = document.createElement('li');
+        li.className = 'history-item';
+        var left = document.createElement('div');
+        var desc = document.createElement('div');
+        desc.className = 'history-desc';
+        desc.textContent = (tx && tx.description) || TX_LABELS[tx && tx.type] || 'Операция';
+        var date = document.createElement('div');
+        date.className = 'history-date';
+        var label = tx && tx.description && TX_LABELS[tx.type] ? TX_LABELS[tx.type] + ' · ' : '';
+        date.textContent = label + formatDate(tx && tx.date);
+        left.appendChild(desc); left.appendChild(date);
+        var right = document.createElement('div');
+        right.className = 'history-points ' + (minus ? 'minus' : 'plus');
+        right.textContent = (minus ? '−' : '+') + formatNumber(Math.abs(pts), 0);
+        li.appendChild(left); li.appendChild(right);
+        list.appendChild(li);
+      });
+    }
+
+    function renderCard(card) {
+      var tier = String(card.tier || '').toLowerCase();
+      var face = el('cardFace');
+      face.className = 'card' + (/^[a-z]+$/.test(tier) ? ' tier-' + tier : '');
+
+      el('cardEnterprise').textContent = card.enterpriseName || 'Карта гостя';
+      el('cardTier').textContent = card.tierName || tier || '';
+      show('cardTier', !!(card.tierName || tier));
+      el('cardPoints').textContent = formatNumber(card.points, 0);
+      el('cardPointsLabel').textContent = pointsWord(card.points);
+      el('cardName').textContent = card.customerName || '';
+      var disc = Number(card.discountPercent) || 0;
+      el('cardDiscount').textContent = formatNumber(disc, 2) + '%';
+      show('cardDiscountBox', disc > 0);
+
+      // Прогресс до следующего уровня считаем по сумме покупок
+      var next = card.nextTier;
+      var spent = Number(card.totalSpent) || 0;
+      if (next && Number(next.threshold) > 0) {
+        var threshold = Number(next.threshold);
+        var remaining = Math.max(0, Number(next.remaining) || 0);
+        var pct = Math.max(0, Math.min(100, (threshold - remaining) / threshold * 100));
+        el('progressText').textContent = '';
+        el('progressText').append('До уровня «');
+        var b = document.createElement('b');
+        b.textContent = next.name || next.tier || 'следующего';
+        el('progressText').append(b, '» осталось купить на ' + formatNumber(remaining) + ' ₽');
+        el('progressFill').style.width = pct.toFixed(1) + '%';
+        el('progressFrom').textContent = 'Покупки: ' + formatNumber(spent) + ' ₽';
+        el('progressTo').textContent = formatNumber(threshold) + ' ₽';
+        show('progressBarWrap', true);
+      } else {
+        el('progressText').textContent = (card.tierName ? 'Уровень «' + card.tierName + '» — ' : '')
+          + 'максимальный. Покупки: ' + formatNumber(spent) + ' ₽';
+        show('progressBarWrap', false);
+      }
+
+      var number = String(card.number || '');
+      // Без пробелов-разделителей: кассир вводит номер в поиск клиента
+      // ровно так, как видит, а поиск по «1000 0001» ничего бы не нашёл
+      el('cardNumber').textContent = number;
+      renderQr(number);
+
+      // Кнопка Apple Wallet — только по явной https-ссылке от сервера
+      var wallet = typeof card.appleWalletUrl === 'string' && /^https:\/\//i.test(card.appleWalletUrl);
+      if (wallet) el('walletBtn').href = card.appleWalletUrl;
+      show('walletBox', wallet);
+
+      renderHistory(card.recent);
+
+      if (card.enterpriseName) document.title = 'Карта гостя — ' + card.enterpriseName;
+      el('updatedAt').textContent = 'Обновлено ' + new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function loadCard() {
+      if (loading) return;
+      if (!TOKEN_RE.test(token)) {
+        showError('🔗', 'Ссылка неполная',
+          'В адресе нет кода карты или он обрезан. Попросите новую ссылку на кассе.', false);
+        show('refreshBtn', false);
+        return;
+      }
+      loading = true;
+      el('refreshBtn').disabled = true;
+      show('refreshNotice', false);
+      if (!lastCard) { show('errorState', false); show('loadingState', true); }
+      try {
+        var res;
+        try {
+          res = await fetch('/api/crm/card/' + token, {
+            cache: 'no-store',
+            credentials: 'omit',
+            referrerPolicy: 'no-referrer',
+            headers: { 'Accept': 'application/json' }
+          });
+        } catch (netErr) {
+          // Карта уже на экране — не стираем её из-за пропавшей сети
+          if (lastCard) {
+            el('refreshNotice').textContent = 'Нет связи — показаны данные на ' + new Date(lastLoadedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            show('refreshNotice', true);
+            return;
+          }
+          showError('📡', 'Нет связи', 'Не удалось загрузить карту. Проверьте интернет и повторите.', true);
+          return;
+        }
+        var data = await res.json().catch(function () { return {}; });
+        if (res.status === 404) {
+          lastCard = null;
+          showError('🔍', 'Карта не найдена',
+            'Карта не найдена — ссылка устарела или неполная, попросите новую ссылку на кассе.', false);
+          return;
+        }
+        if (!res.ok || !data || !data.card) {
+          var msg = (data && (data.error || data.message)) || ('Ошибка сервера (HTTP ' + res.status + ')');
+          if (lastCard) {
+            el('refreshNotice').textContent = 'Не обновилось: ' + msg;
+            show('refreshNotice', true);
+            return;
+          }
+          showError('⚠️', 'Не удалось загрузить карту', msg, true);
+          return;
+        }
+        lastCard = data.card;
+        lastLoadedAt = Date.now();
+        renderCard(data.card);
+        show('loadingState', false);
+        show('errorState', false);
+        show('cardView', true);
+        updateA2hs();
+      } finally {
+        loading = false;
+        el('refreshBtn').disabled = false;
+      }
+    }
+
+    function isStandalone() {
+      return window.navigator.standalone === true
+        || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    }
+
+    function updateA2hs() {
+      var hidden = false;
+      try { hidden = localStorage.getItem(A2HS_KEY) === '1'; } catch (e) { /* приватный режим */ }
+      if (hidden || isStandalone()) { show('a2hsHint', false); return; }
+      var ua = navigator.userAgent || '';
+      var ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+      var android = /Android/i.test(ua);
+      // Неизвестная платформа — показываем обе инструкции
+      show('a2hsIos', ios || !android);
+      show('a2hsAndroid', android || !ios);
+      show('a2hsHint', true);
+    }
+
+    function hideA2hs() {
+      try { localStorage.setItem(A2HS_KEY, '1'); } catch (e) { /* приватный режим */ }
+      show('a2hsHint', false);
+    }
+
+    // Вернулись на вкладку (или открыли ярлык с экрана «Домой») — баллы
+    // могли измениться после покупки, обновляем
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && TOKEN_RE.test(token)) loadCard();
+    });
+
+    loadCard();
+  </script>
+</body>
+</html>
