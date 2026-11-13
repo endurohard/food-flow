@@ -7,7 +7,8 @@ import { DiscountService, loyaltyDiscountAmount, tierDiscountPercent } from '../
 import { OrderService } from '../order.service';
 
 const noPromos = (rows: any[] = []) => ({ query: jest.fn(async () => ({ rows })) }) as any;
-const it_ = (subtotal: number, noDiscount = false, menuItemId = 'm', categoryId?: string) => ({ menuItemId, categoryId, subtotal, noDiscount });
+// noDiscount = обе скидки запрещены (как перенесла миграция 066)
+const it_ = (subtotal: number, noDiscount = false, menuItemId = 'm', categoryId?: string) => ({ menuItemId, categoryId, subtotal, loyaltyAllowed: !noDiscount, promoAllowed: !noDiscount });
 
 describe('формула', () => {
   it('копейки, половина вверх: (kop * % + 50) / 100', () => {
@@ -72,5 +73,33 @@ describe('OrderService.resolveLoyaltyDiscount', () => {
   it('нет процента или клиента — null', async () => {
     await expect(svc({ loyalty_tier: 'bronze', tier_discounts: {} }).s.resolveLoyaltyDiscount('p', 'e')).resolves.toBeNull();
     await expect(svc(null).s.resolveLoyaltyDiscount('p', 'e')).resolves.toBeNull();
+  });
+});
+
+describe('раздельные разрешения у блюда', () => {
+  const promo = { id: 'p', name: 'Акция 20%', discount_type: 'percentage', value: '20', min_order_amount: '0', max_discount: null, applicable_to: 'order', target_id: null };
+  it('скидка по карте разрешена, акции нет — карта считается, акция нет', async () => {
+    const r = await DiscountService.calculateDiscountsInTx(noPromos([promo]), 'r', 100,
+      [{ menuItemId: 'a', subtotal: 100, loyaltyAllowed: true, promoAllowed: false }], 'e', { tier: 'gold', percent: 10 });
+    expect(r.appliedDiscounts.map(d => [d.discountType, d.amount])).toEqual([['loyalty', 10]]);
+    expect(r.totalDiscount).toBe(10);
+  });
+  it('акции разрешены, карта нет — акция считается, карта нет', async () => {
+    const r = await DiscountService.calculateDiscountsInTx(noPromos([promo]), 'r', 100,
+      [{ menuItemId: 'a', subtotal: 100, loyaltyAllowed: false, promoAllowed: true }], 'e', { tier: 'gold', percent: 10 });
+    expect(r.appliedDiscounts.map(d => [d.discountType, d.amount])).toEqual([['percentage', 20]]);
+    expect(r.totalDiscount).toBe(20);
+  });
+  it('смешанный чек: каждая скидка со своих позиций', async () => {
+    const r = await DiscountService.calculateDiscountsInTx(noPromos([promo]), 'r', 300, [
+      { menuItemId: 'a', subtotal: 100, loyaltyAllowed: true, promoAllowed: false },
+      { menuItemId: 'b', subtotal: 100, loyaltyAllowed: false, promoAllowed: true },
+      { menuItemId: 'c', subtotal: 100, loyaltyAllowed: false, promoAllowed: false }
+    ], 'e', { tier: 'gold', percent: 10 });
+    expect(r.totalDiscount).toBe(30);   // 10 по карте с «a» + 20 акции с «b»; «c» без скидок
+  });
+  it('без указания разрешений — всё разрешено (старые вызовы)', async () => {
+    const r = await DiscountService.calculateDiscountsInTx(noPromos([]), 'r', 100, [{ menuItemId: 'a', subtotal: 100 }], 'e', { tier: 'gold', percent: 10 });
+    expect(r.totalDiscount).toBe(10);
   });
 });

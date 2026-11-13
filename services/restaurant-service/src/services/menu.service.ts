@@ -27,7 +27,10 @@ export interface CreateMenuItemInput {
   taxRate?: number;
   unit?: string;
   weightGrams?: number;
-  /** «Без скидки» (миграция 065): скидки по карте и акции на чек не действуют */
+  /** Разрешения скидок (миграция 066): по карте лояльности и акции — отдельно */
+  loyaltyDiscountAllowed?: boolean;
+  promoDiscountAllowed?: boolean;
+  /** Устаревшее (065): true = обе скидки запрещены. Понимается ради открытых старых вкладок */
   noDiscount?: boolean;
 }
 
@@ -45,6 +48,19 @@ export interface CreateModifierInput {
   // varietyItemId из партий сорта variety. Задаются только парой.
   varietyItemId?: string | null;
   variety?: string | null;
+}
+
+/**
+ * Разрешения скидок блюда из тела запроса. Новые поля важнее устаревшего
+ * noDiscount (true = обе запрещены, false = обе разрешены). Не указано — undefined.
+ */
+export function discountFlags(data: { loyaltyDiscountAllowed?: boolean; promoDiscountAllowed?: boolean; noDiscount?: boolean }):
+    { loyalty?: boolean; promo?: boolean } {
+  const legacy = typeof data.noDiscount === 'boolean' ? !data.noDiscount : undefined;
+  return {
+    loyalty: typeof data.loyaltyDiscountAllowed === 'boolean' ? data.loyaltyDiscountAllowed : legacy,
+    promo: typeof data.promoDiscountAllowed === 'boolean' ? data.promoDiscountAllowed : legacy
+  };
 }
 
 export class MenuService {
@@ -144,8 +160,9 @@ export class MenuService {
       `INSERT INTO menu_items (
         restaurant_id, category_id, name, description, price, image_url,
         is_vegetarian, is_vegan, is_gluten_free, calories, preparation_time,
-        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id, icon, icon_color, no_discount
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        sku, cost_price, tax_rate, unit, weight_grams, enterprise_id, icon, icon_color,
+        loyalty_discount_allowed, promo_discount_allowed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
         restaurantId,
@@ -167,7 +184,8 @@ export class MenuService {
         enterpriseId || null,
         data.icon || null,
         data.iconColor || null,
-        data.noDiscount === true
+        discountFlags(data).loyalty ?? true,
+        discountFlags(data).promo ?? true
       ]
     );
     return result.rows[0];
@@ -181,7 +199,7 @@ export class MenuService {
       calories: 'calories', preparationTime: 'preparation_time',
       sku: 'sku', costPrice: 'cost_price', taxRate: 'tax_rate',
       unit: 'unit', weightGrams: 'weight_grams',
-      icon: 'icon', iconColor: 'icon_color', noDiscount: 'no_discount'
+      icon: 'icon', iconColor: 'icon_color'
     };
 
     const fields: string[] = [];
@@ -194,6 +212,9 @@ export class MenuService {
         values.push((data as any)[key]);
       }
     }
+    const flags = discountFlags(data);
+    if (flags.loyalty !== undefined) { fields.push(`loyalty_discount_allowed = $${p++}`); values.push(flags.loyalty); }
+    if (flags.promo !== undefined) { fields.push(`promo_discount_allowed = $${p++}`); values.push(flags.promo); }
 
     if (fields.length === 0) return null;
 

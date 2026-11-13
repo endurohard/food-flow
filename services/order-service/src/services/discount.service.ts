@@ -210,14 +210,17 @@ export class DiscountService {
     client: PoolClient,
     restaurantId: string,
     subtotal: number,
-    items: Array<{ menuItemId: string; categoryId?: string; subtotal: number; noDiscount?: boolean }>,
+    items: Array<{ menuItemId: string; categoryId?: string; subtotal: number; loyaltyAllowed?: boolean; promoAllowed?: boolean }>,
     enterpriseId?: string,
     loyalty?: LoyaltyDiscount | null
   ): Promise<DiscountCalculation> {
-    // Позиции «без скидки» (menu_items.no_discount) не участвуют ни в акциях,
-    // ни в скидке по карте; порог min_order_amount считается по всему чеку.
-    const eligibleItems = items.filter(i => !i.noDiscount);
-    const eligibleSubtotal = Math.round(eligibleItems.reduce((s, i) => s + i.subtotal, 0) * 100) / 100;
+    // Разрешения у блюда (миграция 066): скидка по карте и акции — отдельно.
+    // Не указано — разрешено. Порог min_order_amount — по всему чеку.
+    const sum = (list: typeof items) => Math.round(list.reduce((s, i) => s + i.subtotal, 0) * 100) / 100;
+    const eligibleItems = items.filter(i => i.promoAllowed !== false);
+    const eligibleSubtotal = sum(eligibleItems);
+    const loyaltySubtotal = sum(items.filter(i => i.loyaltyAllowed !== false));
+    const anyDiscountSubtotal = sum(items.filter(i => i.promoAllowed !== false || i.loyaltyAllowed !== false));
     // 1. Fetch active discounts for the restaurant
     const discountResult = await client.query(
       `SELECT * FROM discounts
@@ -304,9 +307,12 @@ export class DiscountService {
       totalDiscount += discountAmount;
     }
 
-    // Скидка по уровню карты — после акций, от суммы позиций со скидкой
-    if (loyalty && loyalty.percent > 0 && eligibleSubtotal > 0) {
-      const amount = loyaltyDiscountAmount(eligibleSubtotal, loyalty.percent);
+    // Акции — не больше суммы позиций, где они разрешены
+    if (totalDiscount > eligibleSubtotal) totalDiscount = eligibleSubtotal;
+
+    // Скидка по уровню карты — от суммы позиций, где она разрешена
+    if (loyalty && loyalty.percent > 0 && loyaltySubtotal > 0) {
+      const amount = loyaltyDiscountAmount(loyaltySubtotal, loyalty.percent);
       if (amount > 0) {
         appliedDiscounts.push({
           discountId: 'loyalty',
@@ -321,10 +327,10 @@ export class DiscountService {
       }
     }
 
-    // Скидки не больше суммы позиций, на которые они действуют: позиции
-    // «без скидки» оплачиваются полностью при любом наборе акций
-    if (totalDiscount > eligibleSubtotal) {
-      totalDiscount = eligibleSubtotal;
+    // Скидки не больше суммы позиций, на которые хоть какая-то действует:
+    // позиции без обоих разрешений оплачиваются полностью
+    if (totalDiscount > anyDiscountSubtotal) {
+      totalDiscount = anyDiscountSubtotal;
     }
 
     totalDiscount = Math.round(totalDiscount * 100) / 100;

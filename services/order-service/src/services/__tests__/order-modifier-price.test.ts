@@ -18,7 +18,7 @@ function makeSvc(mods: any[]) {
       queries.push({ sql, params });
       if (/FROM menu_items WHERE id = ANY/.test(sql)) return { rows: [
         { id: ESP, name: 'Эспрессо', price: '120', restaurant_id: REST, category_id: null },
-        { id: TOBACCO, name: 'Табак', price: '300', restaurant_id: REST, category_id: null, no_discount: true },
+        { id: TOBACCO, name: 'Табак', price: '300', restaurant_id: REST, category_id: null, loyalty_discount_allowed: false, promo_discount_allowed: false },
         { id: LATTE, name: 'Латте', price: '200', restaurant_id: 'other-rest', category_id: null }] };
       if (/FROM menu_item_modifiers/.test(sql)) {
         // мок уважает фильтр доступности из SQL

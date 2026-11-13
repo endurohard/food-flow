@@ -12,6 +12,40 @@ export function tierPercent(tierDiscounts: any, tier: string | null | undefined)
   return Number.isInteger(v) && v > 0 && v <= 100 ? v : 0;
 }
 
+export const TIER_NAMES_RU: Record<string, string> = {
+  bronze: 'Бронза', silver: 'Серебро', gold: 'Золото', platinum: 'Платина'
+};
+const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
+
+/** Следующий уровень по порогам программы { silver: 10000, gold: 50000, … }. */
+export function nextTier(tier: string, thresholds: any, totalSpent: number):
+    { tier: string; name: string; threshold: number; remaining: number } | null {
+  let t = thresholds;
+  if (typeof t === 'string') { try { t = JSON.parse(t); } catch { t = {}; } }
+  for (const next of TIER_ORDER.slice(TIER_ORDER.indexOf(tier) + 1)) {
+    const threshold = Number((t || {})[next]);
+    if (Number.isFinite(threshold) && threshold > 0) {
+      return { tier: next, name: TIER_NAMES_RU[next], threshold,
+               remaining: Math.max(0, Math.round((threshold - totalSpent) * 100) / 100) };
+    }
+  }
+  return null;
+}
+
+/**
+ * Адрес страницы карты. Берётся из адреса, по которому пришёл кассир
+ * (поддомен организации), — тот же домен откроется у клиента. Kong
+ * проставляет X-Forwarded-Host из настоящего Host. Внутренние адреса
+ * (localhost, IP) наружу не годятся — тогда PUBLIC_BASE_URL или food-flow.ru.
+ */
+export function cardBaseUrl(headers: Record<string, any>): string {
+  const host = String(headers['x-forwarded-host'] || headers.host || '').split(',')[0].trim().toLowerCase();
+  const internal = !host || /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)
+    || /^[\d.]+(:\d+)?$/.test(host) || !/^[a-z0-9.-]+(:\d+)?$/.test(host);
+  if (internal) return (process.env.PUBLIC_BASE_URL || 'https://food-flow.ru').replace(/\/+$/, '');
+  return 'https://' + host;
+}
+
 export class CRMService {
   private pool: InstanceType<typeof Pool>;
   constructor(connectionString: string) { this.pool = new Pool({ connectionString }); }
@@ -55,14 +89,18 @@ export class CRMService {
       const digits = q.replace(/\D/g, '');
       if (digits.length >= 3) {
         values.push('%' + digits + '%');
-        filter = ` AND (${nameCond} OR regexp_replace(coalesce(u.phone, ''), '\\D', '', 'g') LIKE $${values.length})`;
+        const phoneCond = `regexp_replace(coalesce(u.phone, ''), '\\D', '', 'g') LIKE $${values.length}`;
+        // Номер карты (миграция 066) — точное совпадение: кассир вводит его
+        // руками или сканером из QR на карте клиента
+        values.push(digits);
+        filter = ` AND (${nameCond} OR ${phoneCond} OR cp.card_number = $${values.length})`;
       } else {
         filter = ` AND ${nameCond}`;
       }
     }
     values.push(Math.min(Math.max(limit, 1), 50));
     const result = await this.pool.query(
-      `SELECT cp.id, u.first_name, u.last_name, u.phone, cp.loyalty_points, cp.loyalty_tier,
+      `SELECT cp.id, u.first_name, u.last_name, u.phone, cp.loyalty_points, cp.loyalty_tier, cp.card_number,
               -- процент скидки уровня из активной программы своей организации:
               -- касса показывает и считает скидку сразу при выборе клиента
               (SELECT lp.tier_discounts FROM loyalty_programs lp
@@ -83,7 +121,8 @@ export class CRMService {
         phoneTail: digits.length >= 4 ? digits.slice(-4) : null,
         points: Number(r.loyalty_points) || 0,
         tier: (r.loyalty_tier || 'bronze').toLowerCase(),
-        discountPercent: tierPercent(r.tier_discounts, r.loyalty_tier)
+        discountPercent: tierPercent(r.tier_discounts, r.loyalty_tier),
+        cardNumber: r.card_number || null
       };
     });
   }
@@ -409,6 +448,72 @@ export class CRMService {
       vals
     );
     return result.rows[0] || null;
+  }
+
+  // ========== КАРТА КЛИЕНТА (миграция 066) ==========
+
+  /**
+   * Открытая карта по секрету ссылки. Без входа, поэтому наружу — только то,
+   * что клиент и так видит о себе: имя без фамилии, баллы, уровень, номер
+   * карты. Ни телефона, ни e-mail, ни id.
+   */
+  async getCardByToken(token: string): Promise<any | null> {
+    if (!/^[a-f0-9]{64}$/.test(token)) return null;
+    const r = await this.pool.query(
+      `SELECT cp.id, cp.enterprise_id, cp.card_number, cp.loyalty_points, cp.loyalty_tier, cp.total_spent,
+              u.first_name, e.name AS enterprise_name,
+              (SELECT row_to_json(lp) FROM (
+                 SELECT tier_discounts, tier_thresholds FROM loyalty_programs
+                  WHERE enterprise_id = cp.enterprise_id AND is_active = true
+                  ORDER BY (program_type = 'points') DESC, created_at ASC LIMIT 1) lp) AS program
+         FROM customer_profiles cp
+         JOIN users u ON u.id = cp.user_id
+         JOIN enterprises e ON e.id = cp.enterprise_id
+        WHERE cp.card_token = $1`,
+      [token]
+    );
+    const row = r.rows[0];
+    if (!row) return null;
+    const tier = (row.loyalty_tier || 'bronze').toLowerCase();
+    const program = row.program || {};
+    const tx = await this.pool.query(
+      `SELECT created_at, transaction_type, points, description FROM loyalty_transactions
+        WHERE customer_profile_id = $1 AND enterprise_id = $2
+        ORDER BY created_at DESC LIMIT 10`,
+      [row.id, row.enterprise_id]
+    );
+    const totalSpent = Number(row.total_spent) || 0;
+    return {
+      number: row.card_number,
+      customerName: row.first_name || 'Гость',
+      enterpriseName: row.enterprise_name,
+      points: Number(row.loyalty_points) || 0,
+      tier,
+      tierName: TIER_NAMES_RU[tier] || tier,
+      discountPercent: tierPercent(program.tier_discounts, tier),
+      totalSpent,
+      nextTier: nextTier(tier, program.tier_thresholds, totalSpent),
+      recent: tx.rows.map((t: any) => ({
+        date: t.created_at, type: t.transaction_type, points: Number(t.points) || 0, description: t.description || null
+      }))
+    };
+  }
+
+  /**
+   * Ссылка на карту для кассира: профиль только своей организации. rotate —
+   * выдать новый секрет (старая ссылка перестаёт открываться).
+   */
+  async getCardLink(profileId: string, enterpriseId: string, rotate = false): Promise<any | null> {
+    const r = await this.pool.query(
+      `UPDATE customer_profiles cp
+          SET card_token = CASE WHEN $3 THEN replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
+                                ELSE cp.card_token END
+         FROM users u, enterprises e
+        WHERE cp.id = $1 AND cp.enterprise_id = $2 AND u.id = cp.user_id AND e.id = cp.enterprise_id
+        RETURNING cp.card_token, cp.card_number, u.first_name, u.phone, e.name AS enterprise_name`,
+      [profileId, enterpriseId, rotate]
+    );
+    return r.rows[0] || null;
   }
 
   async getTransactions(customerId: string, enterpriseId?: string): Promise<any[]> {

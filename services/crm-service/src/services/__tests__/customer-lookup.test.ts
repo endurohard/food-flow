@@ -25,7 +25,7 @@ describe('поиск клиента для кассы', () => {
   it('кассе не уходят e-mail и полный телефон — только 4 последние цифры', async () => {
     const { svc } = makeSvc([{ id: 'p1', first_name: 'Анна', last_name: 'ТЕСТ', phone: '+7 (999) 123-45-67', email: 'a@x.ru', loyalty_points: 120, loyalty_tier: 'bronze' }]);
     const [c] = await svc.lookupCustomers(ENT, 'анна');
-    expect(c).toEqual({ id: 'p1', name: 'Анна ТЕСТ', phoneTail: '4567', points: 120, tier: 'bronze', discountPercent: 0 });
+    expect(c).toEqual({ id: 'p1', name: 'Анна ТЕСТ', phoneTail: '4567', points: 120, tier: 'bronze', discountPercent: 0, cardNumber: null });
     expect(JSON.stringify(c)).not.toMatch(/a@x\.ru|999/);
   });
 

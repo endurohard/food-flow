@@ -44,6 +44,8 @@ const menuItemSchema = Joi.object({
   taxRate: Joi.number().min(0).max(100).optional(),
   unit: Joi.string().valid('кг', 'г', 'л', 'мл', 'шт', 'упак', 'порц').optional(),
   weightGrams: Joi.number().integer().min(0).optional(),
+  loyaltyDiscountAllowed: Joi.boolean().optional(),
+  promoDiscountAllowed: Joi.boolean().optional(),
   noDiscount: Joi.boolean().optional()
 });
 
@@ -238,8 +240,10 @@ router.put('/menu-items/:id', authenticateUser, requireRole('admin', 'owner', 'm
       return res.status(400).json({ error: 'Validation error', message: visualError.details[0].message });
     }
     // Строка «true» в boolean-колонку прошла бы молча, а мусор дал бы 500
-    if (req.body.noDiscount !== undefined && typeof req.body.noDiscount !== 'boolean') {
-      return res.status(400).json({ error: 'Validation error', message: '«Без скидки» — да или нет' });
+    for (const [key, label] of [['loyaltyDiscountAllowed', '«Скидка по карте разрешена»'], ['promoDiscountAllowed', '«Акции разрешены»'], ['noDiscount', '«Без скидки»']]) {
+      if (req.body[key] !== undefined && typeof req.body[key] !== 'boolean') {
+        return res.status(400).json({ error: 'Validation error', message: `${label} — да или нет` });
+      }
     }
     const item = await menuService.updateItem(req.params.id, req.body, isSuper ? undefined : req.enterpriseId);
     if (!item) {

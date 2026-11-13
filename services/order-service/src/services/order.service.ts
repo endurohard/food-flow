@@ -102,7 +102,7 @@ export class OrderService {
       // Fetch menu items to get prices
       const itemIds = data.items.map(i => i.menuItemId);
       const menuResult = await client.query(
-        `SELECT id, name, price, restaurant_id, category_id, no_discount FROM menu_items WHERE id = ANY($1)`,
+        `SELECT id, name, price, restaurant_id, category_id, loyalty_discount_allowed, promo_discount_allowed FROM menu_items WHERE id = ANY($1)`,
         [itemIds]
       );
 
@@ -160,7 +160,8 @@ export class OrderService {
         orderItems.push({
           menuItemId: item.menuItemId,
           categoryId: menuItem.category_id || undefined,
-          noDiscount: !!menuItem.no_discount,
+          loyaltyAllowed: menuItem.loyalty_discount_allowed !== false,
+          promoAllowed: menuItem.promo_discount_allowed !== false,
           name: menuItem.name,
           quantity: item.quantity,
           unitPrice: unitPrice + modifierTotal,
@@ -192,7 +193,7 @@ export class OrderService {
         client,
         data.restaurantId,
         subtotal,
-        orderItems.map(i => ({ menuItemId: i.menuItemId, categoryId: i.categoryId, subtotal: i.subtotal, noDiscount: i.noDiscount })),
+        orderItems.map(i => ({ menuItemId: i.menuItemId, categoryId: i.categoryId, subtotal: i.subtotal, loyaltyAllowed: i.loyaltyAllowed, promoAllowed: i.promoAllowed })),
         data.enterpriseId,
         data.loyalty
       );

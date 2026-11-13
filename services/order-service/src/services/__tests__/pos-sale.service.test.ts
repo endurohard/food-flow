@@ -94,7 +94,8 @@ function makeClient(
                   name: 'Плов',
                   price: '450.00',
                   category_id: null,
-                  no_discount: !!options.noDiscount,
+                  loyalty_discount_allowed: !options.noDiscount,
+                  promo_discount_allowed: !options.noDiscount,
                 },
               ];
         return { rows, rowCount: rows.length };

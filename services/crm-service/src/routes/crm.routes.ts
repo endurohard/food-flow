@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
-import { CRMService } from '../services/crm.service';
+import { CRMService, cardBaseUrl } from '../services/crm.service';
 import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
 import { config } from '../config';
@@ -32,6 +32,45 @@ router.get('/customers/lookup', authenticateUser, requireRole('admin', 'owner', 
     const customers = await crmService.lookupCustomers(req.enterpriseId, q);
     return res.json({ customers });
   } catch (error) { console.error('Lookup customers error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// ========== КАРТА КЛИЕНТА ==========
+
+// Открытая страница карты /card/?t=… — БЕЗ входа: секрет ссылки и есть доступ.
+// Объявлен до /customers/:userId. Кэш запрещён: баллы меняются после покупки.
+router.get('/card/:token', async (req: Request, res: Response) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    const card = await crmService.getCardByToken(req.params.token);
+    if (!card) return res.status(404).json({ error: 'Карта не найдена' });
+    return res.json({ card });
+  } catch (error) { console.error('Get card error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// Ссылка на карту для отправки клиенту. Кассиру можно; отозвать старую
+// ссылку (rotate) — только владельцу и админу.
+router.post('/customers/:profileId/card-link', authenticateUser,
+  requireRole('admin', 'owner', 'manager', 'operator', 'waiter', 'cashier'), async (req: Request, res: Response) => {
+  try {
+    if (!req.enterpriseId) return res.status(403).json({ error: 'Forbidden', message: 'Требуется контекст предприятия' });
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.profileId)) return res.status(400).json({ error: 'Неверный клиент', message: 'Неверный клиент' });
+    const rotate = req.body?.rotate === true;
+    if (rotate && !['owner', 'admin'].includes(String(req.enterpriseRole || '')) && req.userRole !== 'super_admin') {
+      const msg = 'Отозвать ссылку может только владелец или администратор';
+      return res.status(403).json({ error: msg, message: msg });
+    }
+    const row = await crmService.getCardLink(req.params.profileId, req.enterpriseId, rotate);
+    if (!row) return res.status(404).json({ error: 'Клиент не найден', message: 'Клиент не найден в этом предприятии' });
+    const url = `${cardBaseUrl(req.headers)}/card/?t=${row.card_token}`;
+    const name = row.first_name || 'Гость';
+    const message = `${name}, ваша карта гостя «${row.enterprise_name}»: ${url}`;
+    const phone = row.phone ? '+' + String(row.phone).replace(/\D/g, '') : null;
+    return res.json({
+      url, cardNumber: row.card_number, phone, customerName: name, message,
+      smsUri: phone && phone.length >= 11 ? `sms:${phone}?&body=${encodeURIComponent(message)}` : null,
+      telegramUrl: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(`${name}, ваша карта гостя «${row.enterprise_name}»`)}`
+    });
+  } catch (error) { console.error('Card link error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
 router.get('/customers/:userId', authenticateUser, requireRole('admin', 'owner', 'manager'), async (req: Request, res: Response) => {

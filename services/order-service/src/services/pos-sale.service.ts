@@ -220,7 +220,7 @@ export class PosSaleService {
 
       const itemIds = [...new Set(data.items.map((item) => item.menuItemId))];
       const menuResult = await client.query(
-        `SELECT mi.id, mi.name, mi.price, mi.category_id, mi.no_discount
+        `SELECT mi.id, mi.name, mi.price, mi.category_id, mi.loyalty_discount_allowed, mi.promo_discount_allowed
            FROM menu_items mi
           WHERE mi.id = ANY($1::uuid[])
             AND mi.restaurant_id = $2
@@ -303,7 +303,8 @@ export class PosSaleService {
           menuItemId: item.source.menuItemId,
           categoryId: item.menuItem.category_id || undefined,
           subtotal: item.lineTotal,
-          noDiscount: !!item.menuItem.no_discount,
+          loyaltyAllowed: item.menuItem.loyalty_discount_allowed !== false,
+          promoAllowed: item.menuItem.promo_discount_allowed !== false,
         })),
         enterpriseId,
         loyalty

@@ -74,19 +74,33 @@ it('схема принимает пару и отвергает кривой id
   expect(modifierSchema.validate({ name: 'x', varietyItemId: BEANS, variety: 'я'.repeat(101) }).error).toBeDefined();
 });
 
-describe('блюдо «без скидки»', () => {
-  it('создание: no_discount только при явном true', async () => {
-    for (const [given, want] of [[true, true], [undefined, false], ['true' as any, false]]) {
+describe('разрешения скидок у блюда', () => {
+  const col = (c: any, name: string) => {
+    const cols = /\(\s*([\s\S]*?)\s*\) VALUES/.exec(c.sql)![1].split(',').map((x: string) => x.trim());
+    return c.params[cols.indexOf(name)];
+  };
+  it('создание: по умолчанию обе разрешены; поля задают каждую отдельно', async () => {
+    for (const [given, loyalty, promo] of [
+      [{}, true, true],
+      [{ loyaltyDiscountAllowed: false }, false, true],
+      [{ promoDiscountAllowed: false }, true, false],
+      [{ noDiscount: true }, false, false],
+      [{ noDiscount: true, loyaltyDiscountAllowed: true }, true, false],
+      [{ loyaltyDiscountAllowed: 'false' }, true, true]
+    ] as any[]) {
       const { s, calls } = svc();
-      await s.createItem('r', { name: 'Табак', price: 100, noDiscount: given } as any, 'e');
-      const cols = /\(\s*([\s\S]*?)\s*\) VALUES/.exec(calls[0].sql)![1].split(',').map((x) => x.trim());
-      expect(calls[0].params[cols.indexOf('no_discount')]).toBe(want);
+      await s.createItem('r', { name: 'Табак', price: 100, ...given } as any, 'e');
+      expect([col(calls[0], 'loyalty_discount_allowed'), col(calls[0], 'promo_discount_allowed')]).toEqual([loyalty, promo]);
     }
   });
-  it('изменение пишет no_discount', async () => {
+  it('изменение пишет только переданные разрешения', async () => {
     const { s, calls } = svc();
-    await s.updateItem('i', { noDiscount: true } as any, 'e');
-    expect(calls[0].sql).toMatch(/no_discount = \$1/);
-    expect(calls[0].params[0]).toBe(true);
+    await s.updateItem('i', { promoDiscountAllowed: false } as any, 'e');
+    expect(calls[0].sql).toMatch(/promo_discount_allowed = \$1/);
+    expect(calls[0].sql).not.toMatch(/loyalty_discount_allowed/);
+    expect(calls[0].params[0]).toBe(false);
+    const b = svc();
+    await b.s.updateItem('i', { loyaltyDiscountAllowed: true, promoDiscountAllowed: true } as any, 'e');
+    expect(b.calls[0].sql).toMatch(/loyalty_discount_allowed = \$1, promo_discount_allowed = \$2/);
   });
 });
