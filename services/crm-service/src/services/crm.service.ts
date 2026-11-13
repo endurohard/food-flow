@@ -46,6 +46,19 @@ export function cardBaseUrl(headers: Record<string, any>): string {
   return 'https://' + host;
 }
 
+/**
+ * Секрет ссылки на карту (card_token, миграция 066) — это и есть доступ к
+ * открытой карте. Наружу его отдаёт только card-link — как часть ссылки и
+ * только своей организации. Все ответы с профилем целиком (cp.*,
+ * RETURNING *) проходят через эту функцию, иначе секрет каждого клиента
+ * уходит в список клиентов любого менеджера.
+ */
+export function withoutSecrets<T extends Record<string, any>>(row: T): Omit<T, 'card_token'> {
+  if (!row || typeof row !== 'object') return row;
+  const { card_token: _secret, ...rest } = row;
+  return rest;
+}
+
 export class CRMService {
   private pool: InstanceType<typeof Pool>;
   constructor(connectionString: string) { this.pool = new Pool({ connectionString }); }
@@ -68,7 +81,7 @@ export class CRMService {
        ${where}
        ORDER BY cp.total_spent DESC`, vals
     );
-    return result.rows;
+    return result.rows.map(withoutSecrets);
   }
 
   /**
@@ -141,7 +154,7 @@ export class CRMService {
        WHERE ${whereConds.join(' AND ')}`,
       values
     );
-    return result.rows[0] || null;
+    return result.rows[0] ? withoutSecrets(result.rows[0]) : null;
   }
 
   async createProfile(data: any): Promise<any> {
@@ -159,7 +172,7 @@ export class CRMService {
         data.notes || null
       ]
     );
-    return result.rows[0];
+    return withoutSecrets(result.rows[0]);
   }
 
   async updateProfile(userId: string, data: any, enterpriseId?: string): Promise<any> {
@@ -185,7 +198,7 @@ export class CRMService {
     const result = await this.pool.query(
       `UPDATE customer_profiles SET ${fields.join(', ')} WHERE ${whereConds.join(' AND ')} RETURNING *`, values
     );
-    return result.rows[0] || null;
+    return result.rows[0] ? withoutSecrets(result.rows[0]) : null;
   }
 
   // ========== LOYALTY PROGRAMS ==========
