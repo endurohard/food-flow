@@ -6,7 +6,8 @@
 import { CRMService } from '../crm.service';
 
 const SECRET = 'c'.repeat(64);
-const ROW = { id: 'p1', user_id: 'u1', enterprise_id: 'e1', card_number: '10000001', card_token: SECRET, first_name: 'Анна' };
+const WALLET_SECRET = 'd'.repeat(64);
+const ROW = { id: 'p1', user_id: 'u1', enterprise_id: 'e1', card_number: '10000001', card_token: SECRET, wallet_auth_token: WALLET_SECRET, first_name: 'Анна' };
 function svc() {
   const s = new CRMService('postgres://unused');
   (s as any).pool = { query: async () => ({ rows: [{ ...ROW }], rowCount: 1 }) };
@@ -23,5 +24,7 @@ it.each([
   const json = JSON.stringify(out);
   expect(json).not.toContain(SECRET);
   expect(json).not.toContain('card_token');
+  expect(json).not.toContain(WALLET_SECRET);
+  expect(json).not.toContain('wallet_auth_token');
   expect(json).toContain('10000001');
 });

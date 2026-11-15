@@ -7,6 +7,9 @@ const { Pool } = pkg;
 import { config } from './config';
 import { logger } from './utils/logger';
 import crmRoutes from './routes/crm.routes';
+import walletRoutes from './routes/wallet.routes';
+import { startWalletPusher } from './services/wallet.pusher';
+import { getWalletConfig } from './services/wallet.runtime';
 import { CRMService } from './services/crm.service';
 import { OrderEventsConsumer } from './services/order-events.consumer';
 
@@ -47,6 +50,8 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 app.use('/api/crm', crmRoutes);
+// Сервис обновлений Apple Wallet: телефоны ходят сюда сами (webServiceURL карты)
+app.use('/api/wallet', walletRoutes);
 
 app.use((_req: Request, res: Response) => { res.status(404).json({ error: 'Not Found' }); });
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -67,8 +72,14 @@ orderEventsConsumer
     logger.warn(`Автоначисление баллов недоступно (RabbitMQ): ${err.message}`)
   );
 
+// Apple Wallet: push на телефоны после изменения баллов. Без сертификата не запускается.
+const walletCfg = getWalletConfig();
+const stopWalletPusher = walletCfg ? startWalletPusher(new CRMService(config.database.url), walletCfg) : () => {};
+logger.info(walletCfg ? `Apple Wallet включён (${walletCfg.passTypeId})` : 'Apple Wallet выключен: нет сертификата');
+
 const shutdown = (signal: string) => {
   logger.info(`${signal} received, shutting down gracefully`);
+  stopWalletPusher();
   orderEventsConsumer.disconnect().catch(() => {});
   server.close(async () => {
     await healthPool.end().catch(() => {});

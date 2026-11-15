@@ -291,6 +291,15 @@ services:
       # false — баллы только вручную через API
       AUTO_EARN_POINTS: ${AUTO_EARN_POINTS:-true}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      # Apple Wallet: без этих двух значений и файлов сертификата функция
+      # выключена (кнопки «Добавить в Apple Wallet» на карте нет)
+      WALLET_PASS_TYPE_ID: ${WALLET_PASS_TYPE_ID:-}
+      WALLET_TEAM_ID: ${WALLET_TEAM_ID:-}
+      WALLET_KEY_PASSPHRASE: ${WALLET_KEY_PASSPHRASE:-}
+    volumes:
+      # signerCert.pem, signerKey.pem, wwdr.pem — см. docs/apple-wallet.md.
+      # Только чтение; каталог в .gitignore, в репозиторий ключ не попадает
+      - ./secrets/wallet:/run/secrets/wallet:ro
     expose:
       - "3011"
     networks:

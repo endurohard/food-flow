@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { CRMService, cardBaseUrl } from '../services/crm.service';
+import { getWalletConfig } from '../services/wallet.runtime';
+import { renderPass, sendPass } from './wallet.routes';
 import { authenticateUser, requireRole } from '../middleware/auth.middleware';
 import { idempotencyCheck } from '../middleware/idempotency.middleware';
 import { config } from '../config';
@@ -43,8 +45,22 @@ router.get('/card/:token', async (req: Request, res: Response) => {
     res.set('Cache-Control', 'no-store');
     const card = await crmService.getCardByToken(req.params.token);
     if (!card) return res.status(404).json({ error: 'Карта не найдена' });
+    // Кнопка «Добавить в Apple Wallet» появляется, только когда на сервере
+    // лежит сертификат: без него карту нечем подписать
+    if (getWalletConfig()) card.appleWalletUrl = `${cardBaseUrl(req.headers)}/api/crm/card/${req.params.token}/wallet.pkpass`;
     return res.json({ card });
   } catch (error) { console.error('Get card error:', error); return res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// Файл карты для Apple Wallet — по тому же секрету ссылки, без входа
+router.get('/card/:token/wallet.pkpass', async (req: Request, res: Response) => {
+  try {
+    if (!getWalletConfig()) return res.status(404).json({ error: 'Apple Wallet не подключён' });
+    if (!/^[a-f0-9]{64}$/.test(req.params.token)) return res.status(404).json({ error: 'Карта не найдена' });
+    const loaded = await crmService.loadCard('token', req.params.token);
+    if (!loaded) return res.status(404).json({ error: 'Карта не найдена' });
+    return sendPass(res, renderPass(loaded, req.headers), loaded.walletUpdatedAt, `card-${loaded.card.number}.pkpass`);
+  } catch (error) { console.error('Wallet pkpass error:', error); return res.status(500).json({ error: 'Internal server error' }); }
 });
 
 // Ссылка на карту для отправки клиенту. Кассиру можно; отозвать старую

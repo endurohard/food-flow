@@ -45,3 +45,6 @@ frontend/design-concepts/
 # Собранный APK кассы: бинарник раздаётся через /downloads, а не хранится в git.
 # Публикуется скриптом scripts/publish-pos-apk.sh
 frontend/downloads/
+
+# Сертификаты и ключи (Apple Wallet и др.) — только на сервере
+secrets/

@@ -96,6 +96,12 @@ services:
         paths:
           - /api/crm
         strip_path: false
+      # Сервис обновлений Apple Wallet: телефон сам ходит сюда по
+      # webServiceURL из карты (/api/wallet/v1/devices/…, /v1/passes/…)
+      - name: wallet-routes
+        paths:
+          - /api/wallet
+        strip_path: false
 
   - name: finance-service
     url: http://finance-service:3012

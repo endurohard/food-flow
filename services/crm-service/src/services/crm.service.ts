@@ -53,9 +53,11 @@ export function cardBaseUrl(headers: Record<string, any>): string {
  * RETURNING *) проходят через эту функцию, иначе секрет каждого клиента
  * уходит в список клиентов любого менеджера.
  */
-export function withoutSecrets<T extends Record<string, any>>(row: T): Omit<T, 'card_token'> {
+export function withoutSecrets<T extends Record<string, any>>(row: T): Omit<T, 'card_token' | 'wallet_auth_token'> {
   if (!row || typeof row !== 'object') return row;
-  const { card_token: _secret, ...rest } = row;
+  // wallet_auth_token (067) — секрет карты в Apple Wallet: с ним можно
+  // скачать карту и подписать чужой телефон на её обновления
+  const { card_token: _card, wallet_auth_token: _wallet, ...rest } = row;
   return rest;
 }
 
@@ -472,8 +474,22 @@ export class CRMService {
    */
   async getCardByToken(token: string): Promise<any | null> {
     if (!/^[a-f0-9]{64}$/.test(token)) return null;
+    const loaded = await this.loadCard('token', token);
+    return loaded ? loaded.card : null;
+  }
+
+  /**
+   * Карта и служебные поля по секрету ссылки (страница карты) или по
+   * номеру карты (серийный номер карты в Apple Wallet). Служебные поля
+   * (id, секреты) наружу не отдавать — только card.
+   */
+  async loadCard(by: 'token' | 'serial', value: string): Promise<{
+    card: any; profileId: string; enterpriseId: string; cardToken: string; walletAuthToken: string; walletUpdatedAt: Date;
+  } | null> {
+    const where = by === 'token' ? 'cp.card_token = $1' : 'cp.card_number = $1';
     const r = await this.pool.query(
       `SELECT cp.id, cp.enterprise_id, cp.card_number, cp.loyalty_points, cp.loyalty_tier, cp.total_spent,
+              cp.card_token, cp.wallet_auth_token, cp.wallet_updated_at,
               u.first_name, e.name AS enterprise_name,
               (SELECT row_to_json(lp) FROM (
                  SELECT tier_discounts, tier_thresholds FROM loyalty_programs
@@ -482,8 +498,8 @@ export class CRMService {
          FROM customer_profiles cp
          JOIN users u ON u.id = cp.user_id
          JOIN enterprises e ON e.id = cp.enterprise_id
-        WHERE cp.card_token = $1`,
-      [token]
+        WHERE ${where}`,
+      [value]
     );
     const row = r.rows[0];
     if (!row) return null;
@@ -497,19 +513,95 @@ export class CRMService {
     );
     const totalSpent = Number(row.total_spent) || 0;
     return {
-      number: row.card_number,
-      customerName: row.first_name || 'Гость',
-      enterpriseName: row.enterprise_name,
-      points: Number(row.loyalty_points) || 0,
-      tier,
-      tierName: TIER_NAMES_RU[tier] || tier,
-      discountPercent: tierPercent(program.tier_discounts, tier),
-      totalSpent,
-      nextTier: nextTier(tier, program.tier_thresholds, totalSpent),
-      recent: tx.rows.map((t: any) => ({
-        date: t.created_at, type: t.transaction_type, points: Number(t.points) || 0, description: t.description || null
-      }))
+      card: {
+        number: row.card_number,
+        customerName: row.first_name || 'Гость',
+        enterpriseName: row.enterprise_name,
+        points: Number(row.loyalty_points) || 0,
+        tier,
+        tierName: TIER_NAMES_RU[tier] || tier,
+        discountPercent: tierPercent(program.tier_discounts, tier),
+        totalSpent,
+        nextTier: nextTier(tier, program.tier_thresholds, totalSpent),
+        recent: tx.rows.map((t: any) => ({
+          date: t.created_at, type: t.transaction_type, points: Number(t.points) || 0, description: t.description || null
+        }))
+      },
+      profileId: row.id,
+      enterpriseId: row.enterprise_id,
+      cardToken: row.card_token,
+      walletAuthToken: row.wallet_auth_token,
+      walletUpdatedAt: row.wallet_updated_at
     };
+  }
+
+  // ========== APPLE WALLET: регистрации телефонов (миграция 067) ==========
+
+  /** Телефон добавил карту. true — новая регистрация, false — уже была (токен обновлён). */
+  async walletRegister(device: string, pushToken: string, passTypeId: string, serial: string, profileId: string): Promise<boolean> {
+    const r = await this.pool.query(
+      `INSERT INTO wallet_registrations (device_library_id, push_token, pass_type_id, serial_number, customer_profile_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (device_library_id, pass_type_id, serial_number)
+       DO UPDATE SET push_token = EXCLUDED.push_token, updated_at = now()
+       RETURNING (xmax = 0) AS inserted`,
+      [device, pushToken, passTypeId, serial, profileId]
+    );
+    return !!r.rows[0]?.inserted;
+  }
+
+  async walletUnregister(device: string, passTypeId: string, serial: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM wallet_registrations WHERE device_library_id = $1 AND pass_type_id = $2 AND serial_number = $3`,
+      [device, passTypeId, serial]
+    );
+  }
+
+  /** Какие карты телефона изменились после since (метка lastUpdated из прошлого ответа). */
+  async walletUpdatedSerials(device: string, passTypeId: string, since?: string): Promise<{ serials: string[]; lastUpdated: string | null }> {
+    const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : null;
+    const r = await this.pool.query(
+      `SELECT wr.serial_number, cp.wallet_updated_at
+         FROM wallet_registrations wr
+         JOIN customer_profiles cp ON cp.id = wr.customer_profile_id
+        WHERE wr.device_library_id = $1 AND wr.pass_type_id = $2
+          AND ($3::timestamptz IS NULL OR cp.wallet_updated_at > $3::timestamptz)`,
+      [device, passTypeId, sinceDate]
+    );
+    if (!r.rows.length) return { serials: [], lastUpdated: null };
+    const last = r.rows.reduce((m: Date, x: any) => (new Date(x.wallet_updated_at) > m ? new Date(x.wallet_updated_at) : m), new Date(0));
+    return { serials: r.rows.map((x: any) => x.serial_number), lastUpdated: last.toISOString() };
+  }
+
+  /** Карты, изменившиеся после последней рассылки, с push-токенами их телефонов. */
+  async walletPending(passTypeId: string, limit = 200): Promise<Array<{ profileId: string; updatedAt: Date; tokens: string[] }>> {
+    const r = await this.pool.query(
+      `SELECT cp.id, cp.wallet_updated_at, array_agg(DISTINCT wr.push_token) AS tokens
+         FROM customer_profiles cp
+         JOIN wallet_registrations wr ON wr.customer_profile_id = cp.id AND wr.pass_type_id = $1
+        WHERE cp.wallet_pushed_at IS NULL OR cp.wallet_updated_at > cp.wallet_pushed_at
+        GROUP BY cp.id, cp.wallet_updated_at
+        ORDER BY cp.wallet_updated_at
+        LIMIT $2`,
+      [passTypeId, limit]
+    );
+    return r.rows.map((x: any) => ({ profileId: x.id, updatedAt: x.wallet_updated_at, tokens: x.tokens || [] }));
+  }
+
+  /**
+   * Рассылка дошла до изменения at. Отмечаем именно его, а не now():
+   * если баллы сменились ещё раз, пока шёл push, следующий проход это увидит.
+   */
+  async walletMarkPushed(profileId: string, at: Date): Promise<void> {
+    await this.pool.query(
+      `UPDATE customer_profiles SET wallet_pushed_at = $2 WHERE id = $1 AND (wallet_pushed_at IS NULL OR wallet_pushed_at < $2)`,
+      [profileId, at]
+    );
+  }
+
+  /** Apple сообщил, что токен больше недействителен — телефон удалил карту. */
+  async walletDropToken(pushToken: string): Promise<void> {
+    await this.pool.query(`DELETE FROM wallet_registrations WHERE push_token = $1`, [pushToken]);
   }
 
   /**
