@@ -1319,217 +1319,326 @@ AUTH.requireAuth();
 
   <!-- Main Content -->
   <div class="container">
-    <div class="header">
-      <h1 class="title">Номенклатура</h1>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <label class="nm-toggle" title="Порядок позиций на кассе вместо дерева групп">
-          <input type="checkbox" id="cashModeToggle" onchange="toggleCashMode()">
-          <span>Режим: порядок на кассе</span>
-        </label>
-        <label class="nm-toggle">
-          <input type="checkbox" id="showDeletedToggle" onchange="reloadTree()">
-          <span>Показать удалённые</span>
-        </label>
-        <button class="btn btn-primary" onclick="openGroupForm(null)">Группа</button>
+    <div class="header nm-headrow">
+      <div>
+        <h1 class="title">Номенклатура</h1>
+        <div class="nm-lead">Единый справочник: блюда меню, товары и заготовки склада по группам</div>
+      </div>
+      <div class="nm-head-acts">
+        <button type="button" class="nm-btn sec" id="cashModeBtn" onclick="toggleCashMode()" aria-pressed="false">Порядок на кассе</button>
+        <div class="nm-menu">
+          <button type="button" class="nm-btn" onclick="toggleAddMenu(event)" aria-haspopup="true" aria-expanded="false" id="addBtn">+ Позиция</button>
+          <div class="nm-menu-list" id="addMenu" role="menu" hidden>
+            <a role="menuitem" href="/admin-panel/menu.html">Блюдо<span>создаётся в «Меню» — с ценой и фото</span></a>
+            <button type="button" role="menuitem" onclick="openCreateItem('good')">Товар склада<span>покупается и хранится: молоко, мука</span></button>
+            <button type="button" role="menuitem" onclick="openCreateItem('prepared')">Заготовка<span>готовится по техкарте: тесто, соус</span></button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Вкладки по типу позиции -->
-    <div class="tabs">
-      <button class="tab active" data-type="" onclick="switchType('')">Всё</button>
-      <button class="tab" data-type="dish" onclick="switchType('dish')">Блюда</button>
-      <button class="tab" data-type="good" onclick="switchType('good')">Товары</button>
-      <button class="tab" data-type="prepared" onclick="switchType('prepared')">Заготовки</button>
+    <div class="nm-bar" id="nmBar">
+      <div class="nm-search"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg><input type="search" id="searchInput" class="nm-ctl" placeholder="Название или артикул" oninput="onSearchInput()" aria-label="Поиск позиции"></div>
+      <div class="nm-seg" role="group" aria-label="Тип позиций">
+        <button type="button" data-type="" aria-pressed="true" onclick="switchType('')">Все</button>
+        <button type="button" data-type="dish" aria-pressed="false" onclick="switchType('dish')">Блюда</button>
+        <button type="button" data-type="good" aria-pressed="false" onclick="switchType('good')">Товары</button>
+        <button type="button" data-type="prepared" aria-pressed="false" onclick="switchType('prepared')">Заготовки</button>
+      </div>
+      <label class="nm-check"><input type="checkbox" id="showDeletedToggle" onchange="reloadTree()"> удалённые</label>
     </div>
 
-    <div style="margin:0 0 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <input type="text" id="searchInput" placeholder="Поиск по названию или артикулу"
-             oninput="onSearchInput()"
-             style="flex:1;min-width:220px;padding:10px 14px;border:1px solid var(--color-grey-3,#ddd);border-radius:8px;font-family:inherit;font-size:14px">
-      <span id="countBadge" style="color:var(--color-text-secondary);font-size:13px"></span>
+    <div class="nm-layout" id="nmLayout">
+      <aside class="nm-side" aria-label="Группы">
+        <div class="nm-side-h">Группы <button type="button" class="nm-ico" title="Новая группа" aria-label="Новая группа" onclick="openGroupForm(null)"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></button></div>
+        <nav id="nmTree"></nav>
+      </aside>
+      <section class="nm-main">
+        <select class="nm-ctl nm-groupsel" id="groupSelect" onchange="selectGroup(this.value)" aria-label="Группа"></select>
+        <div class="nm-main-h" id="nmMainHead"></div>
+        <div id="nmItems"></div>
+      </section>
     </div>
-
-    <!-- Inline-форма группы: модальных диалогов браузера здесь нет -->
-    <div id="groupForm" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--color-grey-3,#ddd);border-radius:10px;background:var(--color-white,#fff)">
-      <div style="font-weight:700;margin-bottom:12px" id="groupFormTitle">Новая группа</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Название*</span>
-          <input type="text" id="groupName" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Артикул</span>
-          <input type="text" id="groupSku" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Родительская группа</span>
-          <select id="groupParent" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
-        </label>
-      </div>
-      <div id="groupFormError" style="display:none;margin-top:10px;color:#e53935;font-size:13px"></div>
-      <div style="margin-top:12px;display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="saveGroup()">Сохранить</button>
-        <button class="btn" onclick="closeGroupForm()" style="border:1px solid var(--color-grey-3,#ddd)">Отмена</button>
-      </div>
-    </div>
-
-    <!-- Inline-форма позиции -->
-    <div id="itemForm" style="display:none;margin-bottom:16px;padding:16px;border:1px solid var(--color-grey-3,#ddd);border-radius:10px;background:var(--color-white,#fff)">
-      <div style="font-weight:700;margin-bottom:12px" id="itemFormTitle">Позиция</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Название*</span>
-          <input type="text" id="itemName" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Артикул</span>
-          <input type="text" id="itemSku" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Тип</span>
-          <select id="itemType" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Группа</span>
-          <select id="itemGroup" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit"></select>
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Бухгалтерская категория</span>
-          <input type="text" id="itemAccounting" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Налоговая категория</span>
-          <input type="text" id="itemTax" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Продуктовая категория</span>
-          <input type="text" id="itemProduct" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit">
-        </label>
-        <label style="display:block" id="itemUnitWrap">
-          <span style="font-size:12px;color:var(--color-text-secondary)">Единица измерения</span>
-          <select id="itemUnit" style="width:100%;padding:8px 10px;border:1px solid var(--color-grey-3,#ddd);border-radius:6px;font-family:inherit;background:var(--admin-card-bg,#fff)"></select>
-        </label>
-      </div>
-      <div id="itemFormError" style="display:none;margin-top:10px;color:#e53935;font-size:13px"></div>
-      <div style="margin-top:12px;display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="saveItem()">Сохранить</button>
-        <button class="btn" onclick="closeItemForm()" style="border:1px solid var(--color-grey-3,#ddd)">Отмена</button>
-      </div>
-    </div>
-
-    <div id="treeRoot"></div>
     <div id="cashPanel" style="display:none"></div>
-
-    <!-- Карточка позиции с вкладками: разворачивается на месте дерева,
-         без модального окна — встроенный браузер их блокирует. -->
-    <div id="cardPanel" style="display:none"></div>
   </div>
+</div>
+
+<!-- Правка группы -->
+<div class="modal" id="groupModal" role="dialog" aria-modal="true" aria-labelledby="groupFormTitle">
+  <div class="nm-dlg" style="max-width:480px">
+    <div class="nm-dlg-h"><h2 id="groupFormTitle">Новая группа</h2><button type="button" class="nm-x" onclick="closeGroupForm()" aria-label="Закрыть">&times;</button></div>
+    <div class="nm-dlg-b">
+      <label class="nm-f"><span>Название</span><input type="text" id="groupName" class="nm-ctl" maxlength="255"></label>
+      <label class="nm-f"><span>Входит в группу</span><select id="groupParent" class="nm-ctl"></select></label>
+      <label class="nm-f"><span>Артикул (необязательно)</span><input type="text" id="groupSku" class="nm-ctl" maxlength="50"></label>
+      <div class="nm-err" id="groupFormError"></div>
+    </div>
+    <div class="nm-dlg-f">
+      <button type="button" class="nm-btn del" id="groupDeleteBtn" onclick="deleteGroup(editingGroupId, this)" style="display:none">Удалить группу</button>
+      <span style="flex:1"></span>
+      <button type="button" class="nm-btn sec" onclick="closeGroupForm()">Отмена</button>
+      <button type="button" class="nm-btn" onclick="saveGroup()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Правка / создание позиции -->
+<div class="modal" id="itemModal" role="dialog" aria-modal="true" aria-labelledby="itemFormTitle">
+  <div class="nm-dlg" style="max-width:600px">
+    <div class="nm-dlg-h"><h2 id="itemFormTitle">Позиция</h2><button type="button" class="nm-x" onclick="closeItemForm()" aria-label="Закрыть">&times;</button></div>
+    <div class="nm-dlg-b nm-grid2">
+      <label class="nm-f nm-wide"><span>Название</span><input type="text" id="itemName" class="nm-ctl" maxlength="255"></label>
+      <div class="nm-f"><span>Тип</span><div class="nm-seg" id="itemTypeSeg" role="group" aria-label="Тип позиции"></div><input type="hidden" id="itemType"></div>
+      <label class="nm-f"><span>Единица учёта</span><select id="itemUnit" class="nm-ctl"></select></label>
+      <label class="nm-f"><span>Группа</span><select id="itemGroup" class="nm-ctl"></select></label>
+      <label class="nm-f"><span>Артикул</span><input type="text" id="itemSku" class="nm-ctl" maxlength="50" placeholder="необязательно"></label>
+      <details class="nm-more nm-wide">
+        <summary>Учётные категории</summary>
+        <div class="nm-grid2" style="margin-top:10px">
+          <label class="nm-f"><span>Бухгалтерская</span><input type="text" id="itemAccounting" class="nm-ctl" maxlength="100"></label>
+          <label class="nm-f"><span>Налоговая</span><input type="text" id="itemTax" class="nm-ctl" maxlength="100"></label>
+          <label class="nm-f"><span>Продуктовая</span><input type="text" id="itemProduct" class="nm-ctl" maxlength="100"></label>
+        </div>
+      </details>
+      <div class="nm-err nm-wide" id="itemFormError"></div>
+    </div>
+    <div class="nm-dlg-f">
+      <span style="flex:1"></span>
+      <button type="button" class="nm-btn sec" onclick="closeItemForm()">Отмена</button>
+      <button type="button" class="nm-btn" id="itemSaveBtn" onclick="saveItem()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Карточка позиции -->
+<div class="modal" id="cardModal" role="dialog" aria-modal="true" aria-labelledby="cardTitle">
+  <div class="nm-dlg nm-card" id="cardPanel"></div>
 </div>
 
 <div id="notification" class="notification"></div>
 
 <style>
-  .nm-toggle { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;
-               color:var(--color-text-secondary); user-select:none; }
-  .nm-toggle input { width:16px; height:16px; cursor:pointer; }
-  .nm-group { border:1px solid var(--color-grey-3,#e5e5e5); border-radius:10px; margin-bottom:10px;
-              background:var(--color-white,#fff); overflow:hidden; }
-  .nm-group-head { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
-                   background:var(--admin-sidebar-active-bg,rgba(0,0,0,0.02)); }
-  .nm-group-head:hover { background:rgba(0,0,0,0.04); }
-  .nm-caret { width:14px; display:inline-block; transition:transform .15s; color:var(--color-text-secondary); }
-  .nm-caret.open { transform:rotate(90deg); }
-  .nm-group-name { font-weight:600; flex:1; }
-  .nm-sku { font-size:12px; color:var(--color-text-secondary); font-family:ui-monospace,monospace; }
-  .nm-body { padding:0 14px 12px; }
-  .nm-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .nm-table th { text-align:left; padding:8px 10px; color:var(--color-text-secondary);
-                 font-weight:600; border-bottom:1px solid var(--color-grey-3,#eee); white-space:nowrap; }
-  .nm-table td { padding:8px 10px; border-bottom:1px solid var(--color-grey-2,#f3f3f3); }
-  .nm-table tr.deleted td { opacity:.5; text-decoration:line-through; }
-  .nm-type { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--color-grey-2,#f0f0f0);
-             color:var(--color-text-secondary); white-space:nowrap; }
-  .nm-actions button { background:none; border:none; cursor:pointer; font-size:14px; padding:2px 5px; }
-  .nm-empty { padding:14px; color:var(--color-text-secondary); font-size:13px; }
-  .nm-error { padding:28px; background:rgba(229,57,53,.08); border:1px solid rgba(229,57,53,.35);
-              border-radius:12px; }
-  .nm-error-title { font-size:16px; font-weight:700; color:#e53935; margin-bottom:10px; }
+  .nm-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .nm-lead { font-size: 14px; color: var(--color-text-secondary); margin-top: 4px; }
+  .nm-head-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .nm-btn { height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--color-primary); background: var(--color-primary); color: #fff;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .nm-btn.sec { background: var(--admin-card-bg); color: var(--color-primary); }
+  .nm-btn.sec[aria-pressed="true"] { background: var(--color-primary-light); }
+  .nm-btn.del { background: var(--admin-card-bg); color: #9E3420; border-color: #E8B7A8; }
+  .nm-btn:hover { filter: brightness(1.05); }
+  .nm-btn:disabled { opacity: .6; cursor: default; }
+  .nm-menu { position: relative; }
+  .nm-menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 290px; background: var(--admin-card-bg);
+    border: 1px solid var(--admin-border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 6px; }
+  .nm-menu-list a, .nm-menu-list button { display: block; width: 100%; text-align: left; border: 0; background: none; font: inherit; font-size: 14px;
+    font-weight: 600; color: var(--color-text-primary); padding: 10px 12px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+  .nm-menu-list span { display: block; font-size: 12px; font-weight: 400; color: var(--color-text-secondary); margin-top: 2px; }
+  .nm-menu-list a:hover, .nm-menu-list button:hover, .nm-menu-list :focus-visible { background: var(--admin-content-bg); outline: none; }
+
+  .nm-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 14px; }
+  .nm-ctl { height: 40px; border: 1px solid var(--admin-border); border-radius: 10px; background: var(--admin-card-bg); color: var(--color-text-primary);
+    font: inherit; font-size: 14px; padding: 0 12px; width: 100%; box-sizing: border-box; }
+  .nm-ctl:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-light); }
+  .nm-search { position: relative; flex: 1; min-width: 220px; }
+  .nm-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--color-text-secondary); }
+  .nm-search input { padding-left: 36px; }
+  .nm-seg { display: inline-flex; border: 1px solid var(--admin-border); border-radius: 10px; overflow: hidden; background: var(--admin-card-bg); flex: none; }
+  .nm-seg button { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; height: 38px; cursor: pointer; color: var(--color-text-secondary); }
+  .nm-seg button[aria-pressed="true"] { background: var(--color-primary); color: #fff; }
+  .nm-seg button:disabled { opacity: .45; cursor: default; }
+  .nm-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-text-secondary); cursor: pointer; }
+  .nm-check input { width: 16px; height: 16px; }
+
+  .nm-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .nm-side { background: var(--admin-card-bg); border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-card); padding: 10px; position: sticky; top: 84px;
+    max-height: calc(100vh - 110px); overflow: auto; }
+  .nm-side-h { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--color-text-secondary);
+    text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px 8px; }
+  .nm-ico { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--admin-border); background: transparent; color: var(--color-text-secondary);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+  .nm-ico svg { width: 14px; height: 14px; }
+  .nm-ico:hover { color: var(--color-primary); border-color: var(--color-primary); }
+  .nm-node { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; background: none; font: inherit; font-size: 14px; color: var(--color-text-primary);
+    text-align: left; padding: 7px 8px; border-radius: 8px; cursor: pointer; min-height: 36px; }
+  .nm-node:hover { background: var(--admin-content-bg); }
+  .nm-node[aria-current="true"] { background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
+  .nm-node .nm-n { margin-left: auto; font-size: 12px; color: var(--color-text-secondary); font-weight: 400; }
+  .nm-node .nm-tw { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary); flex: none; border-radius: 4px; }
+  .nm-node .nm-tw svg { width: 12px; height: 12px; transition: transform .15s; }
+  .nm-node .nm-tw.open svg { transform: rotate(90deg); }
+  .nm-node.del { opacity: .55; text-decoration: line-through; }
+  .nm-sep { height: 1px; background: var(--admin-border); margin: 6px 4px; }
+
+  .nm-main { min-width: 0; }
+  .nm-groupsel { display: none; margin-bottom: 10px; }
+  .nm-main-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .nm-main-h h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  .nm-crumb { font-size: 13px; color: var(--color-text-secondary); }
+  .nm-main-h .nm-cnt { font-size: 13px; color: var(--color-text-secondary); }
+  .nm-main-h .sp { flex: 1; }
+  .nm-wrap { background: var(--admin-card-bg); border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-card); overflow: hidden; }
+  .nm-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .nm-tbl th { text-align: left; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); padding: 11px 14px; background: var(--admin-content-bg); white-space: nowrap; }
+  .nm-tbl th.r, .nm-tbl td.r { text-align: right; }
+  .nm-tbl td { padding: 10px 14px; border-top: 1px solid var(--admin-border); vertical-align: middle; font-variant-numeric: tabular-nums; }
+  .nm-tbl tr.it { cursor: pointer; }
+  .nm-tbl tr.it:hover td { background: rgba(0,0,0,.018); }
+  .nm-tbl tr.it.deleted td { opacity: .5; }
+  .nm-tbl tr.it.deleted .nm-nm { text-decoration: line-through; }
+  .nm-nm { font-weight: 600; }
+  .nm-sub { display: block; font-size: 12px; color: var(--color-text-secondary); font-weight: 400; margin-top: 1px; }
+  .nm-chip { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .nm-chip.dish { background: #E7F1E9; color: #1F5C39; }
+  .nm-chip.good { background: #E3ECF8; color: #1D4E89; }
+  .nm-chip.prepared { background: #FBEFC8; color: #6E5200; }
+  .nm-acts { white-space: nowrap; text-align: right; }
+  .nm-acts .nm-ico { width: 32px; height: 32px; margin-left: 4px; }
+  .nm-acts .nm-ico.x:hover, .nm-acts .nm-ico.x.armed { color: #9E3420; border-color: #E8B7A8; background: #FBE3DC; }
+  .nm-empty { padding: 40px 16px; text-align: center; color: var(--color-text-secondary); font-size: 14px; }
+  .nm-error { padding: 24px; background: #FBE3DC; border-radius: 12px; color: #6E2414; }
+  .nm-error-title { font-weight: 700; margin-bottom: 6px; }
+
+  /* окна */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 3000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; }
+  .modal.active { display: flex; }
+  .nm-dlg { background: var(--admin-card-bg); border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.18); width: 100%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+  .nm-dlg-h { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--admin-border); }
+  .nm-dlg-h h2 { margin: 0; font-size: 18px; font-weight: 700; flex: 1; min-width: 0; }
+  .nm-x { border: 0; background: none; width: 38px; height: 38px; border-radius: 10px; font-size: 26px; line-height: 1; cursor: pointer; color: var(--color-text-secondary); }
+  .nm-x:hover { background: var(--admin-content-bg); }
+  .nm-dlg-b { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+  .nm-dlg-f { display: flex; gap: 8px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--admin-border); }
+  .nm-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  .nm-wide { grid-column: 1 / -1; }
+  .nm-f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); min-width: 0; }
+  .nm-f .nm-seg { align-self: flex-start; }
+  .nm-more summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--color-primary); }
+  .nm-err { color: #9E3420; font-size: 13px; }
+  .nm-err:empty { display: none; }
+
+  /* карточка */
+  .nm-card { max-width: 980px; }
+  .nm-card .nm-dlg-b { gap: 14px; }
+  .nm-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .nm-facts div { background: var(--admin-content-bg); border-radius: 10px; padding: 10px 12px; }
+  .nm-facts small { display: block; font-size: 12px; color: var(--color-text-secondary); }
+  .nm-facts b { font-size: 15px; }
+  .nm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .nm-table th { text-align: left; padding: 7px 8px; color: var(--color-text-secondary); font-weight: 600; border-bottom: 1px solid var(--admin-border); white-space: nowrap; font-size: 12px; }
+  .nm-table td { padding: 7px 8px; border-bottom: 1px solid var(--admin-border); }
+  .nm-table-wrap { overflow-x: auto; }
+  .nm-type { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--admin-content-bg); color: var(--color-text-secondary); white-space: nowrap; }
+  .nm-caret { width: 14px; display: inline-block; transition: transform .15s; color: var(--color-text-secondary); font-size: 10px; }
+  .nm-caret.open { transform: rotate(90deg); }
+  .nm-sku { font-size: 12px; color: var(--color-text-secondary); }
+  .nm-h4 { font-weight: 700; font-size: 14px; margin: 6px 0 2px; }
+
+  /* порядок на кассе */
+  .nm-cash { background: var(--admin-card-bg); border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-card); padding: 16px; }
+  .nm-cash-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .nm-cash-h p { margin: 0; font-size: 14px; color: var(--color-text-secondary); flex: 1; min-width: 220px; }
+  .nm-cash-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .nm-cash-list li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--admin-border); border-radius: 10px;
+    background: var(--admin-card-bg); cursor: grab; font-size: 14px; user-select: none; }
+  .nm-cash-list li.drag { opacity: .4; }
+  .nm-cash-list li.over { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
+  .nm-cash-list .no { width: 26px; height: 26px; border-radius: 7px; background: var(--admin-content-bg); display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--color-text-secondary); flex: none; }
+  .nm-cash-list .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nm-cash-list .nm-ico { width: 28px; height: 28px; }
+
+  @media (max-width: 900px) {
+    .nm-layout { grid-template-columns: minmax(0, 1fr); }
+    .nm-side { display: none; }
+    .nm-groupsel { display: block; }
+    .nm-tbl thead { display: none; }
+    .nm-tbl, .nm-tbl tbody { display: block; }
+    .nm-tbl tr.it { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 14px; border-top: 1px solid var(--admin-border); }
+    .nm-tbl tr.it td { display: block; padding: 0; border: 0; }
+    .nm-tbl td.c-name { grid-column: 1; }
+    .nm-tbl td.nm-acts { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+    .nm-tbl td.c-hide { display: none; }
+    .nm-tbl td.c-meta { grid-column: 1; font-size: 13px; color: var(--color-text-secondary); }
+    .nm-grid2 { grid-template-columns: minmax(0, 1fr); }
+    .nm-seg { overflow-x: auto; max-width: 100%; }
+  }
 </style>
+
 
 <script>
   // ═══════════════ Номенклатура ═══════════════
-  // Источник данных — только API (/api/nomenclature). localStorage здесь
-  // не используется вовсе: молчаливый откат на кэш однажды уже стоил
-  // пользователю потерянных категорий и блюд — экран показывал «Сохранено»,
-  // а запись оседала в браузере и исчезала при перезагрузке.
-
-  // Загрузка удалась? Пока false — любая запись запрещена.
+  // Источник данных — только API (/api/nomenclature); localStorage не
+  // используется: тихий откат на кэш однажды стоил потерянных данных.
   let dataSourceOk = false;
   let tree = { groups: [], ungrouped: [] };
   let groupsFlat = [];
   let currentType = '';
+  let currentGroup = '__all__';   // '__all__' | '__none__' | id группы
   let searchTimer = null;
+  let searchResults = null;       // результаты поиска по серверу
   let openGroups = {};
   let editingGroupId = null;
-  let editingItem = null;      // { id, source }
+  let editingItem = null;          // { id, source } | { create: 'good' | 'prepared' }
   let cashMode = false;
+  let cardData = null;
+  let expandedRows = {};
+  let cardTab = 'main';
 
   const TYPE_LABEL = { dish: 'Блюдо', good: 'Товар', prepared: 'Заготовка' };
+  const UNITS = ['шт', 'кг', 'г', 'л', 'мл', 'порц', 'упак'];
+  const UNIT_LABEL = { 'шт': 'шт — штуки', 'кг': 'кг — килограммы', 'г': 'г — граммы', 'л': 'л — литры',
+                       'мл': 'мл — миллилитры', 'порц': 'порц — порции', 'упак': 'упак — упаковки' };
+  const UNIT_ALIASES = { piece: 'шт', pcs: 'шт', portion: 'порц', kg: 'кг', g: 'г', l: 'л', ml: 'мл' };
+  const I_EDIT = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"/></svg>';
+  const I_DEL = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3h4v2M5 5l1 12h8l1-12"/></svg>';
+  const I_UNDO = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h8a4 4 0 010 8H9"/><path d="M8 5L5 8l3 3"/></svg>';
+  const I_TW = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 5l5 5-5 5"/></svg>';
+  const I_UP = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5-5 5 5"/></svg>';
+  const I_DN = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 8l5 5 5-5"/></svg>';
 
-  function esc(s) {
-    return String(s === null || s === undefined ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  function esc(v) {
+    return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-
-  // Идентификаторы — UUID, в onclick они обязаны быть в кавычках,
-  // иначе получается невалидный JS и кнопка молча не работает.
-  function jsArg(v) { return "'" + String(v).replace(/'/g, "\\'") + "'"; }
-
+  function jsArg(v) { return "'" + String(v).replace(/[^\w-]/g, '') + "'"; }
+  const money = (v) => v === null || v === undefined || v === '' ? '—' : (Number(v) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  const unitRu = (u) => UNIT_ALIASES[u] || u || '';
   async function apiError(res) {
-    try {
-      const data = await res.json();
-      return data.error || data.message || ('HTTP ' + res.status);
-    } catch (e) {
-      return 'HTTP ' + res.status;
-    }
+    try { const d = await res.json(); return d.error || d.message || ('HTTP ' + res.status); } catch (e) { return 'HTTP ' + res.status; }
   }
-
   function showNotification(msg) {
     const n = document.getElementById('notification');
     if (!n) return;
     n.textContent = msg;
     n.classList.add('show');
-    setTimeout(function () { n.classList.remove('show'); }, 4000);
+    clearTimeout(showNotification.t);
+    showNotification.t = setTimeout(() => n.classList.remove('show'), 4000);
   }
-
-  // Ошибка видна на экране с причиной и кнопкой повтора — выдуманных
-  // данных вместо настоящих здесь не бывает.
   function showDataError(message) {
-    const root = document.getElementById('treeRoot');
-    if (root) {
-      root.innerHTML = '<div class="nm-error">'
-        + '<div class="nm-error-title">⚠️ Номенклатура не загружена — сохранение отключено</div>'
-        + '<div style="color:var(--color-text-primary);line-height:1.5">' + esc(message) + '</div>'
-        + '<button class="btn btn-primary" style="margin-top:16px" onclick="reloadTree()">🔄 Повторить</button>'
-        + '</div>';
-    }
-    document.getElementById('countBadge').textContent = '';
-    showNotification('⚠️ ' + message);
+    document.getElementById('nmItems').innerHTML = '<div class="nm-error"><div class="nm-error-title">Номенклатура не загружена — изменения отключены</div>'
+      + '<div>' + esc(message) + '</div><button class="nm-btn" style="margin-top:14px" onclick="reloadTree()">Повторить</button></div>';
+    document.getElementById('nmTree').innerHTML = '';
   }
-
-  // Сторож записи: без подтверждённой связи с сервером не выполняем
-  // операцию вовсе, а не «сохраняем локально».
   function requireServer(action) {
-    if (!dataSourceOk) {
-      showNotification('⚠️ Нет связи с сервером — ' + action + ' не сохранится. Нажмите «Повторить».');
-      return false;
-    }
+    if (!dataSourceOk) { showNotification('Нет связи с сервером — ' + action + ' не сохранится. Нажмите «Повторить».'); return false; }
     return true;
+  }
+  // Удаление — вторым нажатием (confirm() во встроенных браузерах заблокирован)
+  function armed(btn, text) {
+    if (btn && btn.dataset.armed === '1') return true;
+    if (btn) {
+      btn.dataset.armed = '1'; btn.classList.add('armed');
+      const old = btn.dataset.label || btn.innerHTML; btn.dataset.label = old;
+      if (btn.classList.contains('nm-btn')) btn.textContent = text;
+      else btn.title = text;
+      setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.classList.remove('armed'); if (btn.classList.contains('nm-btn')) btn.innerHTML = old; } }, 4000);
+    }
+    showNotification(text);
+    return false;
   }
 
   // ───────── загрузка ─────────
-
   async function reloadTree() {
     dataSourceOk = false;
     const params = new URLSearchParams();
@@ -1545,280 +1654,301 @@ AUTH.requireAuth();
       tree = await treeRes.json();
       groupsFlat = (await groupsRes.json()).groups || [];
       dataSourceOk = true;
-      renderTree();
+      if (currentGroup !== '__all__' && currentGroup !== '__none__' && !findGroup(currentGroup)) currentGroup = '__all__';
+      if (document.getElementById('searchInput').value.trim()) { runSearch(); renderTree(); return; }
+      render();
     } catch (e) {
       showDataError(e.message || 'Сервер недоступен');
     }
   }
 
-  // ───────── отрисовка ─────────
-
+  // ───────── дерево групп ─────────
   function countItems(node) {
     let n = node.items ? node.items.length : 0;
-    (node.children || []).forEach(function (c) { n += countItems(c); });
+    (node.children || []).forEach(c => { n += countItems(c); });
     return n;
   }
-
-  function itemRow(it) {
-    const deleted = !!it.deleted_at;
-    return '<tr class="' + (deleted ? 'deleted' : '') + '">'
-      + '<td>' + esc(it.name) + '</td>'
-      + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
-      + '<td><span class="nm-type">' + esc(TYPE_LABEL[it.item_type] || it.item_type) + '</span></td>'
-      + '<td>' + esc(UNIT_ALIASES[it.unit] || it.unit || '—') + '</td>'
-      + '<td>' + esc(it.category || '—') + '</td>'
-      + '<td>' + esc(it.accounting_category || '—') + '</td>'
-      + '<td>' + esc(it.tax_category || '—') + '</td>'
-      + '<td>' + esc(it.prep_station || '—') + '</td>'
-      + '<td class="nm-actions" style="white-space:nowrap">'
-      + (deleted
-          ? '<button title="Восстановить" onclick="restoreItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">♻️</button>'
-          : '<button title="Карточка" onclick="openCard(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">📄</button>'
-            + '<button title="Изменить" onclick="openItemForm(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">✏️</button>'
-            + '<button title="Удалить" onclick="deleteItem(' + jsArg(it.id) + ',' + jsArg(it.source) + ')">🗑️</button>')
-      + '</td></tr>';
-  }
-
-  function itemsTable(items) {
-    if (!items.length) return '<div class="nm-empty">Позиций нет</div>';
-    return '<table class="nm-table"><thead><tr>'
-      + '<th>Название</th><th>Артикул</th><th>Тип</th><th>Ед. изм.</th><th>Категория</th>'
-      + '<th>Бухгалтерская</th><th>Налоговая</th><th>Место приготовления</th><th></th>'
-      + '</tr></thead><tbody>'
-      + items.map(itemRow).join('')
-      + '</tbody></table>';
-  }
-
-  function groupNode(g, depth) {
-    const open = openGroups[g.id] !== false;
-    const total = countItems(g);
-    const deleted = !!g.deletedAt;
-    let html = '<div class="nm-group" style="margin-left:' + (depth * 16) + 'px">'
-      + '<div class="nm-group-head" onclick="toggleGroup(' + jsArg(g.id) + ')">'
-      + '<span class="nm-caret' + (open ? ' open' : '') + '">▶</span>'
-      + '<span class="nm-group-name"' + (deleted ? ' style="opacity:.5;text-decoration:line-through"' : '') + '>'
-      + '📁 ' + esc(g.name) + '</span>'
-      + '<span class="nm-sku">' + esc(g.sku || '') + '</span>'
-      + '<span class="nm-sku">' + total + ' поз.</span>'
-      + '<span class="nm-actions" onclick="event.stopPropagation()">'
-      + (deleted
-          ? '<button title="Восстановить" onclick="restoreGroup(' + jsArg(g.id) + ')">♻️</button>'
-          : '<button title="Изменить" onclick="openGroupForm(' + jsArg(g.id) + ')">✏️</button>'
-            + '<button title="Удалить" onclick="deleteGroup(' + jsArg(g.id) + ')">🗑️</button>')
-      + '</span></div>';
-    if (open) {
-      html += '<div class="nm-body">' + itemsTable(g.items || []);
-      (g.children || []).forEach(function (c) { html += groupNode(c, 0); });
-      html += '</div>';
+  function findGroup(id, list) {
+    for (const g of (list || tree.groups || [])) {
+      if (g.id === id) return g;
+      const f = findGroup(id, g.children || []);
+      if (f) return f;
     }
-    return html + '</div>';
+    return null;
+  }
+  function groupPath(id) {
+    const path = [];
+    (function walk(list, trail) {
+      for (const g of list) {
+        if (g.id === id) { path.push(...trail, g); return true; }
+        if (walk(g.children || [], trail.concat(g))) return true;
+      }
+      return false;
+    })(tree.groups || [], []);
+    return path;
+  }
+  function allItems() {
+    const out = [];
+    (function walk(list, path) {
+      list.forEach(g => { (g.items || []).forEach(i => out.push(Object.assign({}, i, { _group: g.name }))); walk(g.children || [], path); });
+    })(tree.groups || [], []);
+    (tree.ungrouped || []).forEach(i => out.push(i));
+    return out;
+  }
+  function itemsOf(groupId) {
+    if (groupId === '__all__') return allItems();
+    if (groupId === '__none__') return tree.ungrouped || [];
+    const g = findGroup(groupId);
+    if (!g) return [];
+    // Позиции группы и всех её подгрупп — с названием подгруппы
+    const out = [];
+    (function walk(node, sub) {
+      (node.items || []).forEach(i => out.push(Object.assign({}, i, sub ? { _group: node.name } : {})));
+      (node.children || []).forEach(c => walk(c, true));
+    })(g, false);
+    return out;
+  }
+
+  function treeNode(g, depth) {
+    const hasKids = (g.children || []).length > 0;
+    const open = openGroups[g.id] !== false;
+    const del = !!g.deletedAt;
+    let html = `<button type="button" class="nm-node${del ? ' del' : ''}" style="padding-left:${8 + depth * 16}px" aria-current="${currentGroup === g.id}" onclick="selectGroup(${jsArg(g.id)})">`
+      + (hasKids ? `<span class="nm-tw${open ? ' open' : ''}" onclick="event.stopPropagation();toggleGroup(${jsArg(g.id)})" aria-label="${open ? 'Свернуть' : 'Развернуть'}">${I_TW}</span>` : '<span class="nm-tw"></span>')
+      + `<span>${esc(g.name)}</span><span class="nm-n">${countItems(g)}</span></button>`;
+    if (hasKids && open) g.children.forEach(c => { html += treeNode(c, depth + 1); });
+    return html;
   }
 
   function renderTree() {
-    const root = document.getElementById('treeRoot');
-    let total = 0;
-    let html = '';
-    (tree.groups || []).forEach(function (g) { total += countItems(g); html += groupNode(g, 0); });
-    const ung = tree.ungrouped || [];
-    total += ung.length;
-    if (ung.length) {
-      html += '<div class="nm-group"><div class="nm-group-head" onclick="toggleGroup(\'__ungrouped__\')">'
-        + '<span class="nm-caret' + (openGroups['__ungrouped__'] !== false ? ' open' : '') + '">▶</span>'
-        + '<span class="nm-group-name">📄 Без группы</span>'
-        + '<span class="nm-sku">' + ung.length + ' поз.</span></div>'
-        + (openGroups['__ungrouped__'] !== false ? '<div class="nm-body">' + itemsTable(ung) + '</div>' : '')
-        + '</div>';
-    }
-    // Пустой справочник и сломанная загрузка — разные состояния,
-    // путать их нельзя: иначе ошибка выглядит как «просто ничего нет».
-    root.innerHTML = html || '<div class="nm-empty">Номенклатура пуста — создайте группу и добавьте позиции</div>';
-    document.getElementById('countBadge').textContent = 'позиций: ' + total;
+    const all = allItems().length;
+    const none = (tree.ungrouped || []).length;
+    document.getElementById('nmTree').innerHTML =
+      `<button type="button" class="nm-node" aria-current="${currentGroup === '__all__'}" onclick="selectGroup('__all__')"><span class="nm-tw"></span><span>Все позиции</span><span class="nm-n">${all}</span></button>`
+      + (none ? `<button type="button" class="nm-node" aria-current="${currentGroup === '__none__'}" onclick="selectGroup('__none__')"><span class="nm-tw"></span><span>Без группы</span><span class="nm-n">${none}</span></button>` : '')
+      + ((tree.groups || []).length ? '<div class="nm-sep"></div>' + tree.groups.map(g => treeNode(g, 0)).join('') : '');
+    // мобильный выбор группы
+    const opts = [`<option value="__all__">Все позиции (${all})</option>`];
+    if (none) opts.push(`<option value="__none__">Без группы (${none})</option>`);
+    (function walk(list, d) { list.forEach(g => { opts.push(`<option value="${esc(g.id)}">${'— '.repeat(d)}${esc(g.name)} (${countItems(g)})</option>`); walk(g.children || [], d + 1); }); })(tree.groups || [], 0);
+    const sel = document.getElementById('groupSelect');
+    sel.innerHTML = opts.join('');
+    sel.value = currentGroup;
   }
 
-  function toggleGroup(id) {
-    openGroups[id] = openGroups[id] === false;
+  function toggleGroup(id) { openGroups[id] = openGroups[id] === false; renderTree(); }
+  function selectGroup(id) {
+    currentGroup = id;
+    document.getElementById('searchInput').value = '';
+    searchResults = null;
+    render();
+  }
+
+  // ───────── таблица позиций ─────────
+  function itemRow(it, showGroup) {
+    const deleted = !!it.deleted_at;
+    const price = it.source === 'menu' ? it.price : it.cost_price;
+    const meta = [it.sku ? 'арт. ' + esc(it.sku) : '', showGroup && it._group ? esc(it._group) : ''].filter(Boolean).join(' · ');
+    return `<tr class="it${deleted ? ' deleted' : ''}" tabindex="0" onclick="openCard(${jsArg(it.id)}, ${jsArg(it.source)})" onkeydown="if(event.key==='Enter'&&event.target===this)openCard(${jsArg(it.id)}, ${jsArg(it.source)})">
+      <td class="c-name"><span class="nm-nm">${esc(it.name)}</span>${meta ? `<span class="nm-sub">${meta}</span>` : ''}</td>
+      <td class="c-meta"><span class="nm-chip ${esc(it.item_type)}">${esc(TYPE_LABEL[it.item_type] || it.item_type)}</span></td>
+      <td class="c-hide">${esc(unitRu(it.unit) || '—')}</td>
+      <td class="r c-hide">${money(price)}<span class="nm-sub">${it.source === 'menu' ? 'цена' : 'себестоимость'}</span></td>
+      <td class="nm-acts" onclick="event.stopPropagation()">${deleted
+        ? `<button type="button" class="nm-ico" title="Восстановить" aria-label="Восстановить" onclick="restoreItem(${jsArg(it.id)}, ${jsArg(it.source)})">${I_UNDO}</button>`
+        : `<button type="button" class="nm-ico" title="Изменить" aria-label="Изменить ${esc(it.name)}" onclick="openItemForm(${jsArg(it.id)}, ${jsArg(it.source)})">${I_EDIT}</button>`
+        + `<button type="button" class="nm-ico x" title="Удалить" aria-label="Удалить ${esc(it.name)}" onclick="deleteItem(${jsArg(it.id)}, ${jsArg(it.source)}, this)">${I_DEL}</button>`}</td>
+    </tr>`;
+  }
+  function itemsTable(items, showGroup) {
+    if (!items.length) return '';
+    const sorted = items.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+    return `<div class="nm-wrap"><table class="nm-tbl"><thead><tr><th>Название</th><th>Тип</th><th>Ед.</th><th class="r">Цена / себестоимость</th><th></th></tr></thead>
+      <tbody>${sorted.map(i => itemRow(i, showGroup)).join('')}</tbody></table></div>`;
+  }
+
+  function render() {
     renderTree();
+    const head = document.getElementById('nmMainHead');
+    const box = document.getElementById('nmItems');
+    if (searchResults) {
+      head.innerHTML = `<h2>Поиск</h2><span class="nm-cnt">найдено ${searchResults.length}</span>`;
+      box.innerHTML = itemsTable(searchResults.map(i => Object.assign({}, i, { _group: (groupsFlat.find(g => g.id === i.nomenclature_group_id) || {}).name })), true)
+        || '<div class="nm-wrap"><div class="nm-empty">Ничего не найдено</div></div>';
+      return;
+    }
+    const items = itemsOf(currentGroup);
+    let title = 'Все позиции', crumb = '', acts = '';
+    if (currentGroup === '__none__') title = 'Без группы';
+    else if (currentGroup !== '__all__') {
+      const path = groupPath(currentGroup);
+      const g = path[path.length - 1];
+      title = g ? g.name : 'Группа';
+      crumb = path.slice(0, -1).map(x => esc(x.name)).join(' / ');
+      acts = g && g.deletedAt
+        ? `<button type="button" class="nm-btn sec" onclick="restoreGroup(${jsArg(currentGroup)})">Восстановить группу</button>`
+        : `<button type="button" class="nm-btn sec" onclick="openGroupForm(${jsArg(currentGroup)})">Изменить группу</button>`
+        + `<button type="button" class="nm-btn sec" onclick="openGroupForm(null, ${jsArg(currentGroup)})">+ Подгруппа</button>`;
+    }
+    head.innerHTML = `<div>${crumb ? `<div class="nm-crumb">${crumb}</div>` : ''}<h2>${esc(title)}</h2></div>`
+      + `<span class="nm-cnt">${items.length} поз.</span><span class="sp"></span>${acts}`;
+    const showGroup = currentGroup === '__all__' || items.some(i => i._group);
+    box.innerHTML = itemsTable(items, showGroup) || `<div class="nm-wrap"><div class="nm-empty">${currentType ? 'Позиций этого типа здесь нет' : 'В группе пока нет позиций'}.<br>
+      Позицию можно перенести сюда из другой группы: «Изменить» → «Группа».</div></div>`;
   }
 
   function switchType(type) {
     currentType = type;
-    document.querySelectorAll('.tabs .tab').forEach(function (t) {
-      t.classList.toggle('active', (t.getAttribute('data-type') || '') === type);
-    });
+    document.querySelectorAll('#nmBar .nm-seg button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.type || '') === type)));
     reloadTree();
   }
-
   function onSearchInput() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(runSearch, 300);
   }
-
   async function runSearch() {
     const q = document.getElementById('searchInput').value.trim();
-    if (!q) { reloadTree(); return; }
+    if (!q) { searchResults = null; render(); return; }
     const params = new URLSearchParams({ search: q });
     if (currentType) params.set('itemType', currentType);
     if (document.getElementById('showDeletedToggle').checked) params.set('includeDeleted', 'true');
     try {
       const res = await AUTH.fetch('/api/nomenclature/items?' + params.toString());
       if (!res.ok) throw new Error(await apiError(res));
-      const data = await res.json();
-      dataSourceOk = true;
-      document.getElementById('treeRoot').innerHTML =
-        '<div class="nm-group"><div class="nm-body">' + itemsTable(data.items || []) + '</div></div>';
-      document.getElementById('countBadge').textContent = 'найдено: ' + (data.items || []).length;
-    } catch (e) {
-      showDataError(e.message || 'Поиск не выполнен');
-    }
+      searchResults = (await res.json()).items || [];
+      render();
+    } catch (e) { showDataError(e.message || 'Поиск не выполнен'); }
   }
 
   // ───────── группы ─────────
-
   function groupOptions(selected, excludeId) {
-    let html = '<option value="">— корень —</option>';
-    groupsFlat.forEach(function (g) {
-      if (excludeId && g.id === excludeId) return;   // в себя переносить нельзя
-      html += '<option value="' + esc(g.id) + '"' + (g.id === selected ? ' selected' : '') + '>'
-        + esc(g.name) + '</option>';
-    });
+    // Исключаем саму группу и её потомков: группу нельзя вложить в себя
+    const banned = new Set();
+    if (excludeId) { const g = findGroup(excludeId); (function mark(n) { if (!n) return; banned.add(n.id); (n.children || []).forEach(mark); })(g); }
+    let html = '<option value="">— верхний уровень —</option>';
+    (function walk(list, d) {
+      list.forEach(g => {
+        if (!banned.has(g.id)) html += `<option value="${esc(g.id)}"${g.id === selected ? ' selected' : ''}>${'— '.repeat(d)}${esc(g.name)}</option>`;
+        walk(g.children || [], d + 1);
+      });
+    })(tree.groups || [], 0);
     return html;
   }
-
-  function openGroupForm(id) {
+  function openGroupForm(id, parentId) {
     if (!requireServer('группа')) return;
     editingGroupId = id || null;
-    const g = id ? groupsFlat.find(function (x) { return x.id === id; }) : null;
-    document.getElementById('groupFormTitle').textContent = g ? 'Изменить группу' : 'Новая группа';
+    const g = id ? groupsFlat.find(x => x.id === id) : null;
+    document.getElementById('groupFormTitle').textContent = g ? 'Группа: ' + g.name : 'Новая группа';
     document.getElementById('groupName').value = g ? g.name : '';
     document.getElementById('groupSku').value = g && g.sku ? g.sku : '';
-    document.getElementById('groupParent').innerHTML = groupOptions(g ? g.parent_id : null, id);
-    document.getElementById('groupFormError').style.display = 'none';
-    document.getElementById('groupForm').style.display = 'block';
-    document.getElementById('groupName').focus();
+    document.getElementById('groupParent').innerHTML = groupOptions(g ? g.parent_id : (parentId || null), id);
+    document.getElementById('groupFormError').textContent = '';
+    const del = document.getElementById('groupDeleteBtn');
+    del.style.display = g ? '' : 'none'; del.dataset.armed = ''; del.textContent = 'Удалить группу';
+    document.getElementById('groupModal').classList.add('active');
+    setTimeout(() => document.getElementById('groupName').focus(), 30);
   }
-
-  function closeGroupForm() {
-    document.getElementById('groupForm').style.display = 'none';
-    editingGroupId = null;
-  }
-
-  function formError(elId, msg) {
-    const el = document.getElementById(elId);
-    el.textContent = '❌ Не сохранено: ' + msg;
-    el.style.display = 'block';
-  }
-
+  function closeGroupForm() { document.getElementById('groupModal').classList.remove('active'); editingGroupId = null; }
   async function saveGroup() {
     if (!requireServer('группа')) return;
     const name = document.getElementById('groupName').value.trim();
-    if (!name) { formError('groupFormError', 'укажите название'); return; }
-    const body = {
-      name: name,
-      sku: document.getElementById('groupSku').value.trim() || null,
-      parentId: document.getElementById('groupParent').value || null
-    };
+    const errEl = document.getElementById('groupFormError');
+    if (!name) { errEl.textContent = 'Укажите название'; return; }
+    const body = { name, sku: document.getElementById('groupSku').value.trim() || null, parentId: document.getElementById('groupParent').value || null };
     try {
-      const res = await AUTH.fetch(
-        editingGroupId ? '/api/nomenclature/groups/' + editingGroupId : '/api/nomenclature/groups',
-        {
-          method: editingGroupId ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
+      const res = await AUTH.fetch(editingGroupId ? '/api/nomenclature/groups/' + editingGroupId : '/api/nomenclature/groups',
+        { method: editingGroupId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await apiError(res));
+      const data = await res.json().catch(() => ({}));
+      const newId = !editingGroupId && data.group ? data.group.id : null;
+      if (body.parentId) openGroups[body.parentId] = true;
       closeGroupForm();
-      showNotification('✅ Группа сохранена');
+      showNotification('Группа сохранена');
+      if (newId) currentGroup = newId;
       await reloadTree();
-    } catch (e) {
-      // Форма остаётся открытой: введённое не должно теряться из-за отказа.
-      formError('groupFormError', e.message);
-    }
+    } catch (e) { errEl.textContent = 'Не сохранено: ' + e.message; }
   }
-
-  async function deleteGroup(id) {
-    if (!requireServer('удаление группы')) return;
+  async function deleteGroup(id, btn) {
+    if (!id || !requireServer('удаление группы')) return;
+    const g = findGroup(id);
+    const n = g ? countItems(g) : 0;
+    // Сервер не удаляет группу с позициями или подгруппами — говорим сразу
+    if (g && (g.children || []).length) { document.getElementById('groupFormError').textContent = 'В группе есть подгруппы — сначала перенесите или удалите их.'; return; }
+    if (n) { document.getElementById('groupFormError').textContent = `В группе ${n} поз. — сначала перенесите их в другую группу («Изменить» у позиции → «Группа»).`; return; }
+    if (!armed(btn, 'Удалить пустую группу? Нажмите ещё раз')) return;
     try {
       const res = await AUTH.fetch('/api/nomenclature/groups/' + id, { method: 'DELETE' });
       if (!res.ok) throw new Error(await apiError(res));
-      showNotification('✅ Группа удалена');
+      closeGroupForm();
+      if (currentGroup === id) currentGroup = '__all__';
+      showNotification('Группа удалена');
       await reloadTree();
-    } catch (e) {
-      showNotification('❌ Не удалено: ' + e.message);
-    }
+    } catch (e) { document.getElementById('groupFormError').textContent = 'Не удалено: ' + e.message; }
   }
-
   async function restoreGroup(id) {
     if (!requireServer('восстановление группы')) return;
     try {
       const res = await AUTH.fetch('/api/nomenclature/groups/' + id + '/restore', { method: 'POST' });
       if (!res.ok) throw new Error(await apiError(res));
-      showNotification('✅ Группа восстановлена');
+      showNotification('Группа восстановлена');
       await reloadTree();
-    } catch (e) {
-      showNotification('❌ Не восстановлено: ' + e.message);
-    }
+    } catch (e) { showNotification('Не восстановлено: ' + e.message); }
   }
 
   // ───────── позиции ─────────
-
-  const UNITS = ['шт', 'кг', 'г', 'л', 'мл', 'порц', 'упак'];
-  const UNIT_LABEL = { 'шт': 'шт — штуки', 'кг': 'кг — килограммы', 'г': 'г — граммы', 'л': 'л — литры',
-                       'мл': 'мл — миллилитры', 'порц': 'порц — порции', 'упак': 'упак — упаковки' };
-  // Старые записи блюд хранили единицу по-английски (до миграции 053)
-  const UNIT_ALIASES = { piece: 'шт', pcs: 'шт', portion: 'порц', kg: 'кг', g: 'г', l: 'л', ml: 'мл' };
-
   function findItem(id, source) {
-    let found = null;
-    function walk(node) {
-      (node.items || []).forEach(function (i) { if (i.id === id && i.source === source) found = i; });
-      (node.children || []).forEach(walk);
-    }
-    (tree.groups || []).forEach(walk);
-    (tree.ungrouped || []).forEach(function (i) { if (i.id === id && i.source === source) found = i; });
-    return found;
+    return allItems().concat(searchResults || []).find(i => i.id === id && i.source === source) || null;
   }
-
-  function openItemForm(id, source) {
-    if (!requireServer('позиция')) return;
-    const it = findItem(id, source);
-    if (!it) { showNotification('⚠️ Позиция не найдена на экране — обновите страницу'); return; }
-    editingItem = { id: id, source: source };
-    document.getElementById('itemFormTitle').textContent = 'Позиция: ' + it.name;
+  function setItemType(t) {
+    document.getElementById('itemType').value = t;
+    document.querySelectorAll('#itemTypeSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t)));
+  }
+  function fillItemForm(it, source, unit) {
+    // Блюда и товары продаются, товары и заготовки хранятся — типы у таблиц разные
+    const types = source === 'menu' ? ['dish', 'good'] : ['good', 'prepared'];
+    document.getElementById('itemTypeSeg').innerHTML = types.map(t => `<button type="button" data-t="${t}" onclick="setItemType('${t}')">${TYPE_LABEL[t]}</button>`).join('');
+    setItemType(it.item_type || types[0]);
+    const u = unitRu(unit) || 'шт';
+    const units = UNITS.indexOf(u) >= 0 ? UNITS : UNITS.concat([u]);
+    document.getElementById('itemUnit').innerHTML = units.map(x => `<option value="${esc(x)}"${x === u ? ' selected' : ''}>${esc(UNIT_LABEL[x] || x)}</option>`).join('');
     document.getElementById('itemName').value = it.name || '';
     document.getElementById('itemSku').value = it.sku || '';
     document.getElementById('itemAccounting').value = it.accounting_category || '';
     document.getElementById('itemTax').value = it.tax_category || '';
     document.getElementById('itemProduct').value = it.product_category || '';
-    // Список — как в ограничениях базы: свободный ввод давал ошибку на «штук»/«kg»
-    const unit = UNIT_ALIASES[it.unit] || it.unit || 'шт';
-    const units = UNITS.indexOf(unit) >= 0 ? UNITS : UNITS.concat([unit]);
-    document.getElementById('itemUnit').innerHTML = units.map(function (u) {
-      return '<option value="' + esc(u) + '"' + (u === unit ? ' selected' : '') + '>' + esc(UNIT_LABEL[u] || u) + '</option>';
-    }).join('');
-    // Блюда и товары продаются, товары и заготовки хранятся — наборы типов
-    // у двух таблиц разные, подсовывать чужой тип нельзя.
-    const types = source === 'menu' ? ['dish', 'good'] : ['good', 'prepared'];
-    document.getElementById('itemType').innerHTML = types.map(function (t) {
-      return '<option value="' + t + '"' + (t === it.item_type ? ' selected' : '') + '>' + TYPE_LABEL[t] + '</option>';
-    }).join('');
     document.getElementById('itemGroup').innerHTML = groupOptions(it.nomenclature_group_id, null);
-    document.getElementById('itemFormError').style.display = 'none';
-    document.getElementById('itemForm').style.display = 'block';
-    document.getElementById('itemName').focus();
+    document.querySelector('#itemModal .nm-more').open = !!(it.accounting_category || it.tax_category || it.product_category);
+    document.getElementById('itemFormError').textContent = '';
+    document.getElementById('itemModal').classList.add('active');
+    setTimeout(() => document.getElementById('itemName').focus(), 30);
   }
-
-  function closeItemForm() {
-    document.getElementById('itemForm').style.display = 'none';
-    editingItem = null;
+  function openItemForm(id, source) {
+    if (!requireServer('позиция')) return;
+    const it = findItem(id, source);
+    if (!it) { showNotification('Позиция не найдена на экране — обновите страницу'); return; }
+    editingItem = { id, source };
+    document.getElementById('itemFormTitle').textContent = it.name;
+    document.getElementById('itemSaveBtn').textContent = 'Сохранить';
+    fillItemForm(it, source, it.unit);
   }
+  function openCreateItem(type) {
+    closeAddMenu();
+    if (!requireServer('позиция')) return;
+    editingItem = { create: type };
+    document.getElementById('itemFormTitle').textContent = type === 'prepared' ? 'Новая заготовка' : 'Новый товар склада';
+    document.getElementById('itemSaveBtn').textContent = 'Создать';
+    const groupId = currentGroup !== '__all__' && currentGroup !== '__none__' ? currentGroup : null;
+    fillItemForm({ item_type: type, nomenclature_group_id: groupId }, 'inventory', type === 'prepared' ? 'кг' : 'шт');
+  }
+  function closeItemForm() { document.getElementById('itemModal').classList.remove('active'); editingItem = null; }
 
   async function saveItem() {
-    if (!requireServer('позиция')) return;
-    if (!editingItem) return;
+    if (!requireServer('позиция') || !editingItem) return;
+    const errEl = document.getElementById('itemFormError');
     const name = document.getElementById('itemName').value.trim();
-    if (!name) { formError('itemFormError', 'укажите название'); return; }
+    if (!name) { errEl.textContent = 'Укажите название'; return; }
     const body = {
-      name: name,
+      name,
       sku: document.getElementById('itemSku').value.trim() || null,
       itemType: document.getElementById('itemType').value,
       groupId: document.getElementById('itemGroup').value || null,
@@ -1828,57 +1958,74 @@ AUTH.requireAuth();
     };
     const unit = document.getElementById('itemUnit').value;
     if (UNITS.indexOf(unit) >= 0) body.unit = unit;
+    const btn = document.getElementById('itemSaveBtn');
+    btn.disabled = true;
     try {
-      const res = await AUTH.fetch(
-        '/api/nomenclature/items/' + editingItem.source + '/' + editingItem.id,
+      let id = editingItem.id, source = editingItem.source;
+      if (editingItem.create) {
+        // Товар склада создаётся складом, справочные поля — номенклатурой
+        const cr = await AUTH.fetch('/api/inventory/items', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, unit: body.unit || 'шт', sku: body.sku || undefined }) });
+        if (!cr.ok) throw new Error(await apiError(cr));
+        id = ((await cr.json()).item || {}).id;
+        source = 'inventory';
+        if (!id) throw new Error('склад не вернул позицию');
+        delete body.name; delete body.unit; delete body.sku;
+      }
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id,
         { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await apiError(res));
+      const created = !!editingItem.create;
       closeItemForm();
-      showNotification('✅ Позиция сохранена');
+      showNotification(created ? 'Позиция создана' : 'Позиция сохранена');
       await reloadTree();
     } catch (e) {
-      formError('itemFormError', e.message);
-    }
+      errEl.textContent = (editingItem && editingItem.create ? 'Не создано: ' : 'Не сохранено: ') + e.message;
+    } finally { btn.disabled = false; }
   }
-
-  async function deleteItem(id, source) {
+  async function deleteItem(id, source, btn) {
     if (!requireServer('удаление позиции')) return;
+    if (!armed(btn, 'Удалить позицию? Нажмите корзину ещё раз — её можно будет восстановить')) return;
     try {
       const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id, { method: 'DELETE' });
       if (!res.ok) throw new Error(await apiError(res));
-      showNotification('✅ Позиция помечена удалённой');
+      showNotification('Позиция удалена — найти её можно с галочкой «удалённые»');
+      if (cardData) closeCard();
       await reloadTree();
-    } catch (e) {
-      showNotification('❌ Не удалено: ' + e.message);
-    }
+    } catch (e) { showNotification('Не удалено: ' + e.message); }
   }
-
   async function restoreItem(id, source) {
     if (!requireServer('восстановление позиции')) return;
     try {
-      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id + '/restore',
-                                   { method: 'POST' });
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id + '/restore', { method: 'POST' });
       if (!res.ok) throw new Error(await apiError(res));
-      showNotification('✅ Позиция восстановлена');
+      showNotification('Позиция восстановлена');
       await reloadTree();
-    } catch (e) {
-      showNotification('❌ Не восстановлено: ' + e.message);
-    }
+    } catch (e) { showNotification('Не восстановлено: ' + e.message); }
   }
 
-  // ───────── карточка позиции (вкладки) ─────────
+  // ───────── меню «+ Позиция» ─────────
+  function toggleAddMenu(ev) {
+    ev.stopPropagation();
+    const m = document.getElementById('addMenu');
+    const show = m.hidden;
+    m.hidden = !show;
+    document.getElementById('addBtn').setAttribute('aria-expanded', String(show));
+    if (show) { const f = m.querySelector('a,button'); if (f) f.focus(); }
+  }
+  function closeAddMenu() { document.getElementById('addMenu').hidden = true; document.getElementById('addBtn').setAttribute('aria-expanded', 'false'); }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nm-menu')) closeAddMenu();
+    if (e.target.classList && e.target.classList.contains('modal')) { closeItemForm(); closeGroupForm(); closeCard(); }
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeAddMenu(); closeItemForm(); closeGroupForm(); closeCard(); } });
 
-  let cardData = null;
-  // Раскрытые заготовки в составе техкарты: ключ — id строки, значение —
-  // ответ API либо 'loading'. Объявлено рядом с cardData, а не у функций
-  // раскрытия ниже: closeCard() сбрасывает его и обязан видеть переменную.
-  let expandedRows = {};
-  let cardTab = 'main';
-
+  // ───────── карточка позиции ─────────
   function num(v, digits) {
     if (v === null || v === undefined || v === '') return '—';
     const n = Number(v);
-    return isNaN(n) ? esc(v) : n.toFixed(digits === undefined ? 2 : digits);
+    // По-русски и без хвостовых нулей: «12 %», «350», а не «12.00 %», «350.000»
+    return isNaN(n) ? esc(v) : n.toLocaleString('ru-RU', { maximumFractionDigits: digits === undefined ? 2 : digits });
   }
 
   function dt(v) {
@@ -2148,182 +2295,153 @@ AUTH.requireAuth();
     return html;
   }
 
+
+  async function openCard(id, source) {
+    if (!dataSourceOk) { showNotification('Нет связи с сервером — карточка недоступна'); return; }
+    expandedRows = {};
+    const panel = document.getElementById('cardPanel');
+    panel.innerHTML = '<div class="nm-empty">Загрузка карточки…</div>';
+    document.getElementById('cardModal').classList.add('active');
+    try {
+      const res = await AUTH.fetch('/api/nomenclature/items/' + source + '/' + id + '/card?days=30');
+      if (!res.ok) throw new Error(await apiError(res));
+      cardData = await res.json();
+      cardTab = 'main';
+      renderCard();
+    } catch (e) {
+      panel.innerHTML = '<div class="nm-dlg-h"><h2>Карточка не загружена</h2><button type="button" class="nm-x" onclick="closeCard()" aria-label="Закрыть">&times;</button></div>'
+        + '<div class="nm-dlg-b"><div class="nm-error">' + esc(e.message) + '</div></div>';
+    }
+  }
+  function closeCard() {
+    cardData = null;
+    expandedRows = {};
+    const m = document.getElementById('cardModal');
+    if (m) m.classList.remove('active');
+  }
+  function cardMain(it) {
+    const isMenu = it.source === 'menu';
+    const facts = [
+      ['Тип', esc(TYPE_LABEL[it.item_type] || it.item_type)],
+      ['Единица', esc(unitRu(it.unit) || '—')],
+      [isMenu ? 'Цена продажи' : 'Себестоимость', money(isMenu ? it.price : it.cost_price)],
+      isMenu ? ['Себестоимость', money(it.cost_price)] : null,
+      ['Артикул', esc(it.sku || '—')],
+      ['Категория', esc(it.category || '—')],
+      it.prep_station ? ['Место приготовления', esc(it.prep_station)] : null,
+      isMenu && it.cash_order != null ? ['Место на кассе', esc(Number(it.cash_order) + 1)] : null
+    ].filter(Boolean);
+    const extra = [['Бухгалтерская категория', it.accounting_category], ['Налоговая категория', it.tax_category], ['Продуктовая категория', it.product_category]].filter(x => x[1]);
+    return '<div class="nm-facts">' + facts.map(f => `<div><small>${f[0]}</small><b>${f[1]}</b></div>`).join('') + '</div>'
+      + (extra.length ? '<div class="nm-facts" style="margin-top:10px">' + extra.map(f => `<div><small>${f[0]}</small><b>${esc(f[1])}</b></div>`).join('') + '</div>' : '');
+  }
   function renderCard() {
     if (!cardData) return;
     const it = cardData.item;
-    const tabs = [
-      ['main', 'ОСНОВНОЕ'],
-      ['sales', 'ПРОДАЖИ' + (cardData.sales.applicable ? '' : ' —')],
-      ['purchase', 'ЗАКУПКА' + (cardData.purchase.applicable ? '' : ' —')],
-      ['cooking', 'ПРИГОТОВЛЕНИЕ']
-    ];
-    let html = '<div class="nm-group"><div class="nm-group-head" style="cursor:default">'
-      + '<span class="nm-group-name">📄 ' + esc(it.name) + '</span>'
-      + '<span class="nm-sku">' + esc(it.sku || '') + '</span>'
-      + '<span class="nm-actions"><button title="К дереву" onclick="closeCard()">✖️</button></span>'
-      + '</div><div class="nm-body">'
-      + '<div class="tabs" style="margin:8px 0 14px">'
-      + tabs.map(function (t) {
-          return '<button class="tab' + (cardTab === t[0] ? ' active' : '') + '" '
-            + 'onclick="switchCardTab(' + jsArg(t[0]) + ')">' + t[1] + '</button>';
-        }).join('')
-      + '</div>';
-
-    if (cardTab === 'main') html += cardMain(it);
-    else if (cardTab === 'sales') html += cardSales(cardData.sales, cardData.periodDays);
-    else if (cardTab === 'purchase') html += cardPurchase(cardData.purchase);
-    else html += cardCooking(cardData.cooking);
-
-    html += '<div style="margin-top:16px;display:flex;gap:10px">'
-      + '<button class="btn btn-primary" onclick="editFromCard()">✏️ Изменить</button>'
-      + '<button class="btn" style="border:1px solid var(--color-grey-3,#ddd)" onclick="closeCard()">← К дереву</button>'
-      + '</div></div></div>';
-    document.getElementById('cardPanel').innerHTML = html;
+    const tabs = [['main', 'Основное', true], ['sales', 'Продажи', cardData.sales.applicable], ['purchase', 'Закупка и остатки', cardData.purchase.applicable], ['cooking', 'Состав', cardData.cooking.applicable]];
+    let body;
+    if (cardTab === 'main') body = cardMain(it);
+    else if (cardTab === 'sales') body = cardSales(cardData.sales, cardData.periodDays);
+    else if (cardTab === 'purchase') body = cardPurchase(cardData.purchase);
+    else body = cardCooking(cardData.cooking);
+    document.getElementById('cardPanel').innerHTML =
+      `<div class="nm-dlg-h"><h2 id="cardTitle">${esc(it.name)} <span class="nm-chip ${esc(it.item_type)}" style="vertical-align:3px">${esc(TYPE_LABEL[it.item_type] || '')}</span></h2>
+        <button type="button" class="nm-x" onclick="closeCard()" aria-label="Закрыть">&times;</button></div>
+       <div class="nm-dlg-b">
+        <div class="nm-seg" role="tablist" style="align-self:flex-start;max-width:100%">${tabs.map(t => `<button type="button" role="tab" aria-pressed="${cardTab === t[0]}" aria-selected="${cardTab === t[0]}"${t[2] ? '' : ' disabled title="Не относится к этой позиции"'} onclick="switchCardTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
+        <div class="nm-table-wrap">${body}</div>
+       </div>
+       <div class="nm-dlg-f">${it.deleted_at ? '' : `<button type="button" class="nm-btn del" onclick="deleteItem(${jsArg(it.id)}, ${jsArg(it.source)}, this)">Удалить</button>`}<span style="flex:1"></span>
+        ${it.source === 'menu' ? '<a class="nm-btn sec" style="display:inline-flex;align-items:center;text-decoration:none" href="/admin-panel/menu.html">Цена и фото — в «Меню»</a>' : ''}
+        <button type="button" class="nm-btn" onclick="editFromCard()">Изменить</button></div>`;
   }
-
-  // Правка из карточки: сначала возвращаем дерево, иначе форма сохранения
-  // откроется под скрытым деревом, а после reloadTree карточка покажет
-  // устаревшие данные поверх обновлённого списка.
   function editFromCard() {
     if (!cardData) return;
-    const id = cardData.item.id;
-    const source = cardData.item.source;
+    const id = cardData.item.id, source = cardData.item.source;
     closeCard();
     openItemForm(id, source);
   }
 
-  // ───────── режим «порядок на кассе» ─────────
-
+  // ───────── порядок на кассе ─────────
+  let cashOrderDraft = null;
   function collectSellable() {
-    const out = [];
-    function walk(node) {
-      (node.items || []).forEach(function (i) { if (i.source === 'menu' && !i.deleted_at) out.push(i); });
-      (node.children || []).forEach(walk);
-    }
-    (tree.groups || []).forEach(walk);
-    (tree.ungrouped || []).forEach(function (i) { if (i.source === 'menu' && !i.deleted_at) out.push(i); });
-    return out.sort(function (a, b) {
-      return (a.cash_order || 0) - (b.cash_order || 0) || String(a.name).localeCompare(String(b.name));
-    });
+    return allItems().filter(i => i.source === 'menu' && !i.deleted_at)
+      .sort((a, b) => (a.cash_order || 0) - (b.cash_order || 0) || String(a.name).localeCompare(String(b.name), 'ru'));
   }
-
   function toggleCashMode() {
-    cashMode = document.getElementById('cashModeToggle').checked;
-    // Карточку закрываем: иначе она останется висеть поверх панели кассы,
-    // а кнопка «К дереву» вернёт дерево в режиме, где его быть не должно.
+    cashMode = !cashMode;
+    document.getElementById('cashModeBtn').setAttribute('aria-pressed', String(cashMode));
     if (cardData) closeCard();
-    document.getElementById('treeRoot').style.display = cashMode ? 'none' : 'block';
+    document.getElementById('nmLayout').style.display = cashMode ? 'none' : '';
+    document.getElementById('nmBar').style.display = cashMode ? 'none' : '';
     document.getElementById('cashPanel').style.display = cashMode ? 'block' : 'none';
+    cashOrderDraft = null;
     if (cashMode) renderCashPanel();
   }
-
   function renderCashPanel() {
-    const items = collectSellable();
-    if (!items.length) {
-      document.getElementById('cashPanel').innerHTML =
-        '<div class="nm-empty">Продаваемых позиций нет</div>';
-      return;
-    }
-    let html = '<div class="nm-group"><div class="nm-body">'
-      + '<div class="nm-empty">Порядок позиций на экране кассы. Меняйте стрелками, затем «Сохранить порядок».</div>'
-      + '<table class="nm-table"><thead><tr><th>#</th><th>Название</th><th>Артикул</th><th></th></tr></thead><tbody>';
-    items.forEach(function (it, idx) {
-      html += '<tr><td>' + (idx + 1) + '</td><td>' + esc(it.name) + '</td>'
-        + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
-        + '<td class="nm-actions" style="white-space:nowrap">'
-        + '<button title="Выше" onclick="moveCash(' + idx + ',-1)">⬆️</button>'
-        + '<button title="Ниже" onclick="moveCash(' + idx + ',1)">⬇️</button>'
-        + '</td></tr>';
+    const items = cashOrderDraft || collectSellable();
+    const panel = document.getElementById('cashPanel');
+    if (!items.length) { panel.innerHTML = '<div class="nm-cash"><div class="nm-empty">Продаваемых позиций нет</div></div>'; return; }
+    panel.innerHTML = `<div class="nm-cash"><div class="nm-cash-h"><p>Так позиции стоят на экране кассы. Перетащите плитку или двигайте стрелками.</p>
+        <button type="button" class="nm-btn sec" onclick="toggleCashMode()">Готово</button>
+        <button type="button" class="nm-btn" id="cashSaveBtn" onclick="saveCashOrder()"${cashOrderDraft ? '' : ' disabled'}>Сохранить порядок</button></div>
+      <ol class="nm-cash-list" id="cashList">${items.map((it, i) => `<li draggable="true" data-i="${i}"><span class="no">${i + 1}</span><span class="t" title="${esc(it.name)}">${esc(it.name)}</span>
+        <button type="button" class="nm-ico" aria-label="Выше" onclick="moveCash(${i},-1)"${i ? '' : ' disabled'}>${I_UP}</button>
+        <button type="button" class="nm-ico" aria-label="Ниже" onclick="moveCash(${i},1)"${i < items.length - 1 ? '' : ' disabled'}>${I_DN}</button></li>`).join('')}</ol></div>`;
+    let from = null;
+    panel.querySelectorAll('#cashList li').forEach(li => {
+      li.addEventListener('dragstart', () => { from = +li.dataset.i; li.classList.add('drag'); });
+      li.addEventListener('dragend', () => li.classList.remove('drag'));
+      li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('over'); });
+      li.addEventListener('dragleave', () => li.classList.remove('over'));
+      li.addEventListener('drop', (e) => { e.preventDefault(); li.classList.remove('over'); const to = +li.dataset.i; if (from !== null && from !== to) moveCashTo(from, to); });
     });
-    html += '</tbody></table>'
-      + '<button class="btn btn-primary" style="margin-top:12px" onclick="saveCashOrder()">Сохранить порядок</button>'
-      + '</div></div>';
-    document.getElementById('cashPanel').innerHTML = html;
   }
-
-  let cashOrderDraft = null;
-
-  function moveCash(idx, delta) {
+  function moveCashTo(from, to) {
     if (!cashOrderDraft) cashOrderDraft = collectSellable();
+    const [x] = cashOrderDraft.splice(from, 1);
+    cashOrderDraft.splice(to, 0, x);
+    renderCashPanel();
+  }
+  function moveCash(idx, delta) {
     const to = idx + delta;
-    if (to < 0 || to >= cashOrderDraft.length) return;
-    const tmp = cashOrderDraft[idx];
-    cashOrderDraft[idx] = cashOrderDraft[to];
-    cashOrderDraft[to] = tmp;
-    cashOrderDraft.forEach(function (it, i) { it.cash_order = i; });
-    // Перерисовываем из черновика, не из дерева: иначе стрелки «не работают»
-    // до сохранения, потому что дерево ещё хранит прежний порядок.
-    renderCashDraft();
+    const len = (cashOrderDraft || collectSellable()).length;
+    if (to < 0 || to >= len) return;
+    moveCashTo(idx, to);
+    const b = document.querySelectorAll('#cashList li')[to];
+    if (b) b.querySelector(delta < 0 ? 'button' : 'button:last-child').focus();
   }
-
-  function renderCashDraft() {
-    const items = cashOrderDraft;
-    let html = '<div class="nm-group"><div class="nm-body">'
-      + '<div class="nm-empty">Порядок позиций на экране кассы. Меняйте стрелками, затем «Сохранить порядок».</div>'
-      + '<table class="nm-table"><thead><tr><th>#</th><th>Название</th><th>Артикул</th><th></th></tr></thead><tbody>';
-    items.forEach(function (it, idx) {
-      html += '<tr><td>' + (idx + 1) + '</td><td>' + esc(it.name) + '</td>'
-        + '<td class="nm-sku">' + esc(it.sku || '—') + '</td>'
-        + '<td class="nm-actions" style="white-space:nowrap">'
-        + '<button title="Выше" onclick="moveCash(' + idx + ',-1)">⬆️</button>'
-        + '<button title="Ниже" onclick="moveCash(' + idx + ',1)">⬇️</button>'
-        + '</td></tr>';
-    });
-    html += '</tbody></table>'
-      + '<button class="btn btn-primary" style="margin-top:12px" onclick="saveCashOrder()">Сохранить порядок</button>'
-      + '</div></div>';
-    document.getElementById('cashPanel').innerHTML = html;
-  }
-
   async function saveCashOrder() {
     if (!requireServer('порядок на кассе')) return;
-    const items = (cashOrderDraft || collectSellable()).map(function (it, i) {
-      return { id: it.id, cashOrder: i };
-    });
+    const items = (cashOrderDraft || collectSellable()).map((it, i) => ({ id: it.id, cashOrder: i }));
     try {
-      const res = await AUTH.fetch('/api/nomenclature/cash-order', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items })
-      });
+      const res = await AUTH.fetch('/api/nomenclature/cash-order', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
       if (!res.ok) throw new Error(await apiError(res));
       cashOrderDraft = null;
-      showNotification('✅ Порядок на кассе сохранён');
+      showNotification('Порядок на кассе сохранён');
       await reloadTree();
       renderCashPanel();
-    } catch (e) {
-      showNotification('❌ Не сохранено: ' + e.message);
-    }
+    } catch (e) { showNotification('Не сохранено: ' + e.message); }
   }
 
   // ───────── мобильный сайдбар ─────────
-  // Обработчики гамбургера и оверлея заданы в шапке, взятой из menu.html,
-  // а определения там лежат ниже — на этой странице их надо объявить своими,
-  // иначе кнопка меню на телефоне молча не работает.
   function toggleSidebarMobile() {
-    var sb = document.getElementById('sidebar');
-    var ov = document.getElementById('sidebarOverlay');
+    var sb = document.getElementById('sidebar'), ov = document.getElementById('sidebarOverlay');
     if (!sb) return;
     sb.classList.toggle('mobile-open');
     if (ov) ov.style.display = sb.classList.contains('mobile-open') ? 'block' : 'none';
   }
-
   function closeSidebarMobile() {
-    var sb = document.getElementById('sidebar');
-    var ov = document.getElementById('sidebarOverlay');
+    var sb = document.getElementById('sidebar'), ov = document.getElementById('sidebarOverlay');
     if (sb) sb.classList.remove('mobile-open');
     if (ov) ov.style.display = 'none';
   }
 
-  // ───────── старт ─────────
-
   document.addEventListener('DOMContentLoaded', function () {
     const user = AUTH.getUser();
     if (user) {
-      const el = document.getElementById('sidebarUserName');
-      if (el) el.textContent = user.first_name || user.email || 'Admin';
-      const tb = document.getElementById('topbarUserName');
-      if (tb) tb.textContent = user.first_name || user.email || 'Admin';
+      const el = document.getElementById('sidebarUserName'); if (el) el.textContent = user.first_name || user.email || 'Admin';
+      const tb = document.getElementById('topbarUserName'); if (tb) tb.textContent = user.first_name || user.email || 'Admin';
     }
     reloadTree();
   });
