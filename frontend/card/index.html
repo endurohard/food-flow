@@ -112,6 +112,15 @@
     .qr-box svg { display: block; width: 100%; height: auto; }
     .card-number { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 26px; font-weight: 700; letter-spacing: .12em; margin-top: 10px; }
     .qr-hint { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+    .barcode-box { width: 100%; max-width: 320px; height: 76px; margin: 14px auto 0; background: #fff; }
+    .barcode-box svg { display: block; width: 100%; height: 100%; }
+    .copy-row { margin-top: 8px; }
+    .copy-msg { font-size: 12px; color: var(--muted); margin-left: 6px; }
+    .wallet-steps { margin: 6px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
+    .wallet-steps li { margin: 2px 0; }
+    .wallet-os { font-weight: 700; margin-top: 10px; font-size: 14px; }
+    .wallet-os:first-of-type { margin-top: 0; }
+    .wallet-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
 
     .history-list { list-style: none; margin: 0; padding: 0; }
     .history-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
@@ -196,8 +205,30 @@
       <div class="panel qr-panel">
         <div class="panel-title">Покажите на кассе</div>
         <div class="qr-box" id="qrBox" aria-label="QR-код номера карты"></div>
+        <div class="barcode-box" id="barcodeBox" aria-label="Штрихкод номера карты"></div>
         <div class="card-number" id="cardNumber"></div>
+        <div class="copy-row">
+          <button type="button" class="btn btn-ghost" onclick="copyNumber()">Скопировать номер</button><span class="copy-msg" id="copyMsg" role="status"></span>
+        </div>
         <div class="qr-hint">Кассир отсканирует код или введёт номер карты</div>
+      </div>
+
+      <!-- Карта в Wallet без сертификата Apple: сам телефон умеет создавать
+           карту по штрихкоду/QR или вручную. Баллы в такой карте не
+           обновляются — она хранит только номер, баланс смотрится здесь. -->
+      <div class="panel" id="walletHowto">
+        <div class="panel-title">Добавить в Wallet</div>
+        <div class="wallet-os" id="howtoIos">iPhone</div>
+        <ol class="wallet-steps" id="howtoIosSteps">
+          <li>Сделайте снимок экрана этой страницы — iPhone 15 Pro и новее предложат «Добавить в Wallet».</li>
+          <li>Или откройте Wallet → «+» → «Создать карту» → «Создать вручную» → шаблон «Членская карта» и впишите номер <b class="wallet-num"></b>.</li>
+        </ol>
+        <div class="wallet-os" id="howtoAndroid">Android</div>
+        <ol class="wallet-steps" id="howtoAndroidSteps">
+          <li>Google Wallet или Samsung Wallet → «Добавить» → «Карта лояльности».</li>
+          <li>Отсканируйте штрихкод выше или введите номер <b class="wallet-num"></b>.</li>
+        </ol>
+        <div class="wallet-note">Подойдёт и приложение «Кошелёк». Такая карта хранит только номер — баллы и уровень смотрите на этой странице.</div>
       </div>
 
       <!-- Место под будущую «Добавить в Apple Wallet»: показывается, только
@@ -223,6 +254,7 @@
   </div>
 
   <script src="/admin-panel/js/vendor/qrcode-generator.js"></script>
+  <script src="/admin-panel/js/code128.js"></script>
   <script>
     // Открытая страница карты клиента: без входа, без auth.js, обычный fetch.
     // Токен из ссылки — секрет карты; на сервер его шлём только в проверенном
@@ -305,6 +337,32 @@
       box.appendChild(svg);
     }
 
+    // Штрихкод Code128 того же номера: ручной шаблон Wallet и многие
+    // сканеры-клавиатуры на кассах читают линейный код надёжнее QR.
+    // Номер — только цифры, в разметку попадают лишь полосы.
+    function renderBarcode(number) {
+      var box = el('barcodeBox');
+      box.textContent = '';
+      if (!window.Code128 || !/^\d+$/.test(number)) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      box.innerHTML = window.Code128.svg(number, { height: 60 });
+    }
+
+    function copyNumber() {
+      var number = el('cardNumber').textContent || '';
+      var msg = el('copyMsg');
+      var done = function () { msg.textContent = 'Скопировано'; };
+      var fail = function () {
+        // Буфер недоступен (старый браузер, запрет) — выделяем номер, чтобы
+        // скопировать долгим нажатием
+        var range = document.createRange(); range.selectNodeContents(el('cardNumber'));
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        msg.textContent = 'Номер выделен — скопируйте вручную';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(number).then(done, fail);
+      else fail();
+    }
+
     var TX_LABELS = { earn: 'Начисление', redeem: 'Списание', adjust: 'Корректировка', expire: 'Сгорание баллов' };
 
     function renderHistory(recent) {
@@ -383,6 +441,9 @@
       // ровно так, как видит, а поиск по «1000 0001» ничего бы не нашёл
       el('cardNumber').textContent = number;
       renderQr(number);
+      renderBarcode(number);
+      var nums = document.querySelectorAll('.wallet-num');
+      for (var wi = 0; wi < nums.length; wi++) nums[wi].textContent = number;
 
       // Кнопка Apple Wallet — только по явной https-ссылке от сервера
       var wallet = typeof card.appleWalletUrl === 'string' && /^https:\/\//i.test(card.appleWalletUrl);
@@ -462,13 +523,16 @@
     }
 
     function updateA2hs() {
-      var hidden = false;
-      try { hidden = localStorage.getItem(A2HS_KEY) === '1'; } catch (e) { /* приватный режим */ }
-      if (hidden || isStandalone()) { show('a2hsHint', false); return; }
       var ua = navigator.userAgent || '';
       var ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
       var android = /Android/i.test(ua);
-      // Неизвестная платформа — показываем обе инструкции
+      // Неизвестная платформа — показываем обе инструкции. Инструкция Wallet
+      // нужна и на ярлыке с экрана «Домой», поэтому до раннего выхода.
+      show('howtoIos', ios || !android); show('howtoIosSteps', ios || !android);
+      show('howtoAndroid', android || !ios); show('howtoAndroidSteps', android || !ios);
+      var hidden = false;
+      try { hidden = localStorage.getItem(A2HS_KEY) === '1'; } catch (e) { /* приватный режим */ }
+      if (hidden || isStandalone()) { show('a2hsHint', false); return; }
       show('a2hsIos', ios || !android);
       show('a2hsAndroid', android || !ios);
       show('a2hsHint', true);
