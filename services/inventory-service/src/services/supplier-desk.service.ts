@@ -25,7 +25,7 @@ export class SupplierDeskService {
       `SELECT s.*,
               (SELECT COUNT(*)::int FROM supply_invoices i WHERE i.supplier_id = s.id AND i.status = 'received') AS invoices_count,
               (SELECT MAX(COALESCE(i.received_at, i.created_at)) FROM supply_invoices i WHERE i.supplier_id = s.id AND i.status = 'received') AS last_delivery_at,
-              (SELECT COALESCE(SUM(i.total_amount), 0) FROM supply_invoices i
+              (SELECT COALESCE(SUM(i.total_amount - COALESCE(i.returned_amount, 0)), 0) FROM supply_invoices i
                 WHERE i.supplier_id = s.id AND i.status = 'received' AND COALESCE(i.received_at, i.created_at) >= NOW() - INTERVAL '30 days') AS purchased_30d,
               (SELECT COUNT(*)::int FROM supply_invoices i WHERE i.supplier_id = s.id AND i.status <> 'received') AS drafts_count,
               (SELECT COUNT(*)::int FROM purchase_orders o WHERE o.supplier_id = s.id AND o.status IN ('sent', 'partially_received')) AS open_orders
@@ -57,19 +57,28 @@ export class SupplierDeskService {
            LEFT JOIN supply_invoices i ON i.id = p.invoice_id
            LEFT JOIN users u ON u.id = p.paid_by
           WHERE p.supplier_id = $1 AND (p.enterprise_id = $2 OR p.enterprise_id IS NULL)
+         UNION ALL
+         SELECT 'return', r.id, r.created_at, r.return_number || ' по ' || COALESCE(i.invoice_number, 'накладной'), r.total_amount,
+                r.reason, r.notes, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''), r.invoice_id
+           FROM supplier_returns r
+           LEFT JOIN supply_invoices i ON i.id = r.invoice_id
+           LEFT JOIN users u ON u.id = r.created_by
+          WHERE r.supplier_id = $1 AND r.enterprise_id = $2
        ) x ORDER BY at ASC, kind DESC`,
       [supplierId, enterpriseId]
     );
-    let balance = 0, invoiced = 0, paid = 0;
+    let balance = 0, invoiced = 0, paid = 0, returned = 0;
     const rows = r.rows.map((x: any) => {
       const amount = Number(x.amount) || 0;
-      if (x.kind === 'invoice') { balance += amount; invoiced += amount; } else { balance -= amount; paid += amount; }
+      if (x.kind === 'invoice') { balance += amount; invoiced += amount; }
+      else if (x.kind === 'return') { balance -= amount; returned += amount; }
+      else { balance -= amount; paid += amount; }
       return { ...x, amount: r2(amount), balance_after: r2(balance) };
     });
     return {
       supplier: s.rows[0],
       rows: rows.reverse().slice(0, 500),
-      totals: { invoiced: r2(invoiced), paid: r2(paid), balance: r2(balance), storedBalance: r2(Number(s.rows[0].balance) || 0) }
+      totals: { invoiced: r2(invoiced), paid: r2(paid), returned: r2(returned), balance: r2(balance), storedBalance: r2(Number(s.rows[0].balance) || 0) }
     };
   }
 

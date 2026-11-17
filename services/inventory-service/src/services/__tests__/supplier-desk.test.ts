@@ -40,7 +40,7 @@ describe('ledger', () => {
     });
     const r = (await svcWith(c).ledger('s1', ENT))!;
     expect(r.rows.map((x) => [x.id, x.balance_after])).toEqual([['i2', 700.4], ['p1', 200], ['i1', 1000]]);
-    expect(r.totals).toEqual({ invoiced: 1500.4, paid: 800, balance: 700.4, storedBalance: 700 });
+    expect(r.totals).toEqual({ invoiced: 1500.4, paid: 800, returned: 0, balance: 700.4, storedBalance: 700 });
     expect(c.log[1].params).toEqual(['s1', ENT]);
   });
 

@@ -25,8 +25,8 @@ export async function allocateSupplierPayments(client: any, supplierId: string):
       ORDER BY created_at, id`, [supplierId]);
   if (!pays.rows.length) return;
   const invs = await client.query(
-    `SELECT id, total_amount FROM supply_invoices
-      WHERE supplier_id = $1 AND status = 'received' AND COALESCE(total_amount, 0) > 0
+    `SELECT id, total_amount, returned_amount FROM supply_invoices
+      WHERE supplier_id = $1 AND status = 'received' AND COALESCE(total_amount, 0) - COALESCE(returned_amount, 0) > 0
       ORDER BY COALESCE(received_at, created_at), created_at`, [supplierId]);
   if (!invs.rows.length) return;
   const paid = await client.query(
@@ -35,7 +35,7 @@ export async function allocateSupplierPayments(client: any, supplierId: string):
   const paidBy: Record<string, number> = {};
   paid.rows.forEach((r: any) => { paidBy[r.invoice_id] = Number(r.s) || 0; });
   const open = invs.rows
-    .map((i: any) => ({ id: i.id, due: r2((Number(i.total_amount) || 0) - (paidBy[i.id] || 0)) }))
+    .map((i: any) => ({ id: i.id, due: r2((Number(i.total_amount) || 0) - (Number(i.returned_amount) || 0) - (paidBy[i.id] || 0)) }))
     .filter((i: any) => i.due > 0.005);
   for (const p of pays.rows) {
     if (!open.length) break;
@@ -185,7 +185,7 @@ export class SupplierService {
       `SELECT si.*, s.name as supplier_name, w.name as warehouse_name,
               -- Долг — производная, а не хранимое поле: иначе он разъедется
               -- с суммой накладной при правке позиций.
-              GREATEST(COALESCE(si.total_amount, 0) - si.paid_amount, 0) AS debt,
+              GREATEST(COALESCE(si.total_amount, 0) - COALESCE(si.returned_amount, 0) - si.paid_amount, 0) AS debt,
               (SELECT COUNT(*) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_count,
               (SELECT COALESCE(SUM(sii.total_price), 0) FROM supply_invoice_items sii WHERE sii.invoice_id = si.id) AS items_total
        FROM supply_invoices si
@@ -554,7 +554,7 @@ export class SupplierService {
         invoice = inv.rows[0];
         if (!invoice) throw new InvoiceError('Накладная этого поставщика не найдена', 404);
         const newPaid = (parseFloat(invoice.paid_amount) || 0) + data.amount;
-        const total = parseFloat(invoice.total_amount) || 0;
+        const total = (parseFloat(invoice.total_amount) || 0) - (parseFloat(invoice.returned_amount) || 0);
         const paymentStatus = newPaid >= total - 0.005 ? 'paid' : (newPaid > 0 ? 'partial' : 'unpaid');
         await client.query(
           'UPDATE supply_invoices SET paid_amount = $1, payment_status = $2 WHERE id = $3',

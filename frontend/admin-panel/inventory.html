@@ -1294,6 +1294,39 @@
     .order-status.pending { background: rgba(245, 158, 11, 0.1); color: var(--color-warning); }
     .order-status.completed { background: rgba(34, 197, 94, 0.1); color: var(--color-success); }
     .order-status.cancelled { background: rgba(239, 68, 68, 0.1); color: var(--color-danger); }
+
+    /* Возврат поставщику — в карточке принятой накладной */
+    .ret-box { border-top: 1px solid var(--admin-border); margin-top: 16px; padding-top: 14px; }
+    .ret-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .ret-head h4 { margin: 0; font-size: 15px; }
+    .ret-hint { font-size: 13px; color: var(--color-text-secondary); margin: 6px 0 0; }
+    .ret-doc { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-top: 8px;
+      background: var(--color-grey-1, #F6F7F5); border-radius: 10px; font-size: 13px; }
+    .ret-doc b { white-space: nowrap; }
+    .ret-doc small { display: block; color: var(--color-text-secondary); margin-top: 2px; }
+    .ret-form { margin-top: 12px; }
+    .ret-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .ret-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); padding: 6px 8px; border-bottom: 1px solid var(--admin-border); }
+    .ret-table td { padding: 8px; border-bottom: 1px solid var(--admin-border); vertical-align: middle; }
+    .ret-table td.num, .ret-table th.num { text-align: right; white-space: nowrap; }
+    .ret-table input { width: 96px; text-align: right; }
+    .ret-table tr.off td { color: var(--color-grey-5, #9AA19A); }
+    .ret-max { border: 0; background: none; color: var(--color-primary, #2E7D4F); cursor: pointer; font-size: 12px; padding: 0 0 0 6px; }
+    .ret-meta { display: grid; grid-template-columns: 200px 1fr; gap: 10px; margin-top: 12px; }
+    .ret-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    .ret-sum { font-size: 15px; }
+    .ret-err { color: var(--color-danger); font-size: 13px; margin-top: 8px; }
+    @media (max-width: 640px) {
+      .ret-meta { grid-template-columns: 1fr; }
+      .ret-table, .ret-table tbody { display: block; width: 100%; }
+      .ret-table thead { display: none; }
+      .ret-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 10px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--admin-border); }
+      .ret-table td { border: 0; padding: 2px 0; min-width: 0; overflow-wrap: anywhere; }
+      .ret-table input { width: 80px; }
+      .ret-table td.ret-name { grid-column: 1 / -1; font-weight: 600; }
+      .ret-table td.num { text-align: left; white-space: normal; }
+      .ret-table td[data-label]::before { content: attr(data-label) ': '; color: var(--color-text-secondary); font-size: 12px; }
+    }
   </style>
     <script src="js/units.js"></script>
   <!-- Общий каркас админки: подключается последним, чтобы выровнять страничные стили -->
@@ -2120,7 +2153,46 @@ AUTH.requireAuth();
       </form>
 
       <div id="invoiceItemsReadonlyHint" style="display:none;color:var(--color-text-secondary);font-size:13px;border-top:1px solid var(--admin-border);padding-top:16px;">
-        Накладная принята на склад — позиции доступны только для просмотра.
+        Накладная принята на склад — позиции не меняются. Брак, пересорт или лишнее отдаёте поставщику — оформите возврат ниже.
+      </div>
+
+      <div class="ret-box" id="invoiceReturnBox" style="display:none;">
+        <div class="ret-head">
+          <h4>Возвраты поставщику</h4>
+          <button type="button" class="btn btn-small btn-secondary" id="retOpenBtn" onclick="openReturnForm()">Оформить возврат</button>
+        </div>
+        <div id="retList"></div>
+        <div class="ret-form" id="retForm" style="display:none;">
+          <p class="ret-hint">Товар спишется со склада накладной, долг поставщику уменьшится на сумму по цене накладной.</p>
+          <table class="ret-table">
+            <thead><tr><th>Товар</th><th class="num">Принято</th><th class="num">Можно вернуть</th><th class="num">Вернуть</th><th class="num">Сумма</th></tr></thead>
+            <tbody id="retBody"></tbody>
+          </table>
+          <div class="ret-meta">
+            <div class="form-group" style="margin:0">
+              <label class="form-label" for="retReason">Причина</label>
+              <select class="form-input" id="retReason">
+                <option value="defect">Брак</option>
+                <option value="wrong">Пересорт</option>
+                <option value="surplus">Лишнее</option>
+                <option value="expired">Просрочка</option>
+                <option value="other">Другое</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" for="retNotes">Комментарий</label>
+              <input type="text" class="form-input" id="retNotes" maxlength="500" placeholder="Например: 2 пачки вздутые, водитель забрал">
+            </div>
+          </div>
+          <div class="ret-err" id="retError"></div>
+          <div class="ret-foot">
+            <div class="ret-sum" id="retSum">Вернуть на 0,00 ₽</div>
+            <div style="display:flex;gap:10px;">
+              <button type="button" class="btn" onclick="closeReturnForm()">Отмена</button>
+              <button type="button" class="btn btn-primary" id="retSubmitBtn" onclick="submitReturn(this)" disabled>Оформить возврат</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
@@ -3522,7 +3594,7 @@ AUTH.requireAuth();
       receipt: ['Приход', 'in'], return: ['Возврат', 'in'], production_in: ['Выпуск', 'in'], transfer_in: ['Перемещение', 'in'],
       adjustment_plus: ['Корректировка +', 'in'], write_off: ['Списание', 'out'], sale: ['Продажа', 'out'],
       production_out: ['В производство', 'out'], transfer_out: ['Перемещение', 'out'], adjustment_minus: ['Корректировка −', 'out'],
-      inventory: ['Инвентаризация', 'adj']
+      inventory: ['Инвентаризация', 'adj'], supplier_return: ['Возврат поставщику', 'out']
     };
     const JOURNAL_GROUPS = {
       in: Object.keys(MOVE_TYPES).filter(k => MOVE_TYPES[k][1] === 'in'),
@@ -3792,22 +3864,35 @@ AUTH.requireAuth();
       } catch (e) { /* отчёты не критичны */ }
     }
 
+    // Закупки за месяц — по принятым накладным минус возвраты поставщикам.
+    // Раньше считались по приходам склада: туда попадали и возвраты гостей,
+    // а возврат поставщику сумму не уменьшал.
+    async function loadMonthlyPurchases() {
+      const el = document.getElementById('monthlyPurchases');
+      const pad = n => String(n).padStart(2, '0');
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+      const to = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-01`;
+      try {
+        const res = await AUTH.fetch(`/api/suppliers/reports/purchases?from=${from}&to=${to}`);
+        if (!res.ok) throw new Error(await apiError(res));
+        const d = await res.json();
+        el.textContent = (parseFloat(d.net) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
+        el.title = `Накладных: ${d.invoices} на ${money(d.invoiced)}` + (d.returns ? `, возвратов: ${d.returns} на ${money(d.returned)}` : '');
+      } catch (e) {
+        el.textContent = '—';
+        el.title = 'Не удалось посчитать: ' + e.message;
+      }
+    }
+
     function renderReports() {
       loadAnalysisReports();
       const totalValue = inventory.reduce((sum, item) => sum + stockValue(item), 0);
       // Закупки за месяц считаем по реальным приходам склада, а не по
       // локальным «заказам»: прежняя цифра жила в localStorage браузера.
-      const now = new Date();
-      const monthlyPurchases = receiptMovements
-        .filter(m => {
-          const d = new Date(m.created_at);
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        })
-        .reduce((sum, m) => sum + (parseFloat(m.quantity) || 0) * (parseFloat(m.cost_price) || 0), 0);
-
       document.getElementById('totalInventoryValue').textContent = money(totalValue);
-      document.getElementById('monthlyPurchases').textContent =
-        monthlyPurchases.toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽';
+      loadMonthlyPurchases();
 
       const criticalItems = inventory.filter(i => getItemStatus(i) !== 'in-stock');
       const tbody = document.getElementById('criticalItemsBody');
@@ -4083,7 +4168,7 @@ AUTH.requireAuth();
           <td data-label="Дата" class="nowrap">${dateText}</td>
           <td data-label="Поставщик">${esc(inv.supplier_name || '—')}</td>
           <td data-label="Склад">${esc(inv.warehouse_name || '—')}</td>
-          <td data-label="Сумма">${money(inv.total_amount)} ₽</td>
+          <td data-label="Сумма">${money(inv.total_amount)} ₽${parseFloat(inv.returned_amount) > 0 ? '<div style="font-size:12px;color:var(--color-text-secondary);">возврат −' + money(inv.returned_amount) + ' ₽</div>' : ''}</td>
           <td data-label="Оплачено">${payHtml}</td>
           <td data-label="Долг">${debtHtml}</td>
           <td data-label="Позиций">${itemsCount}</td>
@@ -4206,9 +4291,151 @@ AUTH.requireAuth();
       renderInvoiceHeader(isReceived);
       showInvoicePhoto();
 
+      document.getElementById('invoiceReturnBox').style.display = isReceived ? 'block' : 'none';
+      document.getElementById('retForm').style.display = 'none';
+      document.getElementById('retList').innerHTML = '';
+      document.getElementById('retOpenBtn').style.display = 'none';
+
       if (!isReceived) await loadInvoiceProductOptions();
       await loadInvoiceItems(invoiceId);
+      if (isReceived) await loadInvoiceReturns(invoiceId);
     }
+
+    // ── Возврат поставщику ──
+    const RETURN_REASONS = { defect: 'Брак', wrong: 'Пересорт', surplus: 'Лишнее', expired: 'Просрочка', other: 'Другое' };
+    let invoiceReturns = { returns: [], returnedByItem: {} };
+
+    async function loadInvoiceReturns(invoiceId) {
+      const list = document.getElementById('retList');
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + encodeURIComponent(invoiceId) + '/returns');
+        if (!res.ok) throw new Error(await apiError(res));
+        invoiceReturns = await res.json();
+      } catch (e) {
+        invoiceReturns = { returns: [], returnedByItem: {} };
+        list.innerHTML = '<p class="ret-hint" style="color:#9E3420">Возвраты не загрузились: ' + esc(e.message) + '</p>';
+        return;
+      }
+      if (!currentInvoice || currentInvoice.id !== invoiceId) return;
+      const rs = invoiceReturns.returns || [];
+      list.innerHTML = rs.length ? rs.map(r => {
+        const items = (r.items || []).map(x => esc(x.name || '') + ' — ' + esc(qtyText(x.quantity, unitOfLine(x.invoiceItemId)))).join(', ');
+        const who = [r.first_name, r.last_name].filter(Boolean).join(' ');
+        return `<div class="ret-doc"><div><strong>${esc(r.return_number)}</strong> · ${dateRu(r.created_at)}${r.reason ? ' · ' + esc(RETURN_REASONS[r.reason] || r.reason) : ''}
+          <small>${items}${r.notes ? ' — ' + esc(r.notes) : ''}${who ? ' · ' + esc(who) : ''}</small></div><b>−${money(r.total_amount)}</b></div>`;
+      }).join('') : '<p class="ret-hint">Возвратов по этой накладной не было.</p>';
+      const anyLeft = invoiceItemsCache.some(it => it.inventory_item_id && returnLeft(it) > 0.0005);
+      document.getElementById('retOpenBtn').style.display = anyLeft ? '' : 'none';
+    }
+
+    function unitOfLine(id) { const it = invoiceItemsCache.find(x => x.id === id); return it ? it.unit : ''; }
+    function returnLeft(it) {
+      const done = parseFloat((invoiceReturns.returnedByItem || {})[it.id]) || 0;
+      return Math.max(0, Math.round(((parseFloat(it.quantity) || 0) - done) * 1000) / 1000);
+    }
+    function linePrice(it) {
+      const q = parseFloat(it.quantity) || 0;
+      const t = it.total_price !== null && it.total_price !== undefined ? parseFloat(it.total_price) : NaN;
+      return q > 0 && Number.isFinite(t) ? t / q : (parseFloat(it.price_per_unit) || 0);
+    }
+
+    function openReturnForm() {
+      document.getElementById('retBody').innerHTML = invoiceItemsCache.map(it => {
+        const left = returnLeft(it);
+        const off = !it.inventory_item_id || left <= 0.0005;
+        const leftTxt = String(left).replace('.', ',');
+        return `<tr class="${off ? 'off' : ''}">
+          <td class="ret-name">${esc(it.inventory_item_name || it.name || '—')}</td>
+          <td class="num" data-label="Принято">${esc(qtyText(it.quantity, it.unit))}</td>
+          <td class="num" data-label="Можно вернуть">${off ? (it.inventory_item_id ? 'всё вернули' : 'не связан со складом') : esc(qtyText(left, it.unit))}</td>
+          <td class="num" data-label="Вернуть">${off ? '' : `<input type="number" class="form-input" min="0" max="${left}" step="0.001" inputmode="decimal" data-ret="${esc(it.id)}" oninput="updateReturnSum()" aria-label="Вернуть, ${esc(it.unit || '')}"><button type="button" class="ret-max" onclick="fillReturnMax(this, '${leftTxt.replace(',', '.')}')">всё</button>`}</td>
+          <td class="num" data-label="Сумма" data-ret-sum="${esc(it.id)}">—</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('retNotes').value = '';
+      document.getElementById('retReason').value = 'defect';
+      document.getElementById('retError').textContent = '';
+      document.getElementById('retForm').style.display = 'block';
+      document.getElementById('retOpenBtn').style.display = 'none';
+      updateReturnSum();
+      const first = document.querySelector('#retBody input');
+      if (first) first.focus();
+    }
+    function closeReturnForm() {
+      document.getElementById('retForm').style.display = 'none';
+      const anyLeft = invoiceItemsCache.some(it => it.inventory_item_id && returnLeft(it) > 0.0005);
+      document.getElementById('retOpenBtn').style.display = anyLeft ? '' : 'none';
+    }
+    function fillReturnMax(btn, v) {
+      const inp = btn.previousElementSibling; inp.value = v; updateReturnSum();
+    }
+
+    function collectReturn() {
+      const lines = [], errors = [];
+      let total = 0;
+      document.querySelectorAll('#retBody input[data-ret]').forEach(inp => {
+        const id = inp.getAttribute('data-ret');
+        const it = invoiceItemsCache.find(x => x.id === id);
+        const cell = document.querySelector(`[data-ret-sum="${id}"]`);
+        const q = parseFloat(String(inp.value).replace(',', '.'));
+        inp.style.borderColor = '';
+        if (!inp.value || !(q > 0)) { if (cell) cell.textContent = '—'; return; }
+        const left = returnLeft(it);
+        if (q > left + 0.0005) { errors.push(`«${it.inventory_item_name || it.name}»: не больше ${qtyText(left, it.unit)}`); inp.style.borderColor = 'var(--color-danger)'; }
+        // Весь остаток строки — сумма как на сервере, без копеечного хвоста
+        const sum = Math.abs(q - left) <= 0.0005
+          ? Math.round(((parseFloat(it.total_price ?? (linePrice(it) * (parseFloat(it.quantity) || 0))) || 0) * (left / (parseFloat(it.quantity) || 1))) * 100) / 100
+          : Math.round(q * linePrice(it) * 100) / 100;
+        if (cell) cell.textContent = money(sum);
+        total += sum;
+        lines.push({ invoiceItemId: id, quantity: Math.round(q * 1000) / 1000 });
+      });
+      return { lines, errors, total: Math.round(total * 100) / 100 };
+    }
+    function updateReturnSum() {
+      const r = collectReturn();
+      document.getElementById('retSum').innerHTML = 'Вернуть на <strong>' + money(r.total) + '</strong>';
+      document.getElementById('retError').textContent = r.errors.join('; ');
+      const btn = document.getElementById('retSubmitBtn');
+      btn.disabled = !r.lines.length || r.errors.length > 0;
+      btn.dataset.armed = ''; btn.textContent = 'Оформить возврат';
+    }
+
+    async function submitReturn(btn) {
+      const r = collectReturn();
+      const err = document.getElementById('retError');
+      if (!r.lines.length || r.errors.length) { updateReturnSum(); return; }
+      if (!requireServer('возврат поставщику')) { err.textContent = 'Нет связи с сервером. Обновите страницу.'; return; }
+      // Второе нажатие — подтверждение: товар уйдёт со склада
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.textContent = 'Списать со склада и вернуть на ' + money(r.total) + '?';
+        setTimeout(() => { if (btn.isConnected && btn.dataset.armed === '1') { btn.dataset.armed = ''; btn.textContent = 'Оформить возврат'; } }, 4000);
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'Оформляю…';
+      try {
+        const res = await AUTH.fetch('/api/suppliers/invoices/' + encodeURIComponent(currentInvoice.id) + '/returns', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: r.lines, reason: document.getElementById('retReason').value, notes: document.getElementById('retNotes').value })
+        });
+        if (!res.ok) throw new Error(await apiError(res));
+        const ret = (await res.json()).return || {};
+        showNotification('Возврат ' + (ret.return_number || '') + ' оформлен: −' + money(ret.total_amount));
+        document.getElementById('retForm').style.display = 'none';
+        const id = currentInvoice.id;
+        await loadSupplierInvoices();
+        const fresh = supplierInvoices.find(i => i.id === id);
+        if (fresh) currentInvoice = fresh;
+        await loadInvoiceReturns(id);
+        reloadInventoryFromAPI();
+        if (typeof loadSupplierOverview === 'function') loadSupplierOverview();
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false; btn.dataset.armed = ''; btn.textContent = 'Оформить возврат';
+      }
+    }
+    window.openReturnForm = openReturnForm; window.closeReturnForm = closeReturnForm;
+    window.fillReturnMax = fillReturnMax; window.updateReturnSum = updateReturnSum; window.submitReturn = submitReturn;
 
     function closeInvoiceItemsModal() {
       document.getElementById('invoiceItemsModal').classList.remove('active');
@@ -5274,6 +5501,7 @@ AUTH.requireAuth();
       const t = d.totals;
       document.getElementById('ledgerTotals').innerHTML =
         `<div><small>Поставлено</small><b>${money(t.invoiced)}</b></div>`
+        + (t.returned ? `<div><small>Возвращено</small><b>${money(t.returned)}</b></div>` : '')
         + `<div><small>Оплачено</small><b>${money(t.paid)}</b></div>`
         + `<div><small>${t.balance >= 0 ? 'Долг' : 'Переплата'}</small><b class="${t.balance > 0 ? 'cnt-minus' : ''}">${money(Math.abs(t.balance))}</b></div>`;
       // Долг в карточке может включать начальный остаток, внесённый до учёта в системе
@@ -5286,6 +5514,8 @@ AUTH.requireAuth();
         const inv = r.kind === 'invoice';
         const what = inv
           ? `Накладная <strong>${esc(r.doc || '')}</strong>`
+          : r.kind === 'return'
+          ? `Возврат <strong>${esc(r.doc || '')}</strong>${r.method ? ' · ' + esc(RETURN_REASONS[r.method] || r.method) : ''}${r.who ? '<div style="font-size:12px;color:var(--color-text-secondary)">' + esc(r.who) + '</div>' : ''}`
           : `Оплата ${esc(METHOD[r.method] || '')}${r.doc ? ' по ' + esc(r.doc) : ''}${r.who ? '<div style="font-size:12px;color:var(--color-text-secondary)">' + esc(r.who) + '</div>' : ''}`;
         return `<tr>
           <td class="nowrap">${dateRu(r.at)}</td>
