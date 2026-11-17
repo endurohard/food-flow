@@ -81,15 +81,12 @@ export class ProductionService {
         const needQty = parseFloat(ing.quantity) * cycles;
         if (needQty <= 0) continue;
 
-        // FIFO-списание партий — даёт фактическую стоимость списанного
-        const fifo = await this.inventory.deductFIFO(data.warehouseId, ing.inventory_item_id, needQty, client);
-        let ingCost = 0;
-        for (const b of fifo.batches) {
-          const unitCost = b.costPrice !== null && b.costPrice !== undefined
-            ? parseFloat(b.costPrice)
-            : (parseFloat(ing.item_cost_price) || 0);
-          ingCost += b.deducted * unitCost;
-        }
+        // FIFO по партиям — фактическая стоимость списанного. Часть остатка
+        // без партий (старые записи) — по последней цене: раньше она
+        // блокировала выпуск ошибкой «Insufficient batch stock», хотя на
+        // складе товар был. Хватает ли товара — проверяет остаток ниже.
+        const fifo = await this.inventory.consumeBatchesFIFO(client, data.warehouseId, ing.inventory_item_id, needQty);
+        const ingCost = fifo.cost + fifo.uncovered * (parseFloat(ing.item_cost_price) || 0);
 
         // Атомарное списание остатка (не даёт уйти в минус)
         const deduct = await client.query(

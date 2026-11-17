@@ -9,6 +9,72 @@ import { logger } from '../utils/logger';
 
 /** Ошибка накладной, понятная пользователю (отдаётся как 400). */
 /** DATE из pg приходит объектом Date в полночь по местному времени — без сдвига через UTC. */
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Привязка «свободных» оплат поставщику (без накладной) к принятым
+ * накладным — от старых к новым. Оплата делится на строки с invoice_id,
+ * остаток (предоплата) остаётся без привязки и дождётся следующей
+ * накладной. paid_amount накладной пересчитывает триггер (миграция 041)
+ * по привязанным строкам — поэтому распределяем строками, а не UPDATE.
+ */
+export async function allocateSupplierPayments(client: any, supplierId: string): Promise<void> {
+  await client.query('SELECT 1 FROM suppliers WHERE id = $1 FOR UPDATE', [supplierId]);
+  const pays = await client.query(
+    `SELECT * FROM supplier_payments WHERE supplier_id = $1 AND invoice_id IS NULL AND amount > 0
+      ORDER BY created_at, id`, [supplierId]);
+  if (!pays.rows.length) return;
+  const invs = await client.query(
+    `SELECT id, total_amount FROM supply_invoices
+      WHERE supplier_id = $1 AND status = 'received' AND COALESCE(total_amount, 0) > 0
+      ORDER BY COALESCE(received_at, created_at), created_at`, [supplierId]);
+  if (!invs.rows.length) return;
+  const paid = await client.query(
+    `SELECT invoice_id, SUM(amount) AS s FROM supplier_payments
+      WHERE supplier_id = $1 AND invoice_id IS NOT NULL GROUP BY invoice_id`, [supplierId]);
+  const paidBy: Record<string, number> = {};
+  paid.rows.forEach((r: any) => { paidBy[r.invoice_id] = Number(r.s) || 0; });
+  const open = invs.rows
+    .map((i: any) => ({ id: i.id, due: r2((Number(i.total_amount) || 0) - (paidBy[i.id] || 0)) }))
+    .filter((i: any) => i.due > 0.005);
+  for (const p of pays.rows) {
+    if (!open.length) break;
+    let left = Number(p.amount);
+    let first = true;
+    while (left > 0.005 && open.length) {
+      const inv = open[0];
+      const take = r2(Math.min(inv.due, left));
+      if (first) {
+        await client.query('UPDATE supplier_payments SET invoice_id = $2, amount = $3 WHERE id = $1', [p.id, inv.id, take]);
+        first = false;
+      } else {
+        await client.query(
+          `INSERT INTO supplier_payments (enterprise_id, supplier_id, invoice_id, amount, method, register_id, paid_by, notes, created_at)
+           VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8)`,
+          [p.enterprise_id, p.supplier_id, inv.id, take, p.method, p.paid_by, p.notes, p.created_at]);
+      }
+      inv.due = r2(inv.due - take);
+      left = r2(left - take);
+      if (inv.due <= 0.005) open.shift();
+    }
+    if (!first && left > 0.005) {
+      await client.query(
+        `INSERT INTO supplier_payments (enterprise_id, supplier_id, invoice_id, amount, method, register_id, paid_by, notes, created_at)
+         VALUES ($1, $2, NULL, $3, $4, NULL, $5, $6, $7)`,
+        [p.enterprise_id, p.supplier_id, left, p.method, p.paid_by, p.notes, p.created_at]);
+    }
+  }
+}
+
+/** Себестоимость единицы из строки накладной: точно по сумме, иначе цена за единицу. */
+function unitCost(item: any): number | undefined {
+  const qty = parseFloat(item.quantity);
+  const total = item.total_price === null || item.total_price === undefined ? NaN : parseFloat(item.total_price);
+  if (qty > 0 && Number.isFinite(total)) return Math.round(total / qty * 10000) / 10000;
+  const p = item.price_per_unit === null || item.price_per_unit === undefined ? NaN : parseFloat(item.price_per_unit);
+  return Number.isFinite(p) ? p : undefined;
+}
+
 function dateOnly(v: any): string | undefined {
   if (!v) return undefined;
   if (v instanceof Date) {
@@ -347,6 +413,11 @@ export class SupplierService {
       }
       const badQty = items.rows.filter((i: any) => !(parseFloat(i.quantity) > 0));
       if (badQty.length) throw new InvoiceError('У позиции «' + (badQty[0].name || '') + '» не указано количество');
+      // Без цены партия легла бы на склад по 0 ₽ и занизила себестоимость
+      // всего, что из неё приготовят. Бесплатный товар — цена 0, явно.
+      const noPrice = items.rows.filter((i: any) =>
+        (i.price_per_unit === null || i.price_per_unit === undefined) && (i.total_price === null || i.total_price === undefined));
+      if (noPrice.length) throw new InvoiceError('У позиции «' + (noPrice[0].name || '') + '» не указана цена. Если товар бесплатный — укажите 0.');
 
       // Движения — в этой же транзакции. Партия помнит поставщика и накладную:
       // по ним видно, от кого товар и по какой цене, и возможен возврат поставщику.
@@ -356,7 +427,10 @@ export class SupplierService {
           inventoryItemId: item.inventory_item_id,
           movementType: 'receipt',
           quantity: parseFloat(item.quantity),
-          costPrice: item.price_per_unit ? parseFloat(item.price_per_unit) : undefined,
+          // Цена партии — сумма строки / количество: цена за единицу в
+          // накладной округлена до копеек (199 ₽ за 12 шт = 16,58), и партия
+          // стоила бы 397,92 ₽ вместо 398 ₽ по документу.
+          costPrice: unitCost(item),
           referenceType: 'invoice',
           referenceId: invoiceId,
           performedBy: receivedBy,
@@ -386,6 +460,8 @@ export class SupplierService {
           'UPDATE suppliers SET balance = balance + $1 WHERE id = $2',
           [invoice.rows[0].total_amount, invoice.rows[0].supplier_id]
         );
+        // Предоплата этому поставщику сразу гасит новую накладную
+        await allocateSupplierPayments(client, invoice.rows[0].supplier_id);
       }
 
       await client.query('COMMIT');
@@ -494,6 +570,10 @@ export class SupplierService {
       );
 
       await client.query('UPDATE suppliers SET balance = balance - $1 WHERE id = $2', [data.amount, supplierId]);
+
+      // Оплата без накладной гасит самые старые принятые накладные — иначе
+      // долг поставщику уменьшался, а по накладным оставался «не оплачено»
+      if (!data.invoiceId) await allocateSupplierPayments(client, supplierId);
 
       await client.query('COMMIT');
       return { payment: payment.rows[0], invoice };

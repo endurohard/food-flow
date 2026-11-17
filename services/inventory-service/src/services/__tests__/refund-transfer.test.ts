@@ -79,7 +79,8 @@ describe('transfer', () => {
     expect(mv.map((q: any) => q.sql.match(/'(transfer|transfer_in)'/)[1])).toEqual(['transfer', 'transfer_in']);
     expect(mv[0].params[5]).toBe(mv[1].params[5]);
     const batch = c.queries.find((q: any) => /INSERT INTO inventory_batches/.test(q.sql));
-    expect(batch.params).toEqual(['i', 'b', 'e', 2, 100]);
+    // партия переезжает со своими сроком, сортом, поставщиком и датой поступления
+    expect(batch.params).toEqual(['i', 'b', 'e', null, 2, 100, null, null, null, null, null]);
   });
   it('больше, чем есть на складе отправки, — отказ без движений', async () => {
     const c = makeConn({ stock: '1' });

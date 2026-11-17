@@ -15,6 +15,12 @@ export interface MovementFilters {
   offset?: number;
 }
 
+/** Часть партии, снятая по FIFO: из неё на другом складе собирается такая же партия. */
+export interface BatchPart {
+  take: number; costPrice: number; expiryDate: any; variety: string | null;
+  supplierId: string | null; invoiceId: string | null; receivedAt: any; batchNumber: string | null;
+}
+
 export class InventoryService {
   private pool: InstanceType<typeof Pool>;
 
@@ -165,6 +171,19 @@ export class InventoryService {
 
   // ========== OWNERSHIP HELPERS (multi-tenant) ==========
 
+  /** Остаток товара на складе — для проверки ручного списания. */
+  async stockQty(warehouseId: string, inventoryItemId: string): Promise<{ qty: number; unit: string; name: string }> {
+    const r = await this.pool.query(
+      `SELECT COALESCE(s.quantity, 0) AS qty, i.unit, i.name
+         FROM inventory_items i
+         LEFT JOIN inventory_stock s ON s.inventory_item_id = i.id AND s.warehouse_id = $1
+        WHERE i.id = $2`,
+      [warehouseId, inventoryItemId]
+    );
+    const row = r.rows[0] || {};
+    return { qty: parseFloat(row.qty) || 0, unit: row.unit || '', name: row.name || '' };
+  }
+
   async warehouseBelongsTo(warehouseId: string, enterpriseId: string): Promise<boolean> {
     const r = await this.pool.query(
       'SELECT 1 FROM warehouses WHERE id = $1 AND enterprise_id = $2', [warehouseId, enterpriseId]
@@ -297,6 +316,12 @@ export class InventoryService {
       // только остаток, партии оставались полными, и следующая продажа
       // считала себестоимость по товару, которого на складе уже нет.
       let costPrice = data.costPrice;
+      // Корректировка «плюс» и возврат без цены — по последней цене товара.
+      // Раньше цена вычислялась уже после записи движения, и в журнале и
+      // отчётах у таких движений стояла пустая себестоимость.
+      if (isInflow && data.movementType !== 'receipt' && costPrice === undefined) {
+        costPrice = await this.lastCost(client, data.inventoryItemId);
+      }
       if (!isInflow) {
         const qty = Math.abs(data.quantity);
         const fifo = await this.consumeBatchesFIFO(client, data.warehouseId, data.inventoryItemId, qty);
@@ -1019,7 +1044,8 @@ export class InventoryService {
 
       const transferId = crypto.randomUUID();
       const fifo = await this.consumeBatchesFIFO(client, data.fromWarehouseId, data.inventoryItemId, data.quantity);
-      const cost = (fifo.cost + fifo.uncovered * (await this.lastCost(client, data.inventoryItemId))) / data.quantity;
+      const last = fifo.uncovered > 1e-9 ? await this.lastCost(client, data.inventoryItemId) : 0;
+      const cost = (fifo.cost + fifo.uncovered * last) / data.quantity;
       const note = data.notes ? `Перемещение: ${data.notes}` : 'Перемещение между складами';
 
       const out = await client.query(
@@ -1040,14 +1066,25 @@ export class InventoryService {
          RETURNING quantity`,
         [data.toWarehouseId, data.inventoryItemId, data.quantity]
       );
-      // На целевом складе мог быть минус — его закрывает приход, партия только на остаток
+      // Партии переезжают как есть: срок годности, сорт, поставщик, накладная
+      // и дата поступления (по ней FIFO) остаются. Раньше всё сливалось в
+      // одну партию без срока — истекающий товар в баре не был виден.
+      // На целевом складе мог быть минус — его закрывает приход: эта часть
+      // (с самых старых партий) уже продана и в партии не попадает.
       const after = parseFloat(inn.rows[0].quantity);
-      const batchQty = data.quantity - Math.min(data.quantity, Math.max(0, -(after - data.quantity)));
-      if (batchQty > 1e-9) {
+      let cover = Math.min(data.quantity, Math.max(0, -(after - data.quantity)));
+      const moved: BatchPart[] = fifo.parts.slice();
+      if (fifo.uncovered > 1e-9) moved.push({ take: fifo.uncovered, costPrice: last, expiryDate: null, variety: null, supplierId: null, invoiceId: null, receivedAt: null, batchNumber: null });
+      for (const p of moved) {
+        let q = p.take;
+        if (cover > 1e-9) { const c = Math.min(cover, q); cover -= c; q -= c; }
+        if (q <= 1e-9) continue;
         await client.query(
-          `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, quantity, cost_price)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [data.inventoryItemId, data.toWarehouseId, data.enterpriseId, batchQty, cost]
+          `INSERT INTO inventory_batches (inventory_item_id, warehouse_id, enterprise_id, batch_number, quantity, cost_price,
+             expiry_date, supplier_id, invoice_id, variety, received_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, NOW()))`,
+          [data.inventoryItemId, data.toWarehouseId, data.enterpriseId, p.batchNumber, q, p.costPrice,
+           p.expiryDate, p.supplierId, p.invoiceId, p.variety, p.receivedAt]
         );
       }
       await client.query(
@@ -1073,12 +1110,12 @@ export class InventoryService {
    */
   async consumeBatchesFIFO(conn: any, warehouseId: string, inventoryItemId: string, quantity: number,
       preferVariety?: string | null):
-      Promise<{ consumed: number; cost: number; uncovered: number; preferredTaken: number }> {
+      Promise<{ consumed: number; cost: number; uncovered: number; preferredTaken: number; parts: BatchPart[] }> {
     // preferVariety — сорт, выбранный гостем («на Эфиопии»): сначала его
     // партии по FIFO, не хватило — остальные. Без сорта — чистый FIFO.
     const pref = (preferVariety || '').trim().toLowerCase();
     const batches = await conn.query(
-      `SELECT id, quantity, cost_price, variety FROM inventory_batches
+      `SELECT id, quantity, cost_price, variety, expiry_date, supplier_id, invoice_id, received_at, batch_number FROM inventory_batches
         WHERE warehouse_id = $1 AND inventory_item_id = $2 AND is_depleted = false
         ORDER BY ${pref ? '(lower(variety) IS NOT DISTINCT FROM $3) DESC, ' : ''}received_at ASC
         FOR UPDATE`,
@@ -1087,6 +1124,10 @@ export class InventoryService {
     let remaining = quantity;
     let cost = 0;
     let preferredTaken = 0;
+    const parts: BatchPart[] = [];
+    // Партия без цены (приход без цены, старые записи) — по последней цене
+    // товара. Раньше она шла по 0 ₽ и занижала себестоимость продаж и выпуска.
+    let fallback: number | null = null;
     for (const b of batches.rows) {
       if (remaining <= 1e-9) break;
       const available = parseFloat(b.quantity);
@@ -1096,12 +1137,20 @@ export class InventoryService {
       } else {
         await conn.query('UPDATE inventory_batches SET quantity = quantity - $1 WHERE id = $2', [take, b.id]);
       }
-      cost += take * (parseFloat(b.cost_price) || 0);
+      const hasCost = b.cost_price !== null && b.cost_price !== undefined && b.cost_price !== '';
+      if (!hasCost && fallback === null) fallback = await this.lastCost(conn, inventoryItemId);
+      const unit = hasCost ? (parseFloat(b.cost_price) || 0) : (fallback as number);
+      cost += take * unit;
+      parts.push({
+        take, costPrice: unit, expiryDate: b.expiry_date ?? null, variety: b.variety ?? null,
+        supplierId: b.supplier_id ?? null, invoiceId: b.invoice_id ?? null,
+        receivedAt: b.received_at ?? null, batchNumber: b.batch_number ?? null
+      });
       if (pref && (b.variety || '').trim().toLowerCase() === pref) preferredTaken += take;
       remaining -= take;
     }
     const uncovered = Math.max(0, remaining);
-    return { consumed: quantity - uncovered, cost, uncovered, preferredTaken };
+    return { consumed: quantity - uncovered, cost, uncovered, preferredTaken, parts };
   }
 
   /** Последняя известная цена позиции — для части, не покрытой партиями. */

@@ -215,6 +215,19 @@ router.post('/movements', authenticateUser, requireRole('admin', 'owner', 'manag
       }
     }
 
+    // Ручное списание и «минус» — не больше, чем лежит на складе: иначе
+    // остаток уходил в минус без предупреждения, и следующий приход молча
+    // «закрывал» дыру. Продажи по техкартам идут другим путём и в минус могут.
+    if (value.movementType === 'write_off' || value.movementType === 'adjustment_minus') {
+      const st = await inventoryService.stockQty(value.warehouseId, value.inventoryItemId);
+      if (st.qty + 1e-9 < value.quantity) {
+        const have = Math.round(st.qty * 1000) / 1000;
+        const msg = `На этом складе «${st.name}» только ${String(have).replace('.', ',')} ${st.unit}`.trim()
+          + ' — больше списать нельзя. Если товар есть, сначала оформите приход или перемещение.';
+        return res.status(400).json({ error: msg, message: msg });
+      }
+    }
+
     const movement = await inventoryService.addStockMovement({
       ...value,
       performedBy: req.userId,
