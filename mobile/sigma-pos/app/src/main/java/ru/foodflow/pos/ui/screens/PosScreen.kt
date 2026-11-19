@@ -41,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,6 +59,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.foodflow.pos.data.CartLine
+import ru.foodflow.pos.data.CustomerChoice
+import ru.foodflow.pos.data.ModifierSelection
 import ru.foodflow.pos.data.Money
 import ru.foodflow.pos.data.db.MenuItemEntity
 import ru.foodflow.pos.data.db.ModifierEntity
@@ -79,6 +82,9 @@ fun PosScreen(vm: PosViewModel, padding: PaddingValues) {
 
     var modifierTarget by remember { mutableStateOf<MenuItemEntity?>(null) }
     var showCashDialog by remember { mutableStateOf(false) }
+    var showCustomerDialog by remember { mutableStateOf(false) }
+    val customer by vm.customer.collectAsState()
+    val totals by vm.totals.collectAsState()
 
     val visible = remember(items, selectedCategory, search) {
         items.filter { item ->
@@ -203,6 +209,34 @@ fun PosScreen(vm: PosViewModel, padding: PaddingValues) {
             OrderTypeSelector(vm)
 
             Spacer(Modifier.height(8.dp))
+            // Клиент чека: ему сервер начислит баллы лояльности за заказ
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = { showCustomerDialog = true; vm.searchCustomers("") },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        customer?.let {
+                            "👤 ${it.label} · ${it.points} б." +
+                                (if (it.discountPercent > 0) " · ${it.discountLabel}" else "")
+                        } ?: "👤 Клиент: без клиента",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (customer != null) {
+                    IconButton(onClick = { vm.selectCustomer(null) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Убрать клиента")
+                    }
+                }
+            }
+            customer?.let { c ->
+                TextButton(onClick = { vm.requestCardLink(c.id, c.name) }) {
+                    Text("📨 Отправить карту" + (c.cardNumber?.let { " № $it" } ?: ""))
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
             if (cart.isEmpty) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
@@ -222,10 +256,28 @@ fun PosScreen(vm: PosViewModel, padding: PaddingValues) {
             }
 
             Divider(Modifier.padding(vertical = 8.dp))
+            if (totals.discountKopecks > 0) {
+                Row(Modifier.fillMaxWidth()) {
+                    Text("Сумма", modifier = Modifier.weight(1f))
+                    Text(Money.format(totals.subtotalKopecks))
+                }
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        "Скидка по карте (${customer?.discountLabel.orEmpty()})",
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "\u2212" + Money.format(totals.discountKopecks),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             Row(Modifier.fillMaxWidth()) {
                 Text("ИТОГО", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
-                    Money.format(cart.totalKopecks),
+                    Money.format(totals.totalKopecks),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge
                 )
@@ -264,7 +316,8 @@ fun PosScreen(vm: PosViewModel, padding: PaddingValues) {
 
     if (showCashDialog) {
         CashDialog(
-            totalKopecks = cart.totalKopecks,
+            // К оплате — итог со скидкой по карте
+            totalKopecks = totals.totalKopecks,
             onDismiss = { showCashDialog = false },
             onConfirm = { got ->
                 showCashDialog = false
@@ -274,8 +327,96 @@ fun PosScreen(vm: PosViewModel, padding: PaddingValues) {
     }
 
     lastSale?.let { outcome ->
-        SaleDoneDialog(outcome = outcome, onDismiss = { vm.dismissSaleOutcome() })
+        SaleDoneDialog(
+            outcome = outcome,
+            onDismiss = { vm.dismissSaleOutcome() },
+            onSendCard = outcome.customerProfileId?.let { id ->
+                { vm.requestCardLink(id, outcome.customerName) }
+            }
+        )
     }
+
+    // После окна «оплачено»: в композиции позже — значит поверх него
+    val cardLinkState by vm.cardLink.collectAsState()
+    cardLinkState?.let { CardLinkDialog(state = it, onDismiss = { vm.dismissCardLink() }) }
+
+    if (showCustomerDialog) {
+        CustomerDialog(
+            vm = vm,
+            onPick = { vm.selectCustomer(it); showCustomerDialog = false },
+            onDismiss = { showCustomerDialog = false }
+        )
+    }
+}
+
+/** Выбор клиента лояльности из списка предприятия (поиск по имени и цифрам телефона). */
+@Composable
+private fun CustomerDialog(vm: PosViewModel, onPick: (CustomerChoice) -> Unit, onDismiss: () -> Unit) {
+    val results by vm.customerResults.collectAsState()
+    val error by vm.customerError.collectAsState()
+    val loading by vm.customerLoading.collectAsState()
+    var query by remember { mutableStateOf("") }
+    val autoPicked by vm.customerAutoPicked.collectAsState()
+
+    // Сканер карты вбил 8 цифр и нашёлся ровно этот клиент — он уже выбран
+    LaunchedEffect(autoPicked) {
+        if (autoPicked) {
+            vm.consumeCustomerAutoPick()
+            onDismiss()
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Клиент для начисления баллов") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it; vm.searchCustomers(it) },
+                    placeholder = { Text("Имя, цифры телефона или номер карты") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                when {
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                    loading && results.isEmpty() -> Text("Загрузка…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    results.isEmpty() -> Text(
+                        if (query.isBlank()) "Клиентов пока нет — их заводят в админке, раздел «Лояльность»"
+                        else "Никого не нашли",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    else -> LazyColumn(Modifier.height(320.dp)) {
+                        items(results, key = { it.id }) { c ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(c.label, fontWeight = FontWeight.SemiBold)
+                                    c.cardNumber?.let {
+                                        Text(
+                                            "Карта № $it",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "${c.points} баллов" +
+                                        (if (c.discountPercent > 0) " · ${c.discountLabel}" else ""),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Divider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 @Composable
@@ -322,6 +463,13 @@ private fun CartLineRow(line: CartLine, vm: PosViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                if (line.noDiscount) {
+                    Text(
+                        "без скидки по карте",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
             }
             IconButton(onClick = { vm.changeQuantity(line.mergeKey, -1) }) {
                 Icon(Icons.Default.Remove, contentDescription = "Меньше")
@@ -354,11 +502,17 @@ private fun OrderTypeSelector(vm: PosViewModel) {
     }
 }
 
-/** Выбор добавок. Если их нет — сразу добавляем позицию в чек. */
+/**
+ * Выбор добавок. Если их нет — сразу добавляем позицию в чек.
+ * Группа сортов (все модификаторы с variety) — радио «ровно один», с
+ * предвыбором варианта по умолчанию; прочие группы — галочки. Правила — в
+ * [ModifierSelection], здесь только отрисовка.
+ */
 @Composable
 private fun ModifierDialog(vm: PosViewModel, item: MenuItemEntity, onDismiss: () -> Unit) {
     var mods by remember(item.id) { mutableStateOf<List<ModifierEntity>?>(null) }
     var selected by remember(item.id) { mutableStateOf(setOf<String>()) }
+    var error by remember(item.id) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(item.id) {
         val loaded = vm.modifiersFor(item.id)
@@ -366,57 +520,80 @@ private fun ModifierDialog(vm: PosViewModel, item: MenuItemEntity, onDismiss: ()
             vm.addToCart(item)
             onDismiss()
         } else {
+            selected = ModifierSelection.initial(loaded)
             mods = loaded
         }
     }
 
     val list = mods ?: return
+    val groups = remember(list) { ModifierSelection.groups(list) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.name) },
+        title = { Text(item.name + if (item.noDiscount) " · без скидки по карте" else "") },
         text = {
             Column {
-                Text(
-                    "Добавки",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                list.forEach { m ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selected = if (m.id in selected) selected - m.id else selected + m.id
-                            }
-                            .padding(vertical = 8.dp)
-                    ) {
-                        val on = m.id in selected
-                        Box(
-                            Modifier
-                                .size(20.dp)
-                                .background(
-                                    if (on) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(4.dp)
-                                )
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(m.name, Modifier.weight(1f))
+                groups.forEach { g ->
+                    Text(
+                        g.name ?: if (g.singleChoice) "Сорт" else "Добавки",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (g.singleChoice) {
                         Text(
-                            if (m.priceAdjustmentKopecks == 0L) "—"
-                            else "+" + Money.format(m.priceAdjustmentKopecks)
+                            "выберите один",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Spacer(Modifier.height(4.dp))
+                    g.modifiers.forEach { m ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selected = ModifierSelection.toggle(list, selected, m.id)
+                                    error = null
+                                }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            val on = m.id in selected
+                            if (g.singleChoice) {
+                                RadioButton(selected = on, onClick = null, modifier = Modifier.size(20.dp))
+                            } else {
+                                Box(
+                                    Modifier
+                                        .size(20.dp)
+                                        .background(
+                                            if (on) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.surfaceVariant,
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(m.name, Modifier.weight(1f))
+                            Text(
+                                if (m.priceAdjustmentKopecks == 0L) "—"
+                                else "+" + Money.format(m.priceAdjustmentKopecks)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             Button(onClick = {
-                vm.addToCart(item, list.filter { it.id in selected })
-                onDismiss()
+                val problem = ModifierSelection.validate(list, selected)
+                if (problem != null) {
+                    error = problem
+                } else {
+                    vm.addToCart(item, list.filter { it.id in selected })
+                    onDismiss()
+                }
             }) { Text("В чек") }
         },
         dismissButton = {

@@ -44,7 +44,7 @@ import java.util.Locale
 
 /** Итог продажи: что с чеком и дошло ли до сервера. */
 @Composable
-fun SaleDoneDialog(outcome: SaleOutcome, onDismiss: () -> Unit) {
+fun SaleDoneDialog(outcome: SaleOutcome, onDismiss: () -> Unit, onSendCard: (() -> Unit)? = null) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -60,6 +60,9 @@ fun SaleDoneDialog(outcome: SaleOutcome, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
+                if (outcome.discountKopecks > 0) {
+                    Text("Скидка по карте: \u2212" + Money.format(outcome.discountKopecks))
+                }
                 if (outcome.changeKopecks > 0) {
                     Spacer(Modifier.height(4.dp))
                     Text("Сдача: " + Money.format(outcome.changeKopecks))
@@ -82,10 +85,22 @@ fun SaleDoneDialog(outcome: SaleOutcome, onDismiss: () -> Unit) {
                     else "⏳ Нет связи — отправится автоматически",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                outcome.customerName?.let {
+                    Spacer(Modifier.height(4.dp))
+                    // Баллы считает сервер, когда заказ закрыт, — сумму не обещаем
+                    Text(
+                        "👤 Клиент: $it — баллы начислятся после закрытия заказа",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         },
         confirmButton = {
             Button(onClick = onDismiss) { Text("Новый чек") }
+        },
+        // Продажа на клиента — сразу предложить отправить ему карту гостя
+        dismissButton = onSendCard?.let { send ->
+            { OutlinedButton(onClick = send) { Text("Отправить карту") } }
         }
     )
 }

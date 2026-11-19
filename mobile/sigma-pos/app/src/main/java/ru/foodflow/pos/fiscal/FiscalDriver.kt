@@ -44,9 +44,35 @@ data class FiscalItem(
     /** Признак предмета расчёта (тег 1212): для блюд — товар. */
     val paymentObject: String = "commodity",
     /** Признак способа расчёта (тег 1214): полный расчёт. */
-    val paymentMethod: String = "fullPayment"
+    val paymentMethod: String = "fullPayment",
+    /**
+     * Сумма позиции с учётом скидки (amount в задании ККТ). null — скидки
+     * нет, сумма = цена × количество. price при этом остаётся ценой без скидки.
+     */
+    val amountKopecks: Long? = null
 ) {
-    val sumKopecks: Long get() = Math.round(priceKopecks * quantity)
+    val sumKopecks: Long get() = amountKopecks ?: Math.round(priceKopecks * quantity)
+}
+
+/**
+ * Строки фискального чека из строк корзины. Скидка по карте разложена по
+ * строкам ([ru.foodflow.pos.data.LoyaltyDiscount.allocate]), поэтому сумма
+ * позиций чека = итог со скидкой = сумма платежа на сервере.
+ */
+object FiscalItems {
+    fun build(lines: List<ru.foodflow.pos.data.CartLine>, discountPercent: Int): List<FiscalItem> {
+        val totals = ru.foodflow.pos.data.LoyaltyDiscount.compute(lines, discountPercent)
+        return lines.mapIndexed { i, line ->
+            val lineDiscount = totals.lineDiscounts[i]
+            FiscalItem(
+                name = line.name,
+                priceKopecks = line.effectiveUnitPriceKopecks,
+                quantity = line.quantity.toDouble(),
+                vat = VatRate.from(line.vatRate),
+                amountKopecks = if (lineDiscount > 0) line.sumKopecks - lineDiscount else null
+            )
+        }
+    }
 }
 
 /** Запрос на чек прихода / возврата прихода. */

@@ -10,7 +10,15 @@ data class CartLine(
     val unitPriceKopecks: Long,
     val quantity: Int,
     val vatRate: String,
-    val modifiers: List<CartModifier> = emptyList()
+    val modifiers: List<CartModifier> = emptyList(),
+    /**
+     * Скидка по карте на позицию запрещена (с сервера — !loyalty_discount_allowed,
+     * у старого сервера — no_discount). Имя поля прежнее, чтобы не ломать
+     * сериализованные строки неотправленных продаж. Хранится в строке (а не берётся из меню при
+     * оплате), чтобы оффлайн-чек и повторная печать считались по тому меню,
+     * что было в момент продажи.
+     */
+    val noDiscount: Boolean = false
 ) {
     /** Цена с добавками за одну штуку. */
     val effectiveUnitPriceKopecks: Long

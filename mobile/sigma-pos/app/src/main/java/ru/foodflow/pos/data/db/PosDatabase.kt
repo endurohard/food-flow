@@ -7,6 +7,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -154,10 +156,47 @@ interface SaleDao {
         ModifierEntity::class,
         SaleEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class PosDatabase : RoomDatabase() {
     abstract fun menuDao(): MenuDao
     abstract fun saleDao(): SaleDao
+
+    companion object {
+        /**
+         * 1 → 2: клиент лояльности в продаже. Только ADD COLUMN: в таблице
+         * может лежать очередь неотправленных продаж, терять её нельзя
+         * (деструктивная миграция в приложении выключена намеренно).
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sales ADD COLUMN customer_profile_id TEXT")
+                db.execSQL("ALTER TABLE sales ADD COLUMN customer_name TEXT")
+            }
+        }
+
+        /**
+         * 2 → 3: «без скидки» у позиции, сорта у модификаторов, скидка по карте
+         * в продаже. Снова только ADD COLUMN — очередь продаж сохраняется.
+         * DEFAULT совпадает с defaultValue в сущностях: иначе Room при проверке
+         * схемы сочтёт таблицу не той и уронит приложение на старте.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3_SQL.forEach { db.execSQL(it) }
+            }
+        }
+
+        /** Вынесено списком, чтобы тест сверял его с колонками сущностей. */
+        val MIGRATION_2_3_SQL = listOf(
+            "ALTER TABLE menu_items ADD COLUMN no_discount INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE menu_modifiers ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE menu_modifiers ADD COLUMN variety TEXT",
+            "ALTER TABLE menu_modifiers ADD COLUMN variety_item_id TEXT",
+            "ALTER TABLE sales ADD COLUMN discount_kopecks INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE sales ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE sales ADD COLUMN customer_tier TEXT"
+        )
+    }
 }

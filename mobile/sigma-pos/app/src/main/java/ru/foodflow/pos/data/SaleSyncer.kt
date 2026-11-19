@@ -59,13 +59,7 @@ class SaleSyncer(
 
         // ── 2. Платёж ──────────────────────────────────────────────────────
         if (!paymentSynced) {
-            val body = buildJsonObject {
-                put("orderId", orderId)
-                put("amount", sale.totalKopecks / 100.0)
-                put("paymentMethod", sale.paymentMethod)
-                put("status", "completed")
-                put("paymentGateway", if (sale.paymentMethod == "cash") "cash" else "terminal")
-            }.toString()
+            val body = paymentJson(sale, orderId)
             when (val res = api.post("/api/finance/payments", body, sale.paymentIdempotencyKey)) {
                 is ApiResult.Ok -> paymentSynced = true
                 is ApiResult.Offline -> return finish(sale, Outcome.Retry(res.cause),
@@ -131,17 +125,7 @@ class SaleSyncer(
         // ── 4. Фискальный чек ──────────────────────────────────────────────
         if (!fiscalSynced) {
             if (sale.fiscalStatus == "printed") {
-                val body = buildJsonObject {
-                    put("orderId", orderId)
-                    put("registerId", sale.registerId)
-                    put("receiptNumber", sale.fiscalReceiptNumber ?: sale.id.take(8))
-                    put("fiscalSign", sale.fiscalSign)
-                    put("fiscalDocumentNumber", sale.fiscalDocumentNumber)
-                    put("ofdUrl", sale.ofdUrl)
-                    put("receiptType", "sale")
-                    put("totalAmount", sale.totalKopecks / 100.0)
-                    put("vatAmount", 0.0)
-                }.toString()
+                val body = fiscalReceiptJson(sale, orderId)
                 when (val res = api.post("/api/finance/fiscal-receipts", body, sale.id + "-fiscal")) {
                     is ApiResult.Ok -> fiscalSynced = true
                     is ApiResult.Offline -> return finish(sale, Outcome.Retry(res.cause),
@@ -158,12 +142,42 @@ class SaleSyncer(
         return finish(sale, Outcome.Synced, orderId, orderNumber, paymentSynced, cashSynced, fiscalSynced)
     }
 
-    private fun orderBody(sale: SaleEntity): String {
-        val lines = repo.decodeLines(sale.linesJson)
-        return buildJsonObject {
+    private fun orderBody(sale: SaleEntity): String = orderJson(sale, repo.decodeLines(sale.linesJson))
+
+    companion object {
+        /**
+         * Тело POST /api/finance/payments. amount — итог СО скидкой по карте
+         * (sale.totalKopecks): ровно столько касса получила с клиента, и столько
+         * же сервер насчитает в заказе по той же формуле.
+         */
+        fun paymentJson(sale: SaleEntity, orderId: String?): String = buildJsonObject {
+            put("orderId", orderId)
+            put("amount", sale.totalKopecks / 100.0)
+            put("paymentMethod", sale.paymentMethod)
+            put("status", "completed")
+            put("paymentGateway", if (sale.paymentMethod == "cash") "cash" else "terminal")
+        }.toString()
+
+        /** Тело POST /api/finance/fiscal-receipts: сумма та же, что в чеке ФР и в платеже. */
+        fun fiscalReceiptJson(sale: SaleEntity, orderId: String?): String = buildJsonObject {
+            put("orderId", orderId)
+            put("registerId", sale.registerId)
+            put("receiptNumber", sale.fiscalReceiptNumber ?: sale.id.take(8))
+            put("fiscalSign", sale.fiscalSign)
+            put("fiscalDocumentNumber", sale.fiscalDocumentNumber)
+            put("ofdUrl", sale.ofdUrl)
+            put("receiptType", "sale")
+            put("totalAmount", sale.totalKopecks / 100.0)
+            put("vatAmount", 0.0)
+        }.toString()
+
+        /** Тело POST /api/orders. Вынесено сюда, чтобы проверять его тестом. */
+        fun orderJson(sale: SaleEntity, lines: List<CartLine>): String = buildJsonObject {
             put("restaurantId", sale.restaurantId)
             put("orderType", sale.orderType)
             put("paymentMethod", sale.paymentMethod)
+            // Клиент лояльности: баллы начислит сервер, когда заказ закроют
+            sale.customerProfileId?.let { put("customerProfileId", it) }
             put("items", buildJsonArray {
                 lines.forEach { line ->
                     add(buildJsonObject {

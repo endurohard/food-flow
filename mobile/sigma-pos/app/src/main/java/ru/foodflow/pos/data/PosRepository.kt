@@ -139,6 +139,40 @@ class PosRepository(
         MenuSyncResult.Ok(items.size)
     }
 
+    /** Результат поиска клиентов: список или понятная причина, почему его нет. */
+    sealed class CustomerLookup {
+        data class Ok(val customers: List<CustomerChoice>) : CustomerLookup()
+        data class Error(val message: String) : CustomerLookup()
+    }
+
+    /** Клиенты лояльности предприятия — только онлайн, без кэша: баллы меняются. */
+    suspend fun lookupCustomers(query: String): CustomerLookup = withContext(Dispatchers.IO) {
+        val q = query.trim()
+        val path = "/api/crm/customers/lookup" +
+            if (q.isEmpty()) "" else "?q=" + java.net.URLEncoder.encode(q, "UTF-8")
+        when (val res = api.get(path)) {
+            is ApiResult.Ok -> CustomerLookup.Ok(ApiParser.customers(json, res.value))
+            is ApiResult.Offline -> CustomerLookup.Error("Нет связи с сервером — клиента выбрать нельзя, продавайте без клиента")
+            is ApiResult.HttpError -> CustomerLookup.Error(res.message)
+        }
+    }
+
+    sealed class CardLinkResult {
+        data class Ok(val link: CardLink) : CardLinkResult()
+        data class Error(val message: String) : CardLinkResult()
+    }
+
+    /** Ссылка на веб-карту гостя — только онлайн: токен ссылки выдаёт сервер. */
+    suspend fun cardLink(profileId: String): CardLinkResult = withContext(Dispatchers.IO) {
+        val path = "/api/crm/customers/" + java.net.URLEncoder.encode(profileId, "UTF-8") + "/card-link"
+        when (val res = api.post(path, "{}")) {
+            is ApiResult.Ok -> ApiParser.cardLink(json, res.value)?.let { CardLinkResult.Ok(it) }
+                ?: CardLinkResult.Error("Сервер вернул непонятный ответ — ссылку на карту получить не удалось")
+            is ApiResult.Offline -> CardLinkResult.Error("Нет связи с сервером — отправить карту сейчас нельзя")
+            is ApiResult.HttpError -> CardLinkResult.Error(res.message)
+        }
+    }
+
     /** Поиск открытой кассы — нужна, чтобы наличные попадали в cash_operations. */
     suspend fun refreshOpenRegister(): String? = withContext(Dispatchers.IO) {
         when (val res = api.get("/api/finance/registers?status=open")) {
@@ -164,18 +198,27 @@ class PosRepository(
         cart: Cart,
         paymentMethod: String,
         orderType: String,
-        cashGotKopecks: Long?
+        cashGotKopecks: Long?,
+        customer: CustomerChoice? = null
     ): SaleEntity = withContext(Dispatchers.IO) {
+        // Скидку считаем здесь, в момент записи: продажа — источник истины,
+        // и платёж/кассовая операция/фискальный чек потом берут итог из неё.
+        val totals = LoyaltyDiscount.compute(cart.lines, customer)
         val sale = SaleEntity(
             id = UUID.randomUUID().toString(),
             restaurantId = settings.restaurantId.orEmpty(),
             registerId = settings.registerId,
             orderType = orderType,
             paymentMethod = paymentMethod,
-            totalKopecks = cart.totalKopecks,
+            totalKopecks = totals.totalKopecks,
             cashGotKopecks = cashGotKopecks,
             linesJson = encodeLines(cart.lines),
             createdAt = System.currentTimeMillis(),
+            customerProfileId = customer?.id,
+            customerName = customer?.name,
+            discountKopecks = totals.discountKopecks,
+            discountPercent = totals.discountPercent,
+            customerTier = customer?.tier,
             fiscalStatus = if (settings.fiscalEnabled) "pending" else "disabled",
             paymentIdempotencyKey = UUID.randomUUID().toString()
         )

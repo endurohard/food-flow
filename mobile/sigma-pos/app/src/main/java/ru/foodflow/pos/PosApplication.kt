@@ -38,6 +38,7 @@ class PosApplication : Application() {
         database = Room.databaseBuilder(this, PosDatabase::class.java, "ff_pos.db")
             // Схему меняем только вверх по версии; данные продаж терять нельзя,
             // поэтому деструктивная миграция НЕ включена.
+            .addMigrations(PosDatabase.MIGRATION_1_2, PosDatabase.MIGRATION_2_3)
             .build()
         repository = PosRepository(database, api, settings)
         fiscalDriver = AtolDriverFiscalDriver(this)

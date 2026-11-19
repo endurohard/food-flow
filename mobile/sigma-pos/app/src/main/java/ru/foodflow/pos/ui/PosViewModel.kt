@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.foodflow.pos.PosApplication
@@ -15,6 +16,12 @@ import ru.foodflow.pos.data.Binding
 import ru.foodflow.pos.data.Cart
 import ru.foodflow.pos.data.CartLine
 import ru.foodflow.pos.data.CartModifier
+import ru.foodflow.pos.data.CardLink
+import ru.foodflow.pos.data.CustomerAutoPick
+import ru.foodflow.pos.data.CheckTotals
+import ru.foodflow.pos.data.LoyaltyDiscount
+import ru.foodflow.pos.data.CustomerChoice
+import ru.foodflow.pos.data.PosRepository
 import ru.foodflow.pos.data.LoginResult
 import ru.foodflow.pos.data.MenuSyncResult
 import ru.foodflow.pos.data.SaleSyncer
@@ -23,7 +30,7 @@ import ru.foodflow.pos.data.db.MenuItemEntity
 import ru.foodflow.pos.data.db.ModifierEntity
 import ru.foodflow.pos.data.db.SaleEntity
 import ru.foodflow.pos.fiscal.FiscalException
-import ru.foodflow.pos.fiscal.FiscalItem
+import ru.foodflow.pos.fiscal.FiscalItems
 import ru.foodflow.pos.fiscal.FiscalReceiptRequest
 import ru.foodflow.pos.fiscal.PaymentType
 import ru.foodflow.pos.fiscal.ShiftState
@@ -43,8 +50,20 @@ data class SaleOutcome(
     val paymentMethod: String,
     val fiscalPrinted: Boolean,
     val fiscalError: String?,
-    val syncedOnline: Boolean
+    val syncedOnline: Boolean,
+    /** Клиент, которому начислятся баллы за этот чек */
+    val customerName: String? = null,
+    val discountKopecks: Long = 0,
+    /** id профиля клиента — для кнопки «Отправить карту» в окне «оплачено». */
+    val customerProfileId: String? = null
 )
+
+/** Состояние окна «Отправить карту». */
+sealed class CardLinkState {
+    data class Loading(val customerName: String?) : CardLinkState()
+    data class Ready(val link: CardLink) : CardLinkState()
+    data class Error(val message: String) : CardLinkState()
+}
 
 class PosViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -73,6 +92,38 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _orderType = MutableStateFlow("pickup")
     val orderType: StateFlow<String> = _orderType.asStateFlow()
+
+    // ── клиент чека (лояльность) ───────────────────────────────────────────
+    private val _customer = MutableStateFlow<CustomerChoice?>(null)
+    val customer: StateFlow<CustomerChoice?> = _customer.asStateFlow()
+
+    private val _customerResults = MutableStateFlow<List<CustomerChoice>>(emptyList())
+    val customerResults: StateFlow<List<CustomerChoice>> = _customerResults.asStateFlow()
+
+    private val _customerError = MutableStateFlow<String?>(null)
+    val customerError: StateFlow<String?> = _customerError.asStateFlow()
+
+    private val _customerLoading = MutableStateFlow(false)
+    val customerLoading: StateFlow<Boolean> = _customerLoading.asStateFlow()
+
+    private var customerQuerySeq = 0
+
+    /** Клиент выбран автоматически по номеру карты — окно поиска закрывается само. */
+    private val _customerAutoPicked = MutableStateFlow(false)
+    val customerAutoPicked: StateFlow<Boolean> = _customerAutoPicked.asStateFlow()
+
+    private val _cardLink = MutableStateFlow<CardLinkState?>(null)
+    val cardLink: StateFlow<CardLinkState?> = _cardLink.asStateFlow()
+    private var cardLinkSeq = 0
+
+    /**
+     * Итог чека со скидкой по карте — считается локально, без сети: та же
+     * формула, что на сервере, поэтому на экране кассир видит ту сумму,
+     * которую потом подтвердит заказ.
+     */
+    val totals: StateFlow<CheckTotals> = combine(_cart, _customer) { cart, customer ->
+        LoyaltyDiscount.compute(cart.lines, customer)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, LoyaltyDiscount.compute(emptyList(), 0))
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -151,6 +202,7 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
     fun logout() {
         repo.logout()
         _cart.value = Cart()
+        _customer.value = null
         _screen.value = Screen.LOGIN
     }
 
@@ -259,7 +311,8 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
                 vatRate = item.vatRate ?: settings.vatRate,
                 modifiers = modifiers.map {
                     CartModifier(it.id, it.name, it.priceAdjustmentKopecks)
-                }
+                },
+                noDiscount = item.noDiscount
             )
         )
     }
@@ -269,7 +322,51 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeLine(mergeKey: String) { _cart.value = _cart.value.remove(mergeKey) }
-    fun clearCart() { _cart.value = Cart() }
+    fun clearCart() { _cart.value = Cart(); _customer.value = null }
+
+    /** Поиск клиента; ответ на устаревший ввод отбрасывается. */
+    fun searchCustomers(query: String) = viewModelScope.launch {
+        val seq = ++customerQuerySeq
+        _customerAutoPicked.value = false
+        _customerLoading.value = true
+        _customerError.value = null
+        val res = repo.lookupCustomers(query)
+        if (seq != customerQuerySeq) return@launch
+        _customerLoading.value = false
+        when (res) {
+            is PosRepository.CustomerLookup.Ok -> {
+                _customerResults.value = res.customers
+                CustomerAutoPick.pick(query, res.customers)?.let {
+                    _customer.value = it
+                    _customerAutoPicked.value = true
+                }
+            }
+            is PosRepository.CustomerLookup.Error -> {
+                _customerResults.value = emptyList()
+                _customerError.value = res.message
+            }
+        }
+    }
+
+    fun selectCustomer(c: CustomerChoice?) { _customer.value = c }
+    fun consumeCustomerAutoPick() { _customerAutoPicked.value = false }
+
+    /** Запрос ссылки на веб-карту гостя; ошибки сети показываются в окне, не роняя кассу. */
+    fun requestCardLink(profileId: String, customerName: String?) = viewModelScope.launch {
+        val seq = ++cardLinkSeq
+        _cardLink.value = CardLinkState.Loading(customerName)
+        val res = runCatching { repo.cardLink(profileId) }.getOrElse {
+            PosRepository.CardLinkResult.Error(it.message ?: "Не удалось получить ссылку на карту")
+        }
+        // Окно закрыли или открыли для другого клиента — старый ответ не нужен
+        if (seq != cardLinkSeq || _cardLink.value == null) return@launch
+        _cardLink.value = when (res) {
+            is PosRepository.CardLinkResult.Ok -> CardLinkState.Ready(res.link)
+            is PosRepository.CardLinkResult.Error -> CardLinkState.Error(res.message)
+        }
+    }
+
+    fun dismissCardLink() { cardLinkSeq++; _cardLink.value = null }
 
     // ── оплата ─────────────────────────────────────────────────────────────
 
@@ -288,11 +385,13 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
             return@launchBusy
         }
 
+        val customer = _customer.value
         val sale = repo.recordSale(
             cart = currentCart,
             paymentMethod = method,
             orderType = _orderType.value,
-            cashGotKopecks = cashGotKopecks
+            cashGotKopecks = cashGotKopecks,
+            customer = customer
         )
 
         // ── 2. Фискальный чек ───────────────────────────────────────────
@@ -301,16 +400,10 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
         if (settings.fiscalEnabled) {
             val request = FiscalReceiptRequest(
                 saleId = sale.id,
-                items = currentCart.lines.map { line ->
-                    FiscalItem(
-                        name = line.name,
-                        priceKopecks = line.effectiveUnitPriceKopecks,
-                        quantity = line.quantity.toDouble(),
-                        vat = VatRate.from(line.vatRate)
-                    )
-                },
+                // Скидка разложена по строкам по проценту, сохранённому в продаже
+                items = FiscalItems.build(currentCart.lines, sale.discountPercent),
                 paymentType = if (method == "cash") PaymentType.CASH else PaymentType.ELECTRONIC,
-                paidKopecks = cashGotKopecks ?: currentCart.totalKopecks,
+                paidKopecks = cashGotKopecks ?: sale.totalKopecks,
                 taxation = TaxationType.from(settings.taxationType),
                 cashierName = settings.userName,
                 placeName = settings.restaurantName
@@ -339,14 +432,19 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
             saleId = sale.id,
             orderNumber = (syncOutcome as? SaleSyncer.Outcome.Synced)
                 ?.let { repo.saleById(sale.id)?.serverOrderNumber },
-            totalKopecks = currentCart.totalKopecks,
-            changeKopecks = ((cashGotKopecks ?: 0L) - currentCart.totalKopecks).coerceAtLeast(0L),
+            totalKopecks = sale.totalKopecks,
+            changeKopecks = ((cashGotKopecks ?: 0L) - sale.totalKopecks).coerceAtLeast(0L),
             paymentMethod = method,
             fiscalPrinted = fiscalPrinted,
             fiscalError = fiscalError,
-            syncedOnline = syncedOnline
+            syncedOnline = syncedOnline,
+            customerName = customer?.name,
+            discountKopecks = sale.discountKopecks,
+            customerProfileId = customer?.id
         )
         _cart.value = Cart()
+        // Следующий чек — без клиента, пока кассир не выберет нового
+        _customer.value = null
         updateStatus()
     }
 
@@ -362,14 +460,7 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
         }
         val request = FiscalReceiptRequest(
             saleId = sale.id,
-            items = lines.map {
-                FiscalItem(
-                    name = it.name,
-                    priceKopecks = it.effectiveUnitPriceKopecks,
-                    quantity = it.quantity.toDouble(),
-                    vat = VatRate.from(it.vatRate)
-                )
-            },
+            items = FiscalItems.build(lines, sale.discountPercent),
             paymentType = if (sale.paymentMethod == "cash") PaymentType.CASH
             else PaymentType.ELECTRONIC,
             paidKopecks = sale.cashGotKopecks ?: sale.totalKopecks,
