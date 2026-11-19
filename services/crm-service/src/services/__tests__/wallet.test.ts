@@ -63,6 +63,11 @@ function makeCerts() {
     const subj = [{ name: 'commonName', value: cn }];
     cert.setSubject(subj);
     cert.setIssuer(issuer || subj);
+    // OpenSSL 3 (Linux в CI) не принимает издателя без CA:TRUE — «invalid CA
+    // certificate»; LibreSSL на маке это пропускает. Настоящий WWDR их несёт.
+    cert.setExtensions(issuer
+      ? [{ name: 'basicConstraints', cA: false }, { name: 'keyUsage', digitalSignature: true }]
+      : [{ name: 'basicConstraints', cA: true }, { name: 'keyUsage', keyCertSign: true, cRLSign: true }]);
     cert.sign((signKey || keys.privateKey) as any, forge.md.sha256.create());
     return { keys, cert, subj };
   };
