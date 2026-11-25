@@ -246,7 +246,8 @@ router.post('/logout', async (req: Request, res: Response) => {
 // ответ был 401 «Пользователь не идентифицирован».
 
 const cashRegisterPinSchema = Joi.object({
-  pin: Joi.string().min(4).max(6).required(),
+  // PIN везде ровно 4 цифры — как при создании кассира и на клавиатуре киоска
+  pin: Joi.string().pattern(/^[0-9]{4}$/).required().messages({ 'string.pattern.base': 'PIN — ровно 4 цифры' }),
   registerId: Joi.string().uuid().required(),
 });
 

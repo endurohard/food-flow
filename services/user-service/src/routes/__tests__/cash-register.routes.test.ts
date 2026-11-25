@@ -135,6 +135,14 @@ describe('POST /cash-register/verify', () => {
     const r = await invoke('/cash-register/verify', { pin: '1234' });
     expect(r.status).toBe(400);
   });
+
+  it('PIN не из 4 цифр — 400 ещё до проверки', async () => {
+    for (const pin of ['12345', '123456', '123', '12a4']) {
+      const r = await invoke('/cash-register/verify', { pin, registerId: REG });
+      expect(r.status).toBe(400);
+      expect(r.body.message).toMatch(/4 цифры/);
+    }
+  });
 });
 
 describe('POST /cash-register/lock и /unlock', () => {
