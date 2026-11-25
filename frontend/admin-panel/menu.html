@@ -2225,7 +2225,7 @@ AUTH.requireAuth();
           <span class="category-count">${dishes.length}</span>
         </div>
         ${sortedCategories.map(cat => `
-          <div class="category-item ${currentCategory === cat.id ? 'active' : ''}" onclick="selectCategory(${cat.id})">
+          <div class="category-item ${currentCategory === cat.id ? 'active' : ''}" onclick="selectCategory(${jsArg(cat.id)})">
             <span>${cat.icon} ${cat.name}</span>
             <span class="category-count">${dishes.filter(d => d.category === cat.id).length}</span>
           </div>

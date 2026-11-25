@@ -855,7 +855,7 @@ AUTH.requireAuth();
       const statusLabel = ent.status === 'active' ? 'Активно' : (ent.status || 'Неизвестно');
       const restCount = ent.restaurant_count || ent.restaurantCount || (ent.restaurants ? ent.restaurants.length : 0);
       return `
-        <div class="ent-card" id="entCard-${ent.id}" onclick="toggleEntCard(${ent.id}, this)">
+        <div class="ent-card" id="entCard-${ent.id}" onclick="toggleEntCard('${String(ent.id).replace(/[^\w-]/g, '')}', this)">
           <div class="ent-card-name">${ent.name || 'Предприятие #' + ent.id}</div>
           <div class="ent-card-meta">
             <span class="badge ${statusCls}">${statusLabel}</span>
