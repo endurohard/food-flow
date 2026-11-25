@@ -460,7 +460,12 @@ export class EnterpriseService {
     try { return decryptSecret(enc); } catch { return null; }
   }
 
-  async setCashierPin(enterpriseId: string, userId: string, pin: string): Promise<boolean> {
+  /**
+   * PIN сотруднику организации. roles — каким ролям вызывающий вправе его
+   * задавать (решает роут): кассиру PIN нужен для входа на планшете, админу —
+   * для подтверждения возвратов на кассе.
+   */
+  async setCashierPin(enterpriseId: string, userId: string, pin: string, roles: string[] = ['cashier']): Promise<boolean> {
     if (await this.pinTaken(this.pool, enterpriseId, pin, userId)) {
       throw Object.assign(new Error('Этот PIN уже занят в организации — выберите другой'), { statusCode: 409 });
     }
@@ -468,11 +473,20 @@ export class EnterpriseService {
     const r = await this.pool.query(
       `UPDATE users u SET pin_hash = $1, pin_encrypted = $4, updated_at = CURRENT_TIMESTAMP
          FROM enterprise_users eu
-        WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role = 'cashier'
+        WHERE u.id = $2 AND eu.user_id = u.id AND eu.enterprise_id = $3 AND eu.role = ANY($5::text[])
         RETURNING u.id`,
-      [pinHash, userId, enterpriseId, encryptSecret(pin)]
+      [pinHash, userId, enterpriseId, encryptSecret(pin), roles]
     );
     return r.rows.length > 0;
+  }
+
+  /** Роль сотрудника в организации (enterprise_users.role) или null. */
+  async getMemberRole(enterpriseId: string, userId: string): Promise<string | null> {
+    const r = await this.pool.query(
+      'SELECT role FROM enterprise_users WHERE enterprise_id = $1 AND user_id = $2 AND is_active = true',
+      [enterpriseId, userId]
+    );
+    return r.rows[0]?.role ?? null;
   }
 
   /** Список кассиров предприятия (role = cashier) */

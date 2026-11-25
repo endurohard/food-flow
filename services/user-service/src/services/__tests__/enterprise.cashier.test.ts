@@ -87,8 +87,32 @@ describe('PIN кассиру из «Персонала»', () => {
     const sql = outside.find((q) => /UPDATE users/.test(q))!;
     expect(sql).toBeDefined();
     expect(sql).toMatch(/eu\.enterprise_id = \$3/);
-    expect(sql).toMatch(/eu\.role = 'cashier'/);
+    expect(sql).toMatch(/eu\.role = ANY\(\$5::text\[\]\)/);
     expect(sql).toMatch(/u\.id = \$2/);
     expect(sql).toMatch(/pin_encrypted = \$4/);
+  });
+});
+
+describe('PIN администратору (подтверждение возвратов)', () => {
+  it('по умолчанию правится только кассир; роли передаются параметром', async () => {
+    const svc = new EnterpriseService('postgres://x/y');
+    const calls: any[][] = [];
+    (svc as any).pool = { query: async (sql: string, params: any[] = []) => { calls.push([sql, params]); return { rows: [] }; } };
+    await svc.setCashierPin(ENT, 'u-1', '5678');
+    await svc.setCashierPin(ENT, 'u-2', '5679', ['cashier', 'admin']);
+    const upd = calls.filter(([sql]) => /UPDATE users/.test(sql));
+    expect(upd[0][1][4]).toEqual(['cashier']);
+    expect(upd[1][1][4]).toEqual(['cashier', 'admin']);
+  });
+
+  it('кто кому задаёт PIN', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { pinTargetRoles } = require('../../routes/enterprise.routes');
+    expect(pinTargetRoles('owner', false, false)).toEqual(['cashier', 'admin']);
+    expect(pinTargetRoles('admin', false, false)).toEqual(['cashier']);       // чужому админу — нет
+    expect(pinTargetRoles('admin', false, true)).toEqual(['cashier', 'admin']); // себе — да
+    expect(pinTargetRoles('owner', false, true)).toEqual(['cashier', 'admin', 'owner']);
+    expect(pinTargetRoles(null, true, false)).toEqual(['cashier', 'admin']);   // супер-админ владельцу не задаёт
+    expect(pinTargetRoles('manager', false, true)).toEqual(['cashier']);
   });
 });

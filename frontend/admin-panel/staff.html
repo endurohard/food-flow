@@ -1468,7 +1468,7 @@ AUTH.requireAuth();
           <input type="password" class="form-input" id="staffPassword" minlength="8" autocomplete="new-password">
         </div>
 
-        <!-- PIN нужен только кассиру: им он входит в режим кассы на планшете -->
+        <!-- PIN: кассиру — вход в режим кассы, администратору — подтверждение возвратов -->
         <div class="form-group" id="staffPinGroup" style="display:none">
           <label class="form-label" id="staffPinLabel">PIN для режима кассы (4 цифры):</label>
           <input type="password" class="form-input" id="staffPin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="new-password">
@@ -1858,17 +1858,22 @@ AUTH.requireAuth();
       if (hint) hint.style.display = enabled ? 'none' : '';
     }
 
-    // Поле PIN видно только при должности «Кассир». При правке пустое поле
-    // означает «не менять»: затереть рабочий PIN обычным «Сохранить» нельзя.
+    // Поле PIN видно у кассира (вход в режим кассы) и у администратора (PIN
+    // подтверждения возвратов и смены оплаты на кассе — без него касса не
+    // проведёт ни одного возврата). При правке пустое поле означает «не менять»:
+    // затереть рабочий PIN обычным «Сохранить» нельзя.
+    function pinRole(position) { return position === 'cashier' || position === 'admin'; }
     function syncPinField() {
-      const isCashier = document.getElementById('staffRole').value === 'cashier';
+      const position = document.getElementById('staffRole').value;
+      const isCashier = position === 'cashier';
       const pin = document.getElementById('staffPin');
-      document.getElementById('staffPinGroup').style.display = isCashier ? '' : 'none';
+      document.getElementById('staffPinGroup').style.display = pinRole(position) ? '' : 'none';
       pin.required = isCashier && !editingStaffId;
+      const what = isCashier ? 'PIN для режима кассы' : 'PIN подтверждения возвратов на кассе';
       document.getElementById('staffPinLabel').textContent = editingStaffId
-        ? 'Новый PIN для режима кассы (пусто — не менять):'
-        : 'PIN для режима кассы (4 цифры):';
-      if (!isCashier) pin.value = '';
+        ? 'Новый ' + what + ' (пусто — не менять):'
+        : what + ' (4 цифры' + (isCashier ? '' : ', можно задать позже') + '):';
+      if (!pinRole(position)) pin.value = '';
     }
     document.getElementById('staffRole').addEventListener('change', syncPinField);
 
@@ -1916,7 +1921,7 @@ AUTH.requireAuth();
       }
       const position = document.getElementById('staffRole').value;
       const hireDate = document.getElementById('staffStartDate').value || null;
-      const pin = position === 'cashier' ? document.getElementById('staffPin').value.trim() : '';
+      const pin = pinRole(position) ? document.getElementById('staffPin').value.trim() : '';
       const newPassword = editingStaffId ? document.getElementById('staffPassword').value : '';
       if (newPassword && newPassword.length < 8) {
         showNotification('❌ Пароль — минимум 8 символов');
@@ -1995,9 +2000,9 @@ AUTH.requireAuth();
           }
           if (pin) {
             try { await saveCashierPin(userId, pin); }
-            catch (e) { throw new Error('Кассир создан, но PIN не сохранён — задайте его в «Устройствах»: ' + e.message); }
+            catch (e) { throw new Error('Сотрудник создан, но PIN не сохранён: ' + e.message); }
           }
-          showNotification(pin ? '✅ Кассир создан, PIN сохранён' : '✅ Сотрудник создан на сервере');
+          showNotification(pin ? '✅ Сотрудник создан, PIN сохранён' : '✅ Сотрудник создан на сервере');
         }
 
         closeModal();

@@ -507,7 +507,7 @@ export class AuthService {
         [p.sessionId]
       );
       if (!admins.rows.length) {
-        throw new AuthError('В организации никто из администраторов не задал PIN — задайте его в «Устройства»', 409, 'NO_ADMIN_PIN');
+        throw new AuthError('В организации ни у владельца, ни у администратора нет PIN подтверждения — задайте его в «Персонал» (администратору) или «Устройства» → «Мой PIN подтверждения»', 409, 'NO_ADMIN_PIN');
       }
       throw new AuthError('Неверный PIN администратора', 401, 'BAD_PIN');
     }

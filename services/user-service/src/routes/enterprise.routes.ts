@@ -302,20 +302,46 @@ const cashierPinSchema = Joi.object({
     .messages({ 'string.pattern.base': 'PIN — ровно 4 цифры' }),
 });
 
+/**
+ * Кому вызывающий вправе задать PIN: кассиру — владелец и админ; админу (PIN
+ * подтверждения возвратов) — владелец; себе — владелец и админ сами. Без PIN
+ * хотя бы одного владельца/админа касса не проведёт ни одного возврата.
+ */
+export function pinTargetRoles(requesterRole: string | null, isSuperAdmin: boolean, isSelf: boolean): string[] {
+  const roles = ['cashier'];
+  if (isSuperAdmin || requesterRole === 'owner') roles.push('admin');
+  if (isSelf && requesterRole && ['owner', 'admin'].includes(requesterRole)) roles.push(requesterRole);
+  return Array.from(new Set(roles));
+}
+
 router.put('/:id/cashiers/:userId/pin', authenticateUser, async (req, res) => {
   try {
     const { error, value } = cashierPinSchema.validate(req.body);
     if (error) return res.status(400).json({ error: 'Validation error', message: error.details[0].message });
-    if (req.userRole !== 'super_admin') {
+    const isSuper = req.userRole === 'super_admin';
+    let requesterRole: string | null = null;
+    if (!isSuper) {
       const memberships = await enterpriseService.getUserEnterprises(req.userId!);
       const membership = memberships.find((m: any) => m.enterprise_id === req.params.id);
       if (!membership || !['owner', 'admin'].includes(membership.user_role)) {
         return res.status(403).json({ error: 'Forbidden', message: 'Задавать PIN может владелец или админ организации' });
       }
+      requesterRole = membership.user_role;
     }
-    const ok = await enterpriseService.setCashierPin(req.params.id, req.params.userId, value.pin);
-    if (!ok) return res.status(404).json({ error: 'Not found', message: 'Кассир не найден в этой организации' });
-    return res.status(200).json({ success: true });
+    const roles = pinTargetRoles(requesterRole, isSuper, req.params.userId === req.userId);
+    const targetRole = await enterpriseService.getMemberRole(req.params.id, req.params.userId);
+    if (!targetRole) return res.status(404).json({ error: 'Not found', message: 'Сотрудник не найден в этой организации' });
+    if (!roles.includes(targetRole)) {
+      const why = targetRole === 'owner'
+        ? 'PIN владельца задаёт только сам владелец — «Устройства» → «Мой PIN подтверждения»'
+        : targetRole === 'admin'
+          ? 'PIN администратора задаёт владелец организации или сам администратор'
+          : 'PIN нужен только кассиру и администратору — смените роль сотрудника';
+      return res.status(403).json({ error: 'Forbidden', message: why });
+    }
+    const ok = await enterpriseService.setCashierPin(req.params.id, req.params.userId, value.pin, roles);
+    if (!ok) return res.status(404).json({ error: 'Not found', message: 'Сотрудник не найден в этой организации' });
+    return res.status(200).json({ success: true, role: targetRole });
   } catch (error: any) {
     if (error.statusCode && error.statusCode < 500) {
       return res.status(error.statusCode).json({ error: error.message, message: error.message });
