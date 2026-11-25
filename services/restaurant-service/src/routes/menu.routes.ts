@@ -13,7 +13,8 @@ const menuService = new MenuService(config.database.url);
 
 const categorySchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
-  description: Joi.string().max(500).optional(),
+  // Описание не обязательно: пустое поле формы приходит строкой ''
+  description: Joi.string().max(500).allow('', null).optional(),
   displayOrder: Joi.number().integer().min(0).optional()
 });
 
@@ -26,10 +27,11 @@ const imageUrlSchema = Joi.alternatives()
   .try(Joi.string().uri({ scheme: ['http', 'https'] }), Joi.string().pattern(/^\/api\/restaurants\/media\/[\w\-./]+$/))
   .allow('', null);
 
-const menuItemSchema = Joi.object({
+export const menuItemSchema = Joi.object({
   categoryId: Joi.string().uuid().allow(null).optional(),
   name: Joi.string().min(1).max(255).required(),
-  description: Joi.string().max(2000).optional(),
+  // Описание не обязательно: пустое поле формы приходит строкой ''
+  description: Joi.string().max(2000).allow('', null).optional(),
   price: Joi.number().min(0).required(),
   imageUrl: imageUrlSchema.optional(),
   icon: Joi.string().valid(...MENU_ITEM_ICONS).allow(null).optional(),
